@@ -27,6 +27,7 @@ services/bff/
     app.ts          Shared app factory; does not open a port
     auth.ts         JWT verification, cached JWKS, and scope middleware
     config.ts       Auth0 and local startup configuration validation
+    logging.ts      Structured HTTP logs and bounded debug body previews
     users.ts        Framework-independent identity, profile, and store contract
     dynamodb-users.ts Atomic identity mapping and profile persistence
     persistence.ts  AWS SDK client composition
@@ -122,6 +123,26 @@ curl -i -H "Authorization: Bearer $ACCESS_TOKEN" http://127.0.0.1:3000/v1/me
 With DynamoDB running and its table created, expect 200 with `read:me`, or 403 without it. Repeat with the same user to confirm a stable profile; another user must receive a different ID. P02 was also checked manually using generated RSA keys and a temporary local HTTPS JWKS server; no automated tests or fixture scripts are part of the repository. Results and live limitations are recorded in [P02](docs/TASKS.md#p02-backend-auth0-token-verification).
 
 Implementation references: [jose remote JWKS](https://github.com/panva/jose/blob/main/docs/jwks/remote/functions/createRemoteJWKSet.md), [Auth0 access token validation](https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens).
+
+## Debugging BFF requests
+
+`pnpm dev` prints structured JSON logs to its terminal. Each request produces an `http.request` event when it arrives and an `http.response` event after the handler finishes. Both contain a timestamp, level, service name, method, path, and `requestId`. The response event adds HTTP status and `durationMs`; 4xx responses use `warn`, and 5xx responses use `error`. The duration measures handler processing before response-preview logging, not transfer time to the client.
+
+The same ID is returned in `X-Request-Id` and error bodies. Match it with `serverRequestId` in the mobile API logger to follow a call across the app and BFF.
+
+Local startup defaults to `LOG_LEVEL=debug`. The response log then also includes query parameters, request/response body previews, and the name, message, and stack of unexpected server errors. Synthetic JSON and plain-text bodies are not redacted. Previews use clones, keep the original body available to handlers, and are limited to 8 KiB and a 100 ms read window per preview. Unsupported, oversized, unavailable, or slow bodies get an omission marker. Headers, cookies, Auth0 tokens, and SDK error objects are not logged automatically; never put secrets in demo URLs or bodies.
+
+Override the level in `services/bff/.env` or for one run:
+
+```sh
+LOG_LEVEL=info pnpm dev
+```
+
+Supported levels are `debug`, `info`, `warn`, `error`, and `silent`. `info` omits bodies, query parameters, and exception details. `warn` shows only 4xx/5xx completion events; `error` shows only 5xx completion events. `silent` disables HTTP logs. These settings do not suppress the local server's startup/shutdown diagnostics. Invalid levels fail startup. Restart after changing the environment.
+
+Lambda defaults to `info` and uses the same middleware; its console output goes to the function's CloudWatch logs when deployed. This change does not deploy anything or modify the stack's environment configuration.
+
+For a quick local check, call `curl -i http://127.0.0.1:3000/health`, then `curl -i http://127.0.0.1:3000/v1/me`. Expect status 200 and 401 respectively, with matching request IDs in the terminal and response headers. Reload the profile in the signed-in app to see an authenticated response body at debug level.
 
 ## Checks and build
 

@@ -6,11 +6,13 @@ import {
   readLocalConfig,
 } from './config.js';
 import { createUserStore } from './persistence.js';
+import { readLogLevel } from './logging.js';
 
 const config = readLocalConfig(process.env);
 const app = createApp(
   readAuthConfig(process.env),
   createUserStore(readDatabaseConfig(process.env, true)),
+  readLogLevel(process.env, 'debug'),
 );
 const server = serve({ fetch: app.fetch, ...config }, (info) => {
   console.info(

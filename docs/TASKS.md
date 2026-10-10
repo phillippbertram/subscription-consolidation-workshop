@@ -62,6 +62,8 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 **Limits:** No automated tests, test framework, or persistent fixture scripts were added. No Auth0 tenant login, AWS deployment, or database access was performed. User persistence remains P03; real mobile Auth0 login remains P04. Temporary verification servers were stopped and disposable TLS files removed.
 
+**BFF logging update from October 10, 2026:** Added shared structured HTTP request/completion logs with request IDs, method/path, status, severity, and handler duration. Local startup defaults to debug with bounded JSON/text body previews, query parameters, and unexpected error details; Lambda defaults to metadata-only info logs. `LOG_LEVEL` supports debug/info/warn/error/silent and rejects invalid values. `pnpm check` passed. Manual in-process requests exercised the actual app's health/unauthorized routes, and isolated middleware requests covered JSON body preservation, 403/404/500 logging, info/silent filtering, oversized/binary bodies, and a stalled stream. The 9,000-byte original request remained readable when its preview was omitted, and the stalled preview returned after its 100 ms limit. A manual invocation of the built Lambda handler returned health 200 with info logs. No automated tests, saved fixtures, Auth0 changes, or deployment were added.
+
 ## P03 Small AWS stack and user persistence
 
 **Outcome:** The HTTP backend runs as a Lambda behind an HTTP API; a valid request retrieves its own persisted user profile.
