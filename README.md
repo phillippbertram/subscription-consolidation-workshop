@@ -12,14 +12,15 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 | [Tasks](docs/TASKS.md) | Small work packages with dependencies, status, and acceptance criteria |
 | [Auth0 setup](docs/AUTH0_SETUP.md) | Existing tenant setup: API, permissions, clients, users, and local configuration |
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
-| [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity and profile records, fields, examples, and access patterns |
+| [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity, profile, and subscription records, fields, examples, and access patterns |
+| [Subscriptions](docs/SUBSCRIPTIONS.md) | Access policy, endpoints, and local Free/Premium scenarios |
 | [Mobile app](apps/mobile/README.md) | Expo development build, Auth0 login, and iOS Simulator against the local BFF |
 
 The project directory is the source of truth. Earlier Library files are historical exports.
 
 ## Current implementation
 
-The pnpm workspace contains the Hono skeleton in `services/bff`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
+The pnpm workspace contains the Hono BFF in `services/bff`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
 
 ```text
 services/bff/
@@ -30,6 +31,9 @@ services/bff/
     logging.ts      Structured HTTP logs and bounded debug body previews
     users.ts        Framework-independent identity, profile, and store contract
     dynamodb-users.ts Atomic identity mapping and profile persistence
+    domain/         Pure subscription mappings and access policy
+    subscriptions.ts Framework-independent subscription store contract
+    dynamodb-subscriptions.ts Validated, paginated subscription reads
     persistence.ts  AWS SDK client composition
     local.ts        Node HTTP server on 127.0.0.1
     lambda.ts       Lambda handler for API Gateway HTTP API
@@ -126,7 +130,7 @@ Implementation references: [jose remote JWKS](https://github.com/panva/jose/blob
 
 ## Debugging BFF requests
 
-`pnpm dev` prints structured JSON logs to its terminal. Each request produces an `http.request` event when it arrives and an `http.response` event after the handler finishes. Both contain a timestamp, level, service name, method, path, and `requestId`. The response event adds HTTP status and `durationMs`; 4xx responses use `warn`, and 5xx responses use `error`. The duration measures handler processing before response-preview logging, not transfer time to the client.
+`pnpm dev` uses Pino for structured JSON logs to stdout. A child logger binds request metadata; timestamps use the ISO `time` field. The synchronous destination also works in the Lambda bundle without a background transport. See the [Pino API](https://github.com/pinojs/pino/blob/main/docs/api.md). Each request produces an `http.request` event when it arrives and an `http.response` event after the handler finishes. Both contain a timestamp, level, service name, method, path, and `requestId`. The response event adds HTTP status and `durationMs`; 4xx responses use `warn`, and 5xx responses use `error`. The duration measures handler processing before response-preview logging, not transfer time to the client.
 
 The same ID is returned in `X-Request-Id` and error bodies. Match it with `serverRequestId` in the mobile API logger to follow a call across the app and BFF.
 
@@ -196,3 +200,18 @@ Assign subsequent tasks by ID in the same way. Each task defines its outcome and
 ## Basis for the agent instructions
 
 The concise root `AGENTS.md` follows the [official project instruction guide](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Project facts live in linked documents so agents do not need to treat the entire project plan as a rulebook for every task.
+
+
+## Subscription scenarios (P05)
+
+The dashboard reads subscriptions and derives Free/Premium access from DynamoDB on every request. Start DynamoDB and the BFF as described above, sign in, and copy your internal user ID from the app:
+
+```sh
+pnpm demo:subscription <internal-user-id> active
+pnpm demo:subscription <internal-user-id> expiring
+pnpm demo:subscription <internal-user-id> free
+```
+
+Reload the dashboard after each change. `expiring` grants 30 seconds of access; no subsequent event is needed for the API to deny access. The command only targets the Compose database and two explicitly marked demo records. It makes no purchase and cannot target AWS. See [subscription rules and manual scenarios](docs/SUBSCRIPTIONS.md) and the [DynamoDB model](docs/DYNAMODB_DATA_MODEL.md#subscriptions).
+
+The app now requests `read:premium` as well as `read:me`. Ensure the API permission, user role, and application grant allow it, then **sign out and sign in again**. A valid scope alone does not grant Premium content. See the [Auth0 permission setup](docs/AUTH0_SETUP.md#3-configure-user-permissions-and-application-access).

@@ -14,15 +14,15 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P01 | Local HTTP skeleton                        | P00                                   | complete |
 | P02 | Backend Auth0 token verification           | P01                                   | complete |
 | P03 | Small AWS stack and user persistence       | P01; P02 for a protected live request | partial  |
-| P04 | Mobile login through to the user's profile | P02, P03 local portion                | partial  |
-| P05 | Subscription and entitlement domain rules  | P01, P02, P03                         | open     |
+| P04 | Mobile login through to the user's profile | P02, P03 local portion                | complete |
+| P05 | Subscription and entitlement domain rules  | P01, P02, P03 local portion           | complete |
 | P06 | Stripe purchase and reliable processing    | P02, P03, P05                         | open     |
 | P07 | Apple/Google mocks                         | P05, P06                              | open     |
 | P08 | Outbox publisher and EventBridge           | P06                                   | open     |
 | P09 | Reconciliation and expiration              | P07, P08                              | open     |
 | P10 | CI/CD, operations, and final demo          | P04, P06–P09                          | open     |
 
-**Next step:** Finish P04's session restoration, logout, two-user profile, and remaining failure checks against the local backend. The user has confirmed successful real Auth0 login and profile display. P03's local portion is sufficient for that flow. AWS deployment and Gateway/Lambda verification remain separate and explicitly deferred.
+**Next step:** P06: Stripe test checkout and reliable webhook processing. P04 and P05 are complete for the local iOS workflow. P03's outstanding live AWS evidence remains separate; no deployment was performed during P05.
 
 ## P00 Prepare the project for agents
 
@@ -102,7 +102,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 **Local source evidence:** `pnpm check` passed, including TSX formatting/linting, all workspace typechecks, backend builds, and the mobile iOS JavaScript export. Expo dependency compatibility checking and iOS prebuild passed. Inspected the generated URL schemes and local-networking ATS configuration. No automated tests or test framework were added.
 
-**Outstanding:** Session restoration after an app restart, logout, two-user ownership, and remaining network/authentication failure scenarios must still be demonstrated in the simulator. P04 remains `partial`. AWS and Android verification are outside this local implementation request.
+**Completion from October 10, 2026:** The user confirmed that all remaining manual P04 checks pass: session restoration, logout/relogin, two-user ownership, and failure/retry scenarios. P04 is complete for the iOS Simulator against the local backend. AWS and Android verification remain outside this local scope; the earlier evidence below records intermediate limitations that this confirmation supersedes.
 
 **User-confirmed evidence from October 10, 2026:** The user confirmed that real Auth0 login succeeds and the app displays the profile with `userId` and `createdAt` in the iOS Simulator against the local backend. The previously observed **Callback URL mismatch** no longer blocks this flow. The user supplied the Client ID through ignored `apps/mobile/.env`; the agent made no Auth0 tenant changes. This confirmation covers login and profile display, not the remaining checks above.
 
@@ -125,6 +125,15 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 **Acceptance:** Manual scenarios cover active grants, pending state, cancellation at period end, expiration, revocation, a 24-hour grace period following a previously valid grant, and multiple providers. Retries do not extend grace. Time is injected. Unknown products grant no new access. API integration for T04/T22 is demonstrated.
 
 **Boundary:** No real provider connection, plan changes, or proration.
+
+**Implementation from October 10, 2026:** Added a pure domain module with status mapping, bounded grace, union of valid grants, exclusive time boundaries, and visible unknown mappings. The DynamoDB adapter validates ownership and fields, queries consistently with pagination, and feeds protected subscription/entitlement/history endpoints. The mobile dashboard uses Zod-validated responses, explicit history requests, foreground refresh, and boundary refresh. The local scenario CLI atomically changes only its two marked records in the Compose database. Materialized aggregate revisions, synchronization, and provider writes remain P06 work; see [subscription rules](SUBSCRIPTIONS.md) and the [data model](DYNAMODB_DATA_MODEL.md#subscriptions).
+
+**Local evidence:** `pnpm check` and `pnpm synth` passed. Inspected the generated template: only the additional user-partition `dynamodb:Query` permission, `$default` integration, and no Gateway authorizer. Manually inspected all domain states, fixed grace after retries, an overlong grace cap, initial failure, unknown mappings, and multiple providers. Exercised the real Hono/JWT/DynamoDB Local path with temporary generated RSA credentials and an isolated in-process JWKS response: fifteen scenario combinations returned the expected tier and 200/403 history result. T22 returned 200 before and 403 exactly at the injected boundary without another write. Missing token, missing scope, machine identity, ignored client-supplied user ID, and a separate user partition were checked. Temporary verification records were removed; no automated tests or runtime authentication fallback were added.
+
+**Simulator evidence:** After the user signed in again with `read:premium`, the Free history request showed `premium_required`. On iPhone 17 Pro / iOS 26.5, the local active scenario displayed Premium and rendered the three synthetic history points. The 30-second scenario automatically returned to Free and cleared history at the boundary; a later history request returned 403 without another provider event. Verification used a temporary BFF on port 3001 while the original BFF still selected AWS. The user then switched their BFF to Compose; the app origin was restored to port 3000, the temporary server stopped, and the two scenario records removed. The final dashboard is Free. No cloud deployment or tenant change was performed by the agent.
+
+**Pino evidence:** Replaced the custom JSON console writer with Pino 10.4.0, a child logger per request, ISO time, and synchronous stdout. Manually checked debug JSON previews without consuming the handler's body, info-level metadata only, 401 warning level, silent output, and invalid-level rejection. Local and Lambda bundles build with the existing adapters; a manual HTTP API v2 invocation of the built Lambda returned 200 for health with Pino output. Checked 83 local documentation links and `git diff --check`.
+
 
 ## P06 Stripe purchase and reliable processing
 

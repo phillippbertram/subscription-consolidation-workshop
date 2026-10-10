@@ -7,6 +7,36 @@ const userProfileSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
+const entitlementsSchema = z.object({
+  tier: z.enum(['free', 'premium']),
+  features: z.array(z.literal('score_history')),
+  effectiveUntil: z.iso.datetime().nullable(),
+  evaluatedAt: z.iso.datetime(),
+  grants: z.array(
+    z.object({
+      provider: z.enum(['stripe', 'apple_mock', 'google_mock']),
+      providerSubscriptionId: z.string(),
+      revision: z.number().int().positive(),
+      validUntil: z.iso.datetime(),
+    }),
+  ),
+  warnings: z.array(
+    z.object({
+      provider: z.string(),
+      providerSubscriptionId: z.string(),
+      reason: z.string(),
+    }),
+  ),
+});
+const scoreHistorySchema = z.object({
+  synthetic: z.literal(true),
+  points: z.array(
+    z.object({ date: z.iso.date(), score: z.number().min(0).max(100) }),
+  ),
+});
+export type Entitlements = z.infer<typeof entitlementsSchema>;
+export type ScoreHistory = z.infer<typeof scoreHistorySchema>;
+
 export type UserProfile = z.infer<typeof userProfileSchema>;
 export type AccessTokenProvider = () => Promise<string>;
 
@@ -17,6 +47,7 @@ export interface RequestOptions {
 
 type ApiErrorCode =
   | 'authentication_required'
+  | 'premium_required'
   | 'forbidden'
   | 'cancelled'
   | 'timeout'
@@ -150,6 +181,14 @@ export class ApiClient {
     return this.request('POST', path, schema, { ...options, data });
   }
 
+  getEntitlements(options: RequestOptions = {}): Promise<Entitlements> {
+    return this.get('/v1/me/entitlements', entitlementsSchema, options);
+  }
+
+  getScoreHistory(options: RequestOptions = {}): Promise<ScoreHistory> {
+    return this.get('/v1/premium/score-history', scoreHistorySchema, options);
+  }
+
   getProfile(options: RequestOptions = {}): Promise<UserProfile> {
     return this.get('/v1/me', userProfileSchema, options);
   }
@@ -175,6 +214,16 @@ function normalizeError(error: unknown): ApiError {
       );
     }
     if (status === 403) {
+      const body = z
+        .object({ error: z.object({ code: z.string() }) })
+        .safeParse(error.response?.data);
+      if (body.success && body.data.error.code === 'premium_required') {
+        return new ApiError(
+          'Premium access is required. Reload your status after changing the local scenario.',
+          'premium_required',
+          status,
+        );
+      }
       return new ApiError(
         'Access was denied. Check the required Auth0 API permissions.',
         'forbidden',

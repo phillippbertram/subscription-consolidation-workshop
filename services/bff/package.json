@@ -7,7 +7,8 @@
     "start": "node --env-file-if-exists=.env dist/local.js",
     "db:init": "tsx scripts/init-local-db.ts",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "demo:subscription": "tsx scripts/seed-subscription.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1149.0",

@@ -23,7 +23,8 @@
     "bootstrap:dev": "pnpm --filter @premiumpass/infra run bootstrap",
     "db:up": "docker compose up -d dynamodb && pnpm --filter @premiumpass/bff run db:init",
     "db:down": "docker compose down",
-    "db:logs": "docker compose logs --tail=100 dynamodb"
+    "db:logs": "docker compose logs --tail=100 dynamodb",
+    "demo:subscription": "pnpm --filter @premiumpass/bff run demo:subscription"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

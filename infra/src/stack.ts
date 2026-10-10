@@ -58,6 +58,15 @@ export class PremiumPassStack extends Stack {
         },
       }),
     );
+    role.addToPolicy(
+      new PolicyStatement({
+        actions: ['dynamodb:Query'],
+        resources: [table.tableArn],
+        conditions: {
+          'ForAllValues:StringLike': { 'dynamodb:LeadingKeys': ['USER#*'] },
+        },
+      }),
+    );
     const bff = new NodejsFunction(this, 'Bff', {
       entry: resolve(root, 'services/bff/src/lambda.ts'),
       depsLockFilePath: resolve(root, 'pnpm-lock.yaml'),

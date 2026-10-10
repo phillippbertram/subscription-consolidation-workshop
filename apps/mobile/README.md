@@ -6,7 +6,7 @@ An Expo development app for the iOS Simulator, using Auth0 Universal Login and t
 
 - The repository's pinned Node and pnpm versions, installed dependencies, Xcode with an available iOS Simulator, and CocoaPods.
 - Docker Desktop and the [local DynamoDB workflow](../../infra/README.md#local-dynamodb-and-manual-requests).
-- An Auth0 Native Application, the existing Custom API, and two synthetic users with `read:me`; follow the [Auth0 setup guide](../../docs/AUTH0_SETUP.md#5-configure-the-native-application-for-p04).
+- An Auth0 Native Application, the existing Custom API, and two synthetic users with `read:me` and `read:premium`; follow the [Auth0 setup guide](../../docs/AUTH0_SETUP.md#5-configure-the-native-application-for-p04).
 
 This app uses `react-native-auth0`, so it requires a native development build. Expo Go cannot run it. Builds run locally through Xcode; no EAS account or AWS deployment is needed.
 
@@ -48,7 +48,7 @@ The configured app scheme is `premiumpass`, and the iOS bundle identifier is `co
 premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 ```
 
-The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. No tokens are stored in AsyncStorage, displayed, or logged by the app.
+The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. No tokens are stored in AsyncStorage, displayed, or logged by the app.
 
 If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback above using your configured domain. Changing the callback allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes.
 
@@ -188,3 +188,12 @@ Sources: [Axios instances](https://axios-http.com/docs/instance), [Axios interce
 No automated tests or test framework are part of this project. `pnpm check` includes mobile typechecking, linting, formatting, and an iOS JavaScript export; the export does not prove a native build or successful login. `pnpm --filter @premiumpass/mobile exec expo install --check` checks Expo dependency compatibility. Native configuration can be regenerated separately using `pnpm --filter @premiumpass/mobile prebuild:ios`.
 
 Sources: [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo), [Auth0 SDK](https://github.com/auth0/react-native-auth0), [Expo monorepos](https://docs.expo.dev/guides/monorepos/).
+
+
+## Subscription dashboard
+
+The profile screen composes `ProfileCard` and the feature-owned `subscriptions/PremiumCard`. `useProfile` loads the profile and entitlements together, refreshes when the app returns to the foreground, and reloads at the next access boundary. Reloading unmounts the history card, cancels pending requests, and removes previous history. A failed refresh displays an error instead of retaining a Premium badge. The server remains authoritative even if the app is offline or its timer is suspended.
+
+`ApiClient.getEntitlements()` and `getScoreHistory()` validate responses with Zod. History is requested explicitly so you can observe both a successful Premium response and a Free user's `403 premium_required`. A missing `read:premium` scope instead produces a permissions error. Sign out and sign in after configuring the new scope.
+
+Follow the [P05 scenario guide](../../docs/SUBSCRIPTIONS.md#local-manual-walkthrough) to switch local data between Free, Premium, grace, and expiration. All scores are synthetic. Real purchases and store adapters follow in later tasks.

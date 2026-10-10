@@ -54,29 +54,40 @@ export function createApp(
   });
   app.get('/v1/me/subscriptions', requireScopes('read:me'), async (c) => {
     const user = await stores.users.getOrCreate(c.get('auth'));
-    return c.json({ subscriptions: await stores.subscriptions.listForUser(user.userId) });
+    return c.json({
+      subscriptions: await stores.subscriptions.listForUser(user.userId),
+    });
   });
   app.get('/v1/me/entitlements', requireScopes('read:me'), async (c) => {
     const user = await stores.users.getOrCreate(c.get('auth'));
     const subscriptions = await stores.subscriptions.listForUser(user.userId);
     return c.json(deriveEntitlements(subscriptions, now()));
   });
-  app.get('/v1/premium/score-history', requireScopes('read:premium'), async (c) => {
-    const user = await stores.users.getOrCreate(c.get('auth'));
-    const subscriptions = await stores.subscriptions.listForUser(user.userId);
-    const entitlements = deriveEntitlements(subscriptions, now());
-    if (!entitlements.features.includes('score_history')) {
-      return c.json({ error: { code: 'premium_required', requestId: c.get('requestId') } }, 403);
-    }
-    return c.json({
-      synthetic: true,
-      points: [
-        { date: '2026-08-01', score: 91 },
-        { date: '2026-09-01', score: 93 },
-        { date: '2026-10-01', score: 94 },
-      ],
-    });
-  });
+  app.get(
+    '/v1/premium/score-history',
+    requireScopes('read:premium'),
+    async (c) => {
+      const user = await stores.users.getOrCreate(c.get('auth'));
+      const subscriptions = await stores.subscriptions.listForUser(user.userId);
+      const entitlements = deriveEntitlements(subscriptions, now());
+      if (!entitlements.features.includes('score_history')) {
+        return c.json(
+          {
+            error: { code: 'premium_required', requestId: c.get('requestId') },
+          },
+          403,
+        );
+      }
+      return c.json({
+        synthetic: true,
+        points: [
+          { date: '2026-08-01', score: 91 },
+          { date: '2026-09-01', score: 93 },
+          { date: '2026-10-01', score: 94 },
+        ],
+      });
+    },
+  );
 
   return app;
 }

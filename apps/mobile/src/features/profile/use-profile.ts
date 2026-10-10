@@ -1,16 +1,47 @@
-import { useEffect, useState } from 'react';
-import { ApiError, type UserProfile } from '../../api/api-client';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState } from 'react-native';
+import {
+  ApiError,
+  type Entitlements,
+  type UserProfile,
+} from '../../api/api-client';
 import { useApiClient } from '../../api/use-api-client';
 
 type ProfileState =
   | { status: 'idle' | 'loading' }
-  | { status: 'success'; profile: UserProfile }
+  | { status: 'success'; profile: UserProfile; entitlements: Entitlements }
   | { status: 'error'; message: string };
 
 export function useProfile(enabled: boolean) {
   const api = useApiClient();
   const [state, setState] = useState<ProfileState>({ status: 'loading' });
   const [revision, setRevision] = useState(0);
+
+  const reload = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => {
+    if (!enabled) return;
+    const subscription = AppState.addEventListener('change', (status) => {
+      if (status === 'active') reload();
+    });
+    return () => subscription.remove();
+  }, [enabled, reload]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      state.status !== 'success' ||
+      !state.entitlements.effectiveUntil
+    )
+      return;
+    const delay =
+      Date.parse(state.entitlements.effectiveUntil) -
+      Date.parse(state.entitlements.evaluatedAt);
+    const timer = setTimeout(
+      reload,
+      Math.max(0, Math.min(delay, 2_147_483_647)),
+    );
+    return () => clearTimeout(timer);
+  }, [enabled, state, reload]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -20,8 +51,11 @@ export function useProfile(enabled: boolean) {
 
     async function load() {
       try {
-        const profile = await api.getProfile({ signal: controller.signal });
-        if (active) setState({ status: 'success', profile });
+        const [profile, entitlements] = await Promise.all([
+          api.getProfile({ signal: controller.signal }),
+          api.getEntitlements({ signal: controller.signal }),
+        ]);
+        if (active) setState({ status: 'success', profile, entitlements });
       } catch (error) {
         if (active) {
           setState({
@@ -43,6 +77,6 @@ export function useProfile(enabled: boolean) {
 
   return {
     state: enabled ? state : ({ status: 'idle' } as const),
-    reload: () => setRevision((value) => value + 1),
+    reload,
   };
 }

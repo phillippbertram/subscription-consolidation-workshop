@@ -1,6 +1,6 @@
 # DynamoDB data model
 
-This reference describes the records currently written by the BFF. For implementation progress and verification evidence, see [P03 in the task plan](TASKS.md#p03-small-aws-stack-and-user-persistence). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
+This reference describes the records currently read by the BFF and written by the BFF or the local demo script. For implementation progress and verification evidence, see [P03 in the task plan](TASKS.md#p03-small-aws-stack-and-user-persistence). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
 
 ## Table structure
 
@@ -11,7 +11,7 @@ The application uses one table with a composite primary key:
 | `pk` | String (`S`) | Partition key; identifies an identity or internal user |
 | `sk` | String (`S`) | Sort key; identifies the record type within that partition |
 
-Only these two attributes are defined in the table schema. The application supplies the other attributes when writing items. All fields listed below are written as strings and are required by the current record format.
+Only these two attributes are defined in the table schema. The application supplies the other attributes when writing items. Identity and profile fields below are strings. Subscription fields additionally use numbers, booleans, and nulls as documented below.
 
 The local initializer creates `premiumpass-local`; the CDK stack uses a generated table name and passes it to the BFF as `DYNAMODB_TABLE_NAME`. Both configure on-demand billing (`PAY_PER_REQUEST`). There are no secondary indexes or TTL attributes configured. The CDK table uses `RETAIN`; local Compose storage uses a persistent named volume. See the [infrastructure guide](../infra/README.md#local-dynamodb-and-manual-requests) for startup and manual requests.
 
@@ -104,11 +104,11 @@ The endpoint requires a validated user access token with `read:me`. It rejects m
 4. If the mapping is absent, generate a UUID and creation timestamp. Write both items together through `TransactWriteItems`. Each put has `attribute_not_exists(pk)` to prevent overwriting an existing item at its full primary key. Each transaction request has a generated `ClientRequestToken`.
 5. On a transaction cancellation containing only conditional-check or transaction-conflict failures (plus any `None` reasons), retry the read/create loop with exponential delay and jitter. There are at most five loop attempts; a losing request can read the mapping created by the winner. Other errors, or exhausted retries, propagate to the HTTP error handler.
 
-Existing profiles are read without updating their creation time. The current user flow uses key lookups and transactional puts; it does not scan or query the table. Missing profiles or inconsistent mappings fail with the API's generic `500 / internal_error`; the store does not silently repair data or fabricate a replacement profile.
+Existing profiles are read without updating their creation time. The profile flow uses key lookups and transactional puts. Subscription reads additionally query the user partition; no table scans are needed. Missing profiles or inconsistent mappings fail with the API's generic `500 / internal_error`; the store does not silently repair data or fabricate a replacement profile.
 
 ## Scope and source files
 
-The implemented model stores no email addresses, display names, tokens, Stripe customer IDs, subscriptions, entitlements, provider ownership records, event markers, checkout requests, outbox entries, or mock provider state. Those future domain records remain in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
+The implemented model stores no email addresses, display names, tokens, Stripe customer IDs, materialized entitlements, provider ownership records, event markers, checkout requests, outbox entries, or mock provider state. Those future domain records remain in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
 
 | Source | Responsibility |
 |---|---|
@@ -117,3 +117,52 @@ The implemented model stores no email addresses, display names, tokens, Stripe c
 | [HTTP app](../services/bff/src/app.ts) | Protected profile endpoint and API response |
 | [CDK stack](../infra/src/stack.ts) | Cloud table schema and retention configuration |
 | [Local initializer](../services/bff/scripts/init-local-db.ts) | Local table creation and key schema verification |
+
+
+## Subscriptions
+
+Subscriptions are stored under the internal user partition and are read through `DynamoDbSubscriptionStore`. P05's only writer is the loopback-only scenario CLI; it is not a payment provider integration.
+
+| Field | Type / format | Meaning |
+| --- | --- | --- |
+| `pk` | String: `USER#<userId>` | Owner partition |
+| `sk` | String: `SUB#<provider>#<providerSubscriptionId>` | Unique provider subscription |
+| `userId` | String: UUID | Must match the selected user and partition |
+| `provider` | String: `stripe`, `apple_mock`, `google_mock` | Provider namespace |
+| `providerSubscriptionId` | Nonempty string | Provider subscription identifier |
+| `productId` | Nonempty string | Only `premium_monthly` is currently mapped |
+| `state` | Nonempty string | Normalized state; unknown values grant no access |
+| `providerStatus` | Nonempty string | Original status; must map to the normalized state |
+| `cancelAtPeriodEnd` | Boolean | Scheduled cancellation, not immediate revocation |
+| `accessUntil` | UTC ISO string or null | Previously verified access boundary, not an unpaid period |
+| `graceUntil` | UTC ISO string or null | Fixed grace boundary; reads cap it at 24 hours after prior access |
+| `verifiedAt` | UTC ISO string | Last source verification; never extends access by itself |
+| `revision` | Positive integer | Source record revision; not an aggregate revision |
+| `demoScenario` | String, local demo records only | `p05-local-demo`; protects the CLI's two reserved records |
+
+All fields except the local marker are required. JSON example:
+
+```json
+{
+  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "sk": "SUB#apple_mock#demo-p05-apple_mock",
+  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "provider": "apple_mock",
+  "providerSubscriptionId": "demo-p05-apple_mock",
+  "productId": "premium_monthly",
+  "state": "active",
+  "providerStatus": "active",
+  "cancelAtPeriodEnd": false,
+  "accessUntil": "2026-10-10T13:00:00.000Z",
+  "graceUntil": null,
+  "verifiedAt": "2026-10-10T12:00:00.000Z",
+  "revision": 1,
+  "demoScenario": "p05-local-demo"
+}
+```
+
+Reads use `pk = USER#<resolved-userId>` and `begins_with(sk, 'SUB#')`, `ConsistentRead: true`, and pagination. Zod strips persistence-only fields from API responses. A malformed record or ownership/key mismatch fails closed with 500. Unknown product/status strings remain visible for diagnosis and grant nothing. There is no TTL: expiration is checked during API access even when the row is still present.
+
+The local CLI transaction checks that the profile exists, then puts/deletes only `demo-p05-apple_mock` and `demo-p05-google_mock`. Each write requires either an absent record or the exact demo marker. `free` removes those two records; other subscriptions are preserved. Demo revisions restart at 1 with each explicitly selected scenario. Real provider monotonic revisions and aggregate concurrency are P06 responsibilities.
+
+See [subscription policy and scenarios](SUBSCRIPTIONS.md) for response examples and manual steps. There is no stored `ENTITLEMENTS` record, owner index, synchronization metadata beyond `verifiedAt`, or event/outbox record yet.

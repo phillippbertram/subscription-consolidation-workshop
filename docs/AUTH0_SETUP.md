@@ -34,7 +34,7 @@ In the API's **Permissions** tab, add:
 | Permission | Description | Backend use |
 |---|---|---|
 | `read:me` | Read the current user's profile and subscription status | Required by the current `GET /v1/me` |
-| `read:premium` | Request Premium demo content | Future Premium route; also requires an entitlement |
+| `read:premium` | Request Premium demo content | Required by `GET /v1/premium/score-history`; also requires a valid entitlement |
 | `write:checkout` | Start checkout for the current user | Future web checkout route |
 
 These are custom API scopes. `openid profile email` are OIDC scopes requested during login, not entries to add to this API's permissions list. [API permissions](https://auth0.com/docs/get-started/apis/add-api-permissions).
@@ -47,7 +47,7 @@ For the dedicated PremiumPass API, enable **Settings → RBAC Settings → Enabl
 
 Under **User Management → Roles**, create `premiumpass-user`. In its **Permissions** tab, add all three PremiumPass API permissions. Assign this role to both demo users through **User Management → Users → selected user → Roles**. This is a suggested setup for this guide, not a previously applied tenant configuration. [Create roles](https://auth0.com/docs/manage-users/access-control/configure-core-rbac/roles/create-roles) · [Assign roles](https://auth0.com/docs/manage-users/access-control/configure-core-rbac/rbac-users/assign-roles-to-users).
 
-Both Free and Premium users receive the same basic role. `read:premium` permits a request; only the backend's later entitlement check permits Premium content. Do not encode subscription status in an Auth0 role.
+Both Free and Premium users receive the same basic role. `read:premium` permits a request; only the backend's entitlement check permits Premium content. Do not encode subscription status in an Auth0 role.
 
 ### Application access policy
 
@@ -95,7 +95,7 @@ premiumpass://your-tenant.eu.auth0.com/android/com.example.premiumpass/callback
 
 Save the application settings. Match the Expo Auth0 plugin's `domain` and explicit `customScheme`, the platform identifiers, and the SDK login/logout options to these URLs. Rebuild the native development app after native configuration changes; Expo Go does not support this SDK. [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo) · [React Native SDK](https://github.com/auth0/react-native-auth0).
 
-The login request must explicitly use the Custom API audience and request `openid profile email read:me` for P04. Premium scopes follow when the corresponding endpoints exist. Send the resulting **access token** to the BFF, not the ID token. The callback returns to the mobile app; `http://127.0.0.1:3000/v1/me` is an API endpoint, not a login callback.
+The login request must explicitly use the Custom API audience and request `openid profile email read:me read:premium`. After adding `read:premium`, sign out and sign in again: existing credentials do not gain new scopes. Verify the API permission, user role, and application grant all allow it. Send the resulting **access token** to the BFF, not the ID token. The callback returns to the mobile app; `http://127.0.0.1:3000/v1/me` is an API endpoint, not a login callback.
 
 ## 6. Enable the user connection and prepare users
 
@@ -137,7 +137,7 @@ This authenticates the CLI to manage the tenant. The following command performs 
 ```sh
 auth0 test token YOUR_APPLICATION_CLIENT_ID \
   --audience "https://api.premiumpass.example" \
-  --scopes "openid,profile,email,read:me"
+  --scopes "openid,profile,email,read:me,read:premium"
 ```
 
 Replace the audience with the exact `AUTH0_AUDIENCE` value. If the BFF uses a custom-domain issuer, add `--domain "login.example.com"` with that hostname. [CLI token command](https://auth0.github.io/auth0-cli/auth0_test_token.html).

@@ -2,8 +2,10 @@ import { Button, ButtonText } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
 import { Screen } from '../../components/Screen';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { PremiumCard } from '../subscriptions/PremiumCard';
 import { ProfileCard } from './ProfileCard';
 import { useProfile } from './use-profile';
+import { SessionCard } from '../auth/SessionCard';
 
 interface ProfileScreenProps {
   isSigningOut: boolean;
@@ -19,10 +21,16 @@ export function ProfileScreen({
   const { state, reload } = useProfile(!isSigningOut);
   return (
     <Screen
-      title="Your profile"
-      description="Your profile is loaded from the backend using your Auth0 session."
+      title="Your dashboard"
+      description="Your profile and current access come from the backend."
     >
-      {state.status === 'success' && <ProfileCard profile={state.profile} />}
+      {!isSigningOut && <SessionCard />}
+      {state.status === 'success' && (
+        <>
+          <PremiumCard entitlements={state.entitlements} />
+          <ProfileCard profile={state.profile} />
+        </>
+      )}
       {state.status === 'loading' && (
         <Spinner
           className="text-primary"
@@ -36,7 +44,7 @@ export function ProfileScreen({
         isDisabled={isSigningOut || state.status === 'loading'}
         onPress={reload}
       >
-        <ButtonText>Reload profile</ButtonText>
+        <ButtonText>Reload dashboard</ButtonText>
       </Button>
       <ErrorMessage message={authError} />
       <Button

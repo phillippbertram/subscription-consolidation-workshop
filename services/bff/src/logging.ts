@@ -17,12 +17,15 @@ export function readLogLevel(
 }
 
 export function createLogger(level: LogLevel) {
-  return pino({
-    level,
-    base: { service: 'premiumpass-bff' },
-    timestamp: pino.stdTimeFunctions.isoTime,
-    formatters: { level: (label) => ({ level: label }) },
-  }, pino.destination({ dest: 1, sync: true }));
+  return pino(
+    {
+      level,
+      base: { service: 'premiumpass-bff' },
+      timestamp: pino.stdTimeFunctions.isoTime,
+      formatters: { level: (label) => ({ level: label }) },
+    },
+    pino.destination({ dest: 1, sync: true }),
+  );
 }
 
 export function requestLogger(level: LogLevel) {

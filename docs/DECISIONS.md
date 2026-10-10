@@ -85,3 +85,12 @@ The grace period, small scan-based flows, and latency targets in the project pla
 | GitHub remote and OIDC target                 | P10              | Start with local checks; do not invent a remote                          |
 
 Record only configuration names and non-secret decisions here. Secret values do not belong in this document.
+
+
+## P05 domain and BFF logging
+
+The BFF uses Pino with JSON stdout, per-request child loggers, and synchronous output suitable for the current Lambda adapter. Existing bounded debug previews and log-level controls remain in place. No background logging transport is needed.
+
+Subscription access rules live in the pure `services/bff/src/domain` module, with time supplied by the caller. A separate workspace package is unnecessary until another service consumes the module. Zod validates persisted subscriptions at the adapter boundary. Unknown products/statuses remain visible and grant no access.
+
+P05 computes entitlements on reads of the user's subscriptions. It exposes each grant's source revision, without inventing a materialized aggregate revision. The transactional aggregate, event markers, outbox, and provider writers are part of P06. The local scenario command is a deliberately separate educational writer, fixed to DynamoDB Local.

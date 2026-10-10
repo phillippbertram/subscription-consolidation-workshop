@@ -268,8 +268,8 @@ interface Subscription {
   userId: string;
   provider: Provider;
   providerSubscriptionId: string;
-  productId: 'premium_monthly';
-  state: SubscriptionState;
+  productId: string; // premium_monthly is the only known product
+  state: string; // known values are SubscriptionState; unknown values fail closed
   providerStatus: string;
   cancelAtPeriodEnd: boolean;
   accessUntil: string | null;
@@ -300,6 +300,8 @@ Stripe demo mapping: `incomplete` → `pending`, `incomplete_expired` → `expir
 ### Multiple purchase channels
 
 A user's features are the union of all currently valid grants. If the Apple mock ends while Stripe remains valid, Premium stays active. A single provider event must therefore never blindly set `isPremium=false` for the whole user.
+
+The P05 read model derives access directly from stored subscriptions. Its grants expose source revisions; the persisted `ENTITLEMENTS` aggregate and aggregate revision belong to the transactional processor in P06. See [implemented rules and local scenarios](docs/SUBSCRIPTIONS.md).
 
 Implement the calculation as the pure function `deriveEntitlements(subscriptions, now)`. Pass time as a parameter so expiration boundaries can be checked without waiting. Unknown products or unrecognized provider states grant no new access; keep these cases visible for investigation.
 
