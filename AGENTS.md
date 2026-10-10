@@ -1,60 +1,61 @@
-# Agent-Anweisungen für PremiumPass
+# Agent instructions for PremiumPass
 
-## Einstieg
+## Getting started
 
-Dieses Repository enthält ein Hands-on-Lernprojekt für React Native, Auth0 und eine AWS-Subscription-Plattform. Arbeite im Repository `schufa-lab`; der Produktname ist PremiumPass. Verwende synthetische Daten und Stripe ausschließlich im Testmodus.
+This repository contains a hands-on learning project for React Native, Auth0, and an AWS subscription platform. Work in the `schufa-lab` repository; the product name is PremiumPass. Use synthetic data and Stripe test mode only.
 
-Lies zuerst [README.md](README.md), dann [docs/DECISIONS.md](docs/DECISIONS.md) und die beauftragte Aufgabe in [docs/TASKS.md](docs/TASKS.md). Lies aus [PROJECT_PLAN.md](PROJECT_PLAN.md) anschließend nur die dafür relevanten Abschnitte. Prüfe vorhandene Implementierung und `git status --short`, bevor du Änderungen machst.
+Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISIONS.md) and the assigned task in [docs/TASKS.md](docs/TASKS.md). Then read only the relevant sections of [PROJECT_PLAN.md](PROJECT_PLAN.md). Inspect the existing implementation and `git status --short` before making changes.
 
-## Arbeitsweise
+## Working rules
 
-- Bearbeite den aktuellen Auftrag. Der Aufgabenplan ist keine pauschale Beauftragung aller Aufgaben.
-- Halte Änderungen klein und fachlich zusammenhängend. Lege Verzeichnisse und Abstraktionen erst an, wenn die aktuelle Aufgabe sie benötigt.
-- Unterscheide bestätigte Entscheidungen, Empfehlungen und offene Punkte. Hono ist empfohlen; die Auswahl zwischen Hono und Fastify ist noch nicht entschieden. NestJS ist nicht die gewünschte Richtung.
-- Behebe Routineprobleme im beauftragten Umfang selbstständig. Frage nur bei einer wesentlichen fehlenden Entscheidung oder tatsächlich fehlender Autorisierung; bereits erteilte Autorisierung gilt weiter.
-- Bewahre fremde Änderungen. Keine Commits, Pushes oder Remote-Repositories ohne entsprechenden Auftrag.
-- Cloud-Deployments, Änderungen an Auth0/Stripe und kostenpflichtige Ressourcen müssen vom aktuellen Auftrag abgedeckt sein. Lokales Implementieren, Tests und CDK-Synthese benötigen keine zusätzliche Rückfrage.
-- Keine eigenständige Erweiterung um echte Store-Käufe, zusätzliche Produkte, komplexe Plattformabstraktionen oder Produktionsbetrieb.
-- Dokumentation und Ergebnisberichte auf Deutsch; Codebezeichner auf Englisch.
+- Work on the current request. The task backlog is not blanket authorization to implement every task.
+- Do not write automated tests or install a test framework for this learning project. Verify changes with typechecking, linting, builds, and appropriate manual requests.
+- Keep changes small and cohesive. Add directories and abstractions only when the current task needs them.
+- Distinguish confirmed decisions, recommendations, and open questions. Hono is the selected HTTP framework; pnpm workspaces define the planned repository structure. Toolchain versions are pinned in `.nvmrc` and `package.json`.
+- Resolve routine issues within the assigned scope independently. Ask only when a material decision or authorization is missing; existing authorization remains valid.
+- Preserve other people's changes. Do not commit, push, or create remote repositories without a corresponding request.
+- Cloud deployments, Auth0/Stripe changes, and paid resources must be covered by the current request. Local implementation, manual checks, and CDK synthesis require no additional confirmation.
+- Do not independently expand scope to real store purchases, additional products, complex platform abstractions, or production operation.
+- Use English throughout the project: code, identifiers, comments, runtime messages, configuration examples, documentation, and task records. Keep existing technical identifiers and product names where appropriate.
 
-## Architekturregeln
+## Architecture rules
 
-- Auth0 übernimmt den Login. Access-Token-Verifikation und Scope-Prüfung erfolgen im Backend, vor geschützten Handlern. Kein JWT- oder Lambda-Authorizer am API Gateway.
-- Nutze etablierte JWT-Verifikation und die fest konfigurierte Auth0-JWKS-Adresse. Vertrauen entsteht erst nach Signatur-, Issuer-, Audience- und Zeitprüfung. Niemals Tokens nur dekodieren und Claims übernehmen.
-- Benutzerzuordnung erfolgt aus validiertem `iss` und `sub`. Premiumzugriff verlangt zusätzlich ein gültiges Entitlement; ein Scope allein reicht nicht.
-- Der Stripe-Webhook besitzt eigene Signaturprüfung über unveränderte Request-Bytes. Er benötigt kein Auth0-Token und bestätigt erst nach erfolgreicher Queue-Annahme.
-- HTTP-Transport, Domainlogik, Provider-Adapter und Persistenz bleiben getrennt. SQS-/Zeitplan-Handler benötigen kein HTTP-Framework.
-- Die Domain kennt weder HTTP-Requests noch Framework-Kontexte. Zeitabhängige Berechtigungen erhalten eine injizierbare Uhr.
-- Doppelte und verspätete Events sind Normalfälle. Zustand, Abschlussmarkierung und Outbox werden atomar gespeichert; Reconciliation nutzt denselben fachlichen Verarbeitungspfad.
-- Ein endendes Abo darf andere gültige Grants desselben Nutzers nicht löschen. Ablaufzeiten werden auch beim API-Zugriff geprüft.
-- Ein Provider-Ausfall gewährt keine neue Laufzeit. Bestehende Rechte folgen den im Projektplan festgelegten Grenzen.
+- Auth0 handles login. Access token verification and scope checks run in the backend before protected handlers. Do not configure a JWT or Lambda authorizer in API Gateway.
+- Use established JWT verification and a fixed Auth0 JWKS URL. Trust claims only after signature, issuer, audience, and time validation. Never merely decode tokens and accept their claims.
+- Map users from validated `iss` and `sub`. Premium access also requires a valid entitlement; a scope alone is insufficient.
+- The Stripe webhook verifies its own signature against unchanged request bytes. It requires no Auth0 token and acknowledges only after successful queue acceptance.
+- Keep HTTP transport, domain logic, provider adapters, and persistence separate. SQS and scheduled handlers do not need an HTTP framework.
+- The domain must not depend on HTTP requests or framework contexts. Use an injectable clock for time-dependent access rules.
+- Duplicate and delayed events are normal. Store state, completion markers, and outbox entries atomically; reconciliation uses the same domain processing path.
+- An ending subscription must not remove another valid grant belonging to the same user. Check expiration times during API access as well.
+- A provider outage grants no additional access period. Existing access follows the limits defined in the project plan.
 
-## Konfiguration und Geheimnisse
+## Configuration and secrets
 
-- Keine echten Tokens, Secrets, Kundendaten oder vollständigen Zahlungs-Payloads in Code, Fixtures, Dokumentation oder Logs.
-- Beispiele enthalten Platzhalter. Lokale Geheimnisse gehören in ignorierte Dateien; Cloud-Secrets später in Secrets Manager.
-- Keine bestehenden Zugangsdaten aus anderen Projekten übernehmen. Prüfe Accounts, Profile und Stage vor autorisierten externen Änderungen.
-- Keine funktionierende Authentifizierung vortäuschen: Test-Verifier und lokale JWKS-Fixtures sind nur für Tests, nicht als stiller Laufzeit-Fallback.
+- Do not put real tokens, secrets, customer data, or full payment payloads in code, fixtures, documentation, or logs.
+- Use placeholders in examples. Local secrets belong in ignored files; cloud secrets will later use Secrets Manager.
+- Do not reuse credentials from other projects. Check accounts, profiles, and stage before authorized external changes.
+- Do not simulate working authentication: mock verifiers and local JWKS fixtures are for isolated manual verification only, never a silent runtime fallback.
 
-## Befehle und Prüfung
+## Commands and verification
 
-Aktuell gibt es noch keine Anwendung, kein Paketmanifest und keine Build-/Test-Scripts. Erfinde keine vorhandenen Befehle. Die ausführbaren Befehle werden mit P01 eingeführt und im README dokumentiert.
+The pnpm workspace contains the Hono BFF. `pnpm check` runs formatting checks, linting, typechecking, and the build. Installation, startup, and individual commands are documented in the README. Cloud infrastructure starts with P03.
 
-- Prüfe später zunächst `package.json`, Lockfile und Runtime-Pinning. Verwende deren Toolchain; installiere Abhängigkeiten nicht mit wechselnden Paketmanagern.
-- Für Backend-Änderungen: relevante Domain-/Auth-/Integrationstests, Typecheck, Lint und Build ausführen, soweit eingerichtet.
-- Für Infrastruktur: CDK-Synthese und passende Assertions; ein erfolgreiches Synthese-Ergebnis ist kein Live-Deployment.
-- Für reine Dokumentation: relative Links, Aufgabenabhängigkeiten, Entscheidungsstatus und Diff auf Konsistenz prüfen. Keine künstlichen Anwendungstests für Prosaänderungen anlegen.
-- Mobile Screens zunächst anhand des definierten manuellen Ablaufs prüfen; keine umfangreiche UI-Testsuite für die Demo.
-- Fehlende Credentials oder Infrastruktur sind konkrete Einschränkungen. Schließe unabhängig prüfbare Arbeit ab und benenne den noch offenen Nachweis.
+- Inspect `package.json`, the lockfile, and runtime pins first. Use that toolchain; do not switch package managers when installing dependencies.
+- For backend changes, run typechecking, linting, and the build, and check relevant flows manually.
+- For infrastructure, synthesize CDK and inspect the generated template. Successful synthesis is not a live deployment.
+- For documentation changes, check relative links, task dependencies, decision status, and diff consistency. Do not add artificial application tests for prose changes.
+- Check mobile screens using the defined manual flow; do not add a UI test suite for the demo.
+- Missing credentials or infrastructure are specific limitations. Finish independently verifiable work and state which evidence remains outstanding.
 
-## Übergabe und Dokumentationspflege
+## Handoffs and documentation maintenance
 
-Status einer Implementierungsaufgabe wird ausschließlich in `docs/TASKS.md` gepflegt. Markiere sie erst als erledigt, wenn ihre Abnahmekriterien erfüllt sind. Halte bei Teilfortschritt konkret fest, welche Prüfung fehlt.
+Maintain implementation task status exclusively in `docs/TASKS.md`. Mark a task complete only when its acceptance criteria are met. For partial progress, state exactly which verification is missing.
 
-Aktualisiere die kleinste betroffene Dokumentationsmenge: Befehle im README, Entscheidungen in `docs/DECISIONS.md`, fachliche/architektonische Änderungen im Projektplan. Empfehlungen werden durch Wiederholung nicht zu bestätigten Entscheidungen.
+Update the smallest relevant set of documents: commands in the README, decisions in `docs/DECISIONS.md`, and domain or architecture changes in the project plan. Repetition does not turn a recommendation into a confirmed decision.
 
-Berichte zum Abschluss knapp: Ergebnis, relevante Dateien, tatsächlich ausgeführte Prüfungen sowie verbleibende Einschränkungen. Unterscheide lokale Tests, Synthese, AWS-Live-Nachweise und mobile Tests. Behaupte keinen erfolgreichen Test oder Deployment ohne Ergebnis.
+Report the outcome, relevant files, checks actually performed, and remaining limitations concisely. Distinguish local checks, synthesis, live AWS evidence, and mobile checks. Never claim successful verification or deployment without evidence.
 
-## Code Review Rules
+## Code review rules
 
-Prüfe besonders auf ungeschützte Benutzerrouten, ungeprüfte Claims, fremde Kaufzuordnung, Entitlement-Freigabe allein durch Checkout-Redirect, vorzeitig abgeschlossene Events, verlorene Updates bei konkurrierenden Providern und das Absturzfenster zwischen Speicherung und Eventversand. Formatiertests gehören in automatisierte Checks.
+Pay particular attention to unprotected user routes, unverified claims, purchases assigned to the wrong owner, entitlement grants based only on checkout redirects, prematurely completed events, lost updates across concurrent providers, and the crash window between persistence and event publication. Include formatting verification in automated checks.

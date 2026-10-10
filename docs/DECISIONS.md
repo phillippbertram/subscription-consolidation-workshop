@@ -1,54 +1,62 @@
-# Entscheidungen
+# Decisions
 
-Stand: 10. Oktober 2026. Dieses Dokument unterscheidet die festgelegte Projektrichtung von Umsetzungsvorschlägen. Detaillierte Abläufe stehen im [Projektplan](../PROJECT_PLAN.md); Arbeitsstatus steht im [Aufgabenplan](TASKS.md).
+As of October 10, 2026. This document distinguishes agreed project direction from implementation proposals. Detailed flows are in the [project plan](../PROJECT_PLAN.md); implementation status is in the [task plan](TASKS.md).
 
-## Festgelegte Richtung
+## Agreed direction
 
-| ID | Entscheidung | Konsequenz |
+| ID | Decision | Consequence |
 |---|---|---|
-| D01 | React Native und Auth0 | Echter mobiler Login; SDK benötigt einen nativen Development Build |
-| D02 | Authentifizierung direkt im Backend | API Gateway ohne JWT-/Lambda-Authorizer; zentrale Token- und Scope-Prüfung im BFF |
-| D03 | AWS Serverless mit TypeScript und CDK | HTTP API, Lambda, DynamoDB, SQS/DLQ und EventBridge bilden die Zielarchitektur |
-| D04 | Stripe im Testmodus, Apple/Google zunächst Mocks | Kein Live-Billing und keine echte Store-Integration im Wochenendumfang |
-| D05 | Zentrale Subscriptions und Entitlements | Zugriff richtet sich nach serverseitig berechneten Rechten über alle Provider |
-| D06 | Kleines Hands-on-Projekt | Schrittweise umsetzen; keine zusätzliche Plattform oder Admin-Oberfläche aufbauen |
-| D07 | Hono oder Fastify als HTTP-Framework | Die vorherige NestJS-Empfehlung wird nicht weiterverfolgt |
+| D01 | React Native and Auth0 | Real mobile login; the SDK requires a native development build |
+| D02 | Authentication directly in the backend | API Gateway without a JWT/Lambda authorizer; central token and scope checks in the BFF |
+| D03 | AWS Serverless with TypeScript and CDK | HTTP API, Lambda, DynamoDB, SQS/DLQ, and EventBridge form the target architecture |
+| D04 | Stripe test mode; Apple/Google initially mocked | No live billing or real store integration within the weekend scope |
+| D05 | Central subscriptions and entitlements | Access depends on server-side permissions computed across providers |
+| D06 | Small hands-on project | Implement incrementally; do not build an additional platform or admin interface |
+| D07 | Hono as the HTTP framework | Shared app definition, separate Node and Lambda entry points; selection delegated by the user |
+| D08 | No automated tests in the learning project | No test framework; use typechecking, linting, builds, and manual functional checks |
+| D09 | English throughout the project | Code, comments, messages, configuration examples, and documentation use English |
 
-## Offene Framework-Auswahl
+## Framework: Hono
 
-**Status: offen.** Die Präferenz Hono oder Fastify stammt vom Nutzer. Hono ist die aktuelle Empfehlung des Assistenten und noch keine bestätigte Auswahl.
+**Status: decided on October 10, 2026.** The user delegated the choice between Hono and Fastify, prioritizing straightforward Lambda integration. We chose Hono for the small API: the app definition runs as a Lambda handler through the official `@hono/aws-lambda` adapter and locally through `@hono/node-server`. Both entry points share routes and authentication middleware. Fastify remains a suitable alternative but is not introduced alongside Hono.
 
-Vor P01 entweder die Auswahl mit dem Nutzer treffen oder eine ausdrücklich delegierte Auswahl begründet dokumentieren. Erst danach das gewählte Framework im Projektplan und in diesem Dokument als entschieden markieren. Nicht beide Frameworks installieren oder vorsorglich eine austauschbare HTTP-Abstraktion bauen.
+Domain logic remains independent of Hono. SQS and scheduled handlers need no HTTP server. P01 uses Hono 4.13.13, `@hono/aws-lambda` 1.0.1, and `@hono/node-server` 2.1.4. Versions are fixed in manifests and the lockfile; local verification is recorded in the task plan.
 
-Unabhängig davon gilt: eine gemeinsame App-Definition, getrennte Einstiegspunkte für lokalen HTTP-Betrieb und Lambda, Domainlogik ohne Framework-Abhängigkeit. Der konkrete Lambda-Adapter wird anhand der gewählten Framework-Version geprüft.
+Sources: [Hono on AWS Lambda](https://hono.dev/docs/getting-started/aws-lambda), [Hono on Node.js](https://hono.dev/docs/getting-started/nodejs).
 
-## Umsetzungsvorschläge aus dem Plan
+## Repository: pnpm workspaces
 
-Diese Vorgaben sind die Arbeitsbasis für die Aufgaben, keine bereits vorhandene Implementierung. Routineanpassungen innerhalb des beauftragten Umfangs begründen und hier beziehungsweise im Projektplan nachziehen.
+**Working baseline:** A private monorepo with `pnpm-workspace.yaml` and one shared `pnpm-lock.yaml`. Workspace patterns: `apps/*`, `services/*`, `packages/*`, and `infra`. Create packages only when needed; P01 starts with `services/bff`, and P03 adds `infra`.
 
-| Thema | Arbeitsbasis |
+Internal packages use names such as `@premiumpass/<name>`, set `private: true`, and reference local dependencies with `workspace:*`. Root scripts coordinate package scripts; no Turbo or Nx initially. `packageManager` pins pnpm 12.10.1. Package boundaries and the target structure are in [section 14 of the project plan](../PROJECT_PLAN.md#14-repository-and-cicd).
+
+Source: [pnpm Workspaces](https://pnpm.io/workspaces).
+
+## Implementation baseline
+
+These choices guide the tasks; they do not imply that the corresponding implementation already exists. Explain routine adjustments within the assigned scope and update this document or the project plan.
+
+| Topic | Baseline |
 |---|---|
-| Runtime | Node.js 24; kompatible genaue Versionen und Lockfile mit P01 |
-| Paketverwaltung | pnpm-Workspace als Vorschlag; genaue Version mit P01 festlegen |
-| JWT | Etablierte Bibliothek; `jose` ist empfohlen, keine eigene Kryptografie |
-| Validierung und Tests | Zod und Vitest als Startpunkt; Verhalten statt Implementierungsdetails testen |
-| Mobile | Expo Development Build, drei kleine Screens |
-| Persistenz | Kleine DynamoDB-Demotabelle, Conditional Writes und Transaktionen |
-| Zuverlässigkeit | Gemeinsamer Verarbeitungspfad, Inbox/Outbox, Retry/DLQ und Reconciliation |
-| Deployment | Eine Dev-Stage; GitHub Actions mit OIDC im späteren CI/CD-Task |
+| Runtime | Local Node.js 24.19.0 through `.nvmrc` and `engines`; Lambda target runtime Node 24 |
+| Package management | pnpm 12.10.1; shared lockfile and exact direct dependency versions |
+| JWT | Established library; `jose` recommended, no custom cryptography |
+| Tooling and verification | TypeScript 6.0.3, ESLint, and Prettier; no automated tests; TypeScript stays within the range supported by typescript-eslint. Add Zod only when needed |
+| Mobile | Expo development build, three small screens |
+| Persistence | Small DynamoDB demo table, conditional writes, and transactions |
+| Reliability | Shared processing path, inbox/outbox, retries/DLQ, and reconciliation |
+| Deployment | One development stage; GitHub Actions with OIDC in the later CI/CD task |
 
-Die im Projektplan beschriebene Grace Period, die kleinen Scan-basierten Abläufe und die Latenzziele sind bewusste Demoregeln. Sie dürfen nicht als Provider-Garantien oder Produktions-SLAs dargestellt werden.
+The grace period, small scan-based flows, and latency targets in the project plan are deliberate demo rules. Do not present them as provider guarantees or production SLAs.
 
-## Noch benötigte Umgebung
+## Environment still needed
 
-| Information | Benötigt ab | Umgang bis dahin |
+| Information | Needed from | Approach until then |
 |---|---|---|
-| Hono oder Fastify | P01 | Framework-unabhängige Dokumentation ist möglich |
-| Genaue Toolchain-Versionen | P01 | Keine Installationsbefehle als vorhanden ausgeben |
-| AWS-Account, Profil, Region | Live-Teil von P03 | CDK lokal synthetisieren und testen |
-| Auth0-Issuer, API-Audience, Client-ID, Scopes | Live-Teil von P04 | Lokale Token- und JWKS-Fixtures für P02 |
-| Primäre mobile Testplattform | P04 | Im mobilen Task festlegen und tatsächlich getestete Plattform dokumentieren |
-| Stripe-Testpreis und Secret-Referenzen | P06 | Fixtures verwenden; keine fremden Zugangsdaten übernehmen |
-| GitHub-Remote und OIDC-Ziel | P10 | Lokale Checks zuerst; keinen Remote erfinden |
+| AWS account, profile, region | Live part of P03 | Synthesize CDK locally and inspect the template |
+| Auth0 issuer, API audience, client ID, scopes | Live part of P04 | Local token and JWKS fixtures for P02 |
+| Primary mobile verification platform | P04 | Choose during the mobile task and document the platform actually checked |
+| Stripe test price and secret references | P06 | Use fixtures; do not reuse unrelated credentials |
+| GitHub remote and OIDC target | P10 | Start with local checks; do not invent a remote |
 
-Hier nur Konfigurationsnamen und nicht geheime Entscheidungen festhalten. Secret-Werte gehören nicht in dieses Dokument.
+Record only configuration names and non-secret decisions here. Secret values do not belong in this document.

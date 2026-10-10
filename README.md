@@ -1,53 +1,94 @@
 # PremiumPass
 
-Hands-on-Lernprojekt: Eine React-Native-App mit Auth0 und einem AWS-Backend, das Stripe-Testabonnements sowie Apple-/Google-Mocks in zentrale Berechtigungen übersetzt. Es werden ausschließlich synthetische Daten verwendet.
+A hands-on learning project: a React Native app with Auth0 and an AWS backend that translates Stripe test subscriptions and Apple/Google mocks into central entitlements. All data is synthetic. Code and documentation use English.
 
-## Orientierung
+## Navigation
 
-| Datei | Zweck |
+| File | Purpose |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Arbeitsregeln für Coding-Agenten |
-| [Projektplan](PROJECT_PLAN.md) | Fachlicher Umfang, Architektur, Wochenendplan und vollständige Testmatrix |
-| [Entscheidungen](docs/DECISIONS.md) | Festgelegte Richtung, offene Auswahl und technische Vorschläge |
-| [Aufgaben](docs/TASKS.md) | Kleine Arbeitspakete mit Abhängigkeiten, Status und Abnahme |
+| [AGENTS.md](AGENTS.md) | Working rules for coding agents |
+| [Project plan](PROJECT_PLAN.md) | Scope, architecture, weekend schedule, and manual verification scenarios |
+| [Decisions](docs/DECISIONS.md) | Agreed direction, open questions, and implementation proposals |
+| [Tasks](docs/TASKS.md) | Small work packages with dependencies, status, and acceptance criteria |
 
-Der Projektordner ist die Arbeitsgrundlage. Frühere Library-Dateien sind Exporte eines damaligen Stands.
+The project directory is the source of truth. Earlier Library files are historical exports.
 
-## Aktueller Einstieg
+## Current implementation
 
-Das Repository enthält bisher die Projekt- und Agent-Dokumentation. Anwendungscode, Paketmanifest, Lockfile und Infrastruktur folgen mit den Implementierungsaufgaben. Der Aufgabenstatus steht im [Aufgabenplan](docs/TASKS.md).
+The pnpm workspace contains the Hono skeleton in `services/bff`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. Authentication and `GET /v1/me` follow in P02; unknown routes currently return 404. Progress is tracked in the [task plan](docs/TASKS.md).
 
-Erster technischer Meilenstein: lokal startendes HTTP-Backend mit Health-Endpunkt, anschließend Auth0-Tokenprüfung und `GET /v1/me`. Danach folgt ein kleiner AWS-Durchlauf. Hono ist der aktuelle Vorschlag; die Nutzerpräferenz lässt Hono oder Fastify zu. Die Auswahl ist vor dem Backend-Skeleton zu dokumentieren.
-
-## Lokale Vorbereitung
-
-- Node.js 24 ist als Runtime geplant. Exakte Toolchain und Paketmanager-Version werden in P01 festgelegt und gepinnt.
-- Ein Git-Repository ist bereits vorhanden. Remote, CI und Deployment sind noch nicht eingerichtet.
-- Für die lokalen Auth-Tests reichen erzeugte Testschlüssel und ein kontrolliertes JWKS; echte Zugänge werden erst für den Live-Durchlauf benötigt.
-- Für den späteren AWS-Test: Dev-Account/Profil und Region. Für Auth0: Tenant, Native Application und Custom API mit Audience.
-- Keine Secrets in Aufgabenbeschreibungen oder Chat-Nachrichten kopieren. Nicht geheime IDs und die Namen benötigter Secrets reichen zur Konfiguration.
-
-## Ausführbare Befehle
-
-Derzeit bestehen nur Git- und Dokumentationsdateien. Zur Sichtung des Arbeitsstands:
-
-```sh
-git status --short
-git diff --check
+```text
+services/bff/
+  src/
+    app.ts          Shared app factory; does not open a port
+    config.ts       Local startup configuration validation
+    local.ts        Node HTTP server on 127.0.0.1
+    lambda.ts       Lambda handler for API Gateway HTTP API
+  .env.example      Versioned local configuration example
 ```
 
-`git diff --check` erfasst keine ungetrackten neuen Dateien; diese zusätzlich lesen und prüfen. Es gibt noch keinen Installations-, Start-, Build- oder Testbefehl für eine Anwendung.
+`infra` follows in P03. Additional apps, workers, and shared packages are added only when needed. The target structure is in the [project plan](PROJECT_PLAN.md#14-repository-and-cicd). pnpm scripts coordinate the workspace.
 
-P01 ergänzt an dieser Stelle die tatsächlich vorhandenen Befehle einschließlich Arbeitsverzeichnis, benötigter Konfiguration und Checks. Die Scripts sollen lokalen Start, Typecheck, Lint, Tests und Build nachvollziehbar abdecken. CDK-Synthese und Deployment werden erst mit P03 dokumentiert.
+## Installation and local startup
 
-## Eine Aufgabe an einen Agenten übergeben
+Run all commands below from the repository root. The project pins **Node.js 24.19.0** (`.nvmrc`, `engines`) and **pnpm 12.10.1** (`packageManager`, `engines`). If nvm is installed, run `nvm install` followed by `nvm use` to activate the Node version. If pnpm is missing, run `npm install --global pnpm@12.10.1` once under that Node version.
 
-Beispiel für den nächsten Implementierungsauftrag:
+```sh
+pnpm install --frozen-lockfile
+cp services/bff/.env.example services/bff/.env
+pnpm dev
+```
 
-> Lies AGENTS.md, docs/DECISIONS.md und P01 in docs/TASKS.md. Bearbeite nur P01. Kläre die dort genannte Framework-Auswahl, sofern sie noch nicht entschieden oder an dich delegiert wurde. Prüfe das Ergebnis lokal und aktualisiere Aufgabenstatus sowie README-Befehle. Führe keine Cloud-Deployments aus.
+Copy the example only during initial setup; preserve an existing `.env`. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
 
-Weitere Tasks analog über ihre ID beauftragen. Jeder Task nennt sein Ergebnis und seine Grenzen. Fehlende Live-Zugänge verhindern nicht, dass lokale Implementierung und Tests abgeschlossen werden.
+```sh
+curl --fail http://127.0.0.1:3000/health
+```
 
-## Grundlage der Agent-Anweisungen
+Expected response: `{"status":"ok"}`. Stop with `Ctrl+C`.
 
-Die kompakte `AGENTS.md` im Projektstamm folgt der [offiziellen Anleitung für Projektanweisungen](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Projektspezifische Fakten stehen in verlinkten Dokumenten, damit nicht der gesamte Projektplan bei jeder Aufgabe als Regelwerk gelesen werden muss.
+The local server requires `PORT`, an integer from 0 to 65535. The example uses 3000; 0 lets the operating system choose a free port, which appears in the startup log. `pnpm dev` and `pnpm start` read `services/bff/.env`; existing environment variables take precedence. To run without a file, use `PORT=3000 pnpm dev`. Missing or invalid values produce an explanatory error before the server starts. A port already in use produces a server error; in watch mode, the watcher then waits for a change or `Ctrl+C`.
+
+P01 requires no cloud credentials. Local `.env` files are ignored; `.env.example` is versioned. Do not put tokens or secrets in documentation or logs.
+
+## Checks and build
+
+```sh
+pnpm check
+```
+
+This command runs formatting checks, linting, typechecking, and the build. Individual commands:
+
+| Command | Effect |
+|---|---|
+| `pnpm format:check` | Run Prettier checks for TS, JS, JSON, and YAML across the repository |
+| `pnpm format` | Format the same files, excluding generated files and the lockfile |
+| `pnpm lint` | Run ESLint, including type-aware TypeScript rules |
+| `pnpm typecheck` | Typecheck all workspace packages |
+| `pnpm build` | Bundle local and Lambda entry points with esbuild |
+| `pnpm start` | Start the built local server without watch mode |
+
+Check Markdown links and consistency when changing documentation. `git diff --check` also checks tracked changes for whitespace issues; inspect new files separately.
+
+The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. The Lambda export is `handler`; the eventual deployment handler name is `lambda.handler`, and the bundle must load as ESM (for example, include a `package.json` with `"type": "module"` in the artifact). CDK bundling and deployment follow in P03.
+
+At the user's request, this learning project has no automated tests or test framework. Verify behavior through manual requests; typechecking, linting, and builds remain configured. The Lambda entry point opens no HTTP port and does not require `PORT`. Live AWS verification follows in P03.
+
+## Environment needed later
+
+- P02 manual authentication checks: generated test keys and a controlled JWKS; no real credentials required.
+- P03 live work: AWS development account/profile and region.
+- P04 live work: Auth0 tenant, Native Application, and Custom API with an audience.
+- A remote repository, CI, and deployment have not been configured yet.
+
+## Assigning a task to an agent
+
+Example request for the next implementation task:
+
+> Read AGENTS.md, docs/DECISIONS.md, and P02 in docs/TASKS.md. Work only on P02. Add Auth0 token verification using local test keys and a controlled JWKS. Check the result locally and update the task status and README commands. Do not deploy cloud resources.
+
+Assign subsequent tasks by ID in the same way. Each task defines its outcome and boundaries. Missing live credentials do not prevent completing local implementation and manual checks.
+
+## Basis for the agent instructions
+
+The concise root `AGENTS.md` follows the [official project instruction guide](https://learn.chatgpt.com/docs/agent-configuration/agents-md). Project facts live in linked documents so agents do not need to treat the entire project plan as a rulebook for every task.

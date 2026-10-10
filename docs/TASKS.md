@@ -1,146 +1,150 @@
-# Aufgabenplan
+# Task plan
 
-Diese Datei ist die zentrale Stelle für den Arbeitsstatus. Umfang und fachliche Regeln stehen im [Projektplan](../PROJECT_PLAN.md), Entscheidungen in [DECISIONS.md](DECISIONS.md), Arbeitsregeln in [AGENTS.md](../AGENTS.md).
+This file is the source of truth for implementation status. Scope and domain rules are in the [project plan](../PROJECT_PLAN.md), decisions in [DECISIONS.md](DECISIONS.md), and working rules in [AGENTS.md](../AGENTS.md).
 
-Aufgaben verwenden IDs `Pxx`. Die IDs `T01` bis `T22` im Projektplan bezeichnen Testfälle, keine Implementierungsaufgaben.
+Tasks use `Pxx` IDs. IDs `T01` through `T22` in the project plan identify manual verification scenarios, not implementation tasks. At the user's request, do not write automated tests or configure a test framework for this learning project.
 
-## Status und Reihenfolge
+## Status and sequence
 
-Erlaubte Statuswerte: `offen`, `in Arbeit`, `teilweise`, `erledigt`. Bei `teilweise` den konkret fehlenden Nachweis nennen. Eine lokale Prüfung erfüllt kein ausdrücklich gefordertes Live-Kriterium.
+Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partial`, state exactly which evidence is missing. A local check does not satisfy an explicitly required live acceptance criterion.
 
-| ID | Aufgabe | Abhängigkeiten | Status |
+| ID | Task | Dependencies | Status |
 |---|---|---|---|
-| P00 | Projekt für Agenten vorbereiten | — | erledigt |
-| P01 | Lokales HTTP-Grundgerüst | Framework-Auswahl | offen |
-| P02 | Auth0-Tokenprüfung im Backend | P01 | offen |
-| P03 | Kleiner AWS-Stack und Benutzerpersistenz | P01; für geschützten Live-Aufruf P02 | offen |
-| P04 | Mobiler Login bis zum eigenen Profil | P02, P03 | offen |
-| P05 | Fachliche Subscription- und Entitlement-Regeln | P01, P02, P03 | offen |
-| P06 | Stripe-Kauf und verlässliche Verarbeitung | P02, P03, P05 | offen |
-| P07 | Apple-/Google-Mocks | P05, P06 | offen |
-| P08 | Outbox-Publisher und EventBridge | P06 | offen |
-| P09 | Reconciliation und Ablauf | P07, P08 | offen |
-| P10 | CI/CD, Betrieb und Abschlussdemo | P04, P06–P09 | offen |
+| P00 | Prepare the project for agents | — | complete |
+| P01 | Local HTTP skeleton | P00 | complete |
+| P02 | Backend Auth0 token verification | P01 | open |
+| P03 | Small AWS stack and user persistence | P01; P02 for a protected live request | open |
+| P04 | Mobile login through to the user's profile | P02, P03 | open |
+| P05 | Subscription and entitlement domain rules | P01, P02, P03 | open |
+| P06 | Stripe purchase and reliable processing | P02, P03, P05 | open |
+| P07 | Apple/Google mocks | P05, P06 | open |
+| P08 | Outbox publisher and EventBridge | P06 | open |
+| P09 | Reconciliation and expiration | P07, P08 | open |
+| P10 | CI/CD, operations, and final demo | P04, P06–P09 | open |
 
-**Nächster Auftrag:** P01. Die Framework-Auswahl ist offen; die Entscheidung oder ihre Delegation gehört zum Einstieg in diesen Task. Der Auftrag zur Agent-Vorbereitung führt P01 noch nicht aus.
+**Next task:** P02: Auth0 token verification in the Hono BFF, still without automated tests.
 
-## P00 Projekt für Agenten vorbereiten
+## P00 Prepare the project for agents
 
-**Ergebnis:** Ein Agent findet Projektregeln, bestätigte/offene Entscheidungen und eine kleine nächste Aufgabe.
+**Outcome:** An agent can find project rules, confirmed/open decisions, and a small next task.
 
-**Umfang:** README, AGENTS.md, Entscheidungs- und Aufgabenplan; Projektplan auf die aktuelle Richtung bringen; Ignore- und Editor-Grundregeln.
+**Scope:** README, AGENTS.md, decision and task plans; align the project plan with the current direction; basic ignore and editor settings.
 
-**Abnahme:** Alle lokalen Dokumentationslinks lösen auf. Aufgabenabhängigkeiten sind widerspruchsfrei. Hono wird nicht als bereits bestätigt dargestellt. Keine erfundenen Start-/Testbefehle und kein Anwendungscode. Konfigurationsbeispiele bleiben versionierbar, lokale Secrets werden ignoriert.
+**Acceptance:** All local documentation links resolve. Task dependencies are consistent. Confirmed decisions and open proposals are clearly distinguished. No invented startup/test commands and no application code. Configuration examples remain versioned; local secrets are ignored.
 
-**Nachweis vom 10. Oktober 2026:** 38 lokale Dokumentationslinks, Markdown-Struktur, Aufgaben-IDs und Abhängigkeiten geprüft. Ignore-Regeln mit `git check-ignore --no-index --stdin` für lokale Konfiguration und Beispieldateien geprüft. Neue Dateien separat auf Zeilenenden und Whitespace geprüft; `git diff --check` erfolgreich. Keine Anwendung implementiert oder ausgeführt.
+**Evidence from October 10, 2026:** Checked 38 local documentation links, Markdown structure, task IDs, and dependencies. Checked ignore rules with `git check-ignore --no-index --stdin` for local configuration and example files. Inspected new files separately for line endings and whitespace; `git diff --check` passed. No application implemented or run.
 
-## P01 Lokales HTTP-Grundgerüst
+## P01 Local HTTP skeleton
 
-**Ergebnis:** Das gewählte Framework startet lokal und lässt sich über einen getrennten Lambda-Einstieg bauen.
+**Outcome:** Hono starts locally and builds with a separate Lambda entry point.
 
-**Umfang:** Auswahl Hono/Fastify dokumentieren; Node- und Paketmanager-Versionen pinnen; Workspace, TypeScript, Lint/Format und Testwerkzeug einrichten. Zunächst nur den benötigten BFF unter `services/bff` anlegen. Gemeinsame App-Factory, lokaler Einstieg, Lambda-Einstieg und öffentlicher `GET /health`. Abhängigkeiten per Lockfile fixieren; öffentliche Beispielkonfiguration ergänzen.
+**Scope:** Pin Node and pnpm versions; configure a private pnpm workspace, TypeScript, linting, and formatting. Initially create only the required BFF in `services/bff`. Shared Hono app factory, local entry through `@hono/node-server`, Lambda entry through `@hono/aws-lambda`, and public `GET /health`. Check adapter compatibility for the selected versions. Fix dependencies in the lockfile and add public example configuration.
 
-**Abnahme:** Installation anhand des README funktioniert. Lokaler Start und Health-Aufruf funktionieren. Typecheck, Lint, Formatprüfung, Build sowie ein HTTP-Smoke-Test sind erfolgreich. Fehlende Pflichtkonfiguration liefert eine verständliche Fehlermeldung. Die App-Factory öffnet beim Import keinen Port. Alle tatsächlichen Befehle stehen im README.
+**Acceptance:** Installation from the README works. Local startup and a health request work. Typechecking, linting, formatting checks, build, and a manual health request succeed. Missing required configuration produces a clear error. Importing the app factory opens no port. The Lambda entry point can be imported; actual Gateway integration is checked manually in P03. All real commands are documented in the README.
 
-**Grenze:** Kein AWS-Deployment, keine Auth0-Konsole, keine mobile App und keine leeren Platzhalterpakete für spätere Features.
+**Boundary:** No automated tests or test frameworks. No AWS deployment, Auth0 console setup, mobile app, or empty placeholder packages for later features.
 
-## P02 Auth0-Tokenprüfung im Backend
+**Evidence from October 10, 2026:** Node 24.19.0 and pnpm 12.10.1. `pnpm install --frozen-lockfile` and `pnpm check` (formatting, linting, typechecking, build) passed. Built server through `PORT=0 pnpm start`: `/health` returns 200 with `{"status":"ok"}`; `/v1/me` returns 404. Missing or invalid `PORT` terminates direct local startup with an explanatory error. Importing `dist/lambda.js` returns a function export and exits without an open server. `pnpm dev` starts; file changes trigger a restart outside the sandbox, followed by a successful health request. Watcher events were not delivered inside the sandbox. All servers started for verification were stopped.
 
-**Ergebnis:** Ein direkter Aufruf des BFF ist bereits durch die gemeinsame Auth-Komponente geschützt.
+**User correction:** The initially created tests and Vitest were removed completely from source files, manifests, and the lockfile. No automated tests ran. No AWS resources were created; live Gateway verification remains in P03.
 
-**Umfang:** JWT-Verifikation, fest konfiguriertes Issuer/Audience/Algorithmus-Profil, JWKS-Cache und Scope-Prüfung implementieren. `GET /v1/me` nutzt nur den geprüften Auth-Kontext. Bis P03 dürfen verifizierte Identitätsangaben ohne vorgetäuschte Persistenz geliefert werden. Öffentliche Health-Route explizit kennzeichnen.
+## P02 Backend Auth0 token verification
 
-**Abnahme:** Testfälle T01–T03 aus dem Projektplan direkt gegen den Handler bestehen. Zusätzlich fehlendes Ablaufdatum, manipulierte Signatur, unzulässiger Algorithmus, fremde Audience, unbekannter Schlüssel, Rotation und JWKS-Ausfall prüfen. Kein Fachhandler läuft bei abgewiesener Anfrage. Keine Tokenwerte im Log. Für lokale Tests erzeugte Schlüssel und kontrolliertes JWKS verwenden.
+**Outcome:** Direct BFF requests are protected by the shared authentication component.
 
-**Grenze:** Keine eigene Login-/Passwortverwaltung und kein API-Gateway-Authorizer. Auth0-Login bleibt extern; echte Credentials sind für diese lokalen Tests nicht nötig.
+**Scope:** Implement JWT verification, fixed issuer/audience/algorithm configuration, JWKS caching, and scope checks. `GET /v1/me` uses only the verified authentication context. Until P03, it may return verified identity information without pretending persistence exists. Explicitly identify the public health route.
 
-## P03 Kleiner AWS-Stack und Benutzerpersistenz
+**Acceptance:** Scenarios T01–T03 from the project plan pass when invoking the handler directly. Also check a missing expiration claim, tampered signature, disallowed algorithm, wrong audience, unknown key, rotation, and JWKS outage. Rejected requests execute no domain handler. Logs contain no token values. Use generated keys and a controlled JWKS for local checks.
 
-**Ergebnis:** Das HTTP-Backend läuft als Lambda hinter einer HTTP API; ein gültiger Aufruf erhält ein eigenes persistiertes Benutzerprofil.
+**Boundary:** No custom login/password management and no API Gateway authorizer. Auth0 login remains external; these local checks require no real credentials.
 
-**Umfang:** CDK-Stack für API, BFF, DynamoDB, Logs und eng begrenzte IAM-Rollen. Identität aus `iss`/`sub` auf interne User-ID abbilden. Wiederholte Erstaufrufe legen nicht mehrere Nutzer an. Kein Gateway-Authorizer. Deployment-Konfiguration und tatsächliche Befehle dokumentieren.
+## P03 Small AWS stack and user persistence
 
-**Lokale Abnahme:** CDK-Synthese, Assertions für Ressourcen/Integration/IAM und Tests der Besitzerzuordnung bestehen. Secrets fehlen im Template.
+**Outcome:** The HTTP backend runs as a Lambda behind an HTTP API; a valid request retrieves its own persisted user profile.
 
-**Live-Abnahme:** Im beauftragten Dev-Account deployen, Health und geschützten Aufruf prüfen; wiederholter Aufruf liefert dieselbe User-ID. Account, Region und geprüften Stack dokumentieren. Fehlt Zugang oder Deployment-Auftrag, lokalen Teil abschließen und Task als `teilweise` mit offenem Live-Nachweis führen.
+**Scope:** An `infra` workspace package with a CDK stack for the API, BFF, DynamoDB, logs, and narrowly scoped IAM roles. Map `iss`/`sub` identities to internal user IDs. Repeated first requests must not create multiple users. No Gateway authorizer. Document deployment configuration and actual commands.
 
-## P04 Mobiler Login bis zum eigenen Profil
+**Local acceptance:** CDK synthesis, template inspection for resources/integration/IAM, and manual ownership mapping checks succeed. The template contains no secrets.
 
-**Ergebnis:** Login → Auth0 → AWS-BFF → eigenes Profil ist auf einer benannten mobilen Plattform sichtbar.
+**Live acceptance:** Deploy to the authorized development account, check health and a protected request; repeated calls return the same user ID. Document account, region, and verified stack. If access or deployment authorization is missing, finish the local portion and mark the task `partial`, identifying the outstanding live evidence.
 
-**Umfang:** Kleine React-Native-App als Expo Development Build. Auth0-Anmeldung, SDK-Credentials-Verwaltung, Profilanzeige und Logout. Callback-/Logout-URLs und nicht geheime Konfigurationsnamen dokumentieren. Primäre Testplattform festlegen.
+## P04 Mobile login through to the user's profile
 
-**Abnahme:** Echter Auth0-Login auf Simulator/Emulator oder Gerät, Profilabruf und Logout funktionieren. Nutzer B erhält sein eigenes Profil. Netzwerk-/Auth-Fehler werden angezeigt. Tokens stehen weder in AsyncStorage noch in Logs. Plattform und tatsächlich geprüfter Ablauf sind festgehalten.
+**Outcome:** Login → Auth0 → AWS BFF → own profile is visible on a named mobile platform.
 
-**Grenze:** Keine Store-Käufe, kein UI-Designsystem und keine automatische Annahme, dass die zweite Plattform ebenfalls geprüft ist.
+**Scope:** Small React Native app as an Expo development build. Auth0 login, SDK credential management, profile display, and logout. Document callback/logout URLs and non-secret configuration names. Choose the primary verification platform.
 
-## P05 Fachliche Subscription- und Entitlement-Regeln
+**Acceptance:** Real Auth0 login on a simulator/emulator or device, profile retrieval, and logout work. User B receives their own profile. Network/authentication errors are displayed. Tokens appear in neither AsyncStorage nor logs. Record the platform and flow actually checked.
 
-**Ergebnis:** Die Domain berechnet aus normalisierten Providerzuständen verlässliche Rechte.
+**Boundary:** No store purchases, UI design system, or assumption that a second platform has also been verified.
 
-**Umfang:** Modelle, Status-/Produktmapping und `deriveEntitlements(subscriptions, now)` nach Abschnitten 7–8 des Projektplans. Domain ohne HTTP-/AWS-Abhängigkeit. Free-/Premium-Lesemodell und geschützten Historienzugriff anschließen.
+## P05 Subscription and entitlement domain rules
 
-**Abnahme:** Tests für aktive Grants, Pending, periodische Kündigung, Ablauf, Widerruf, 24-Stunden-Grace nach zuvor gültigem Grant und mehrere Provider bestehen. Wiederholungen verlängern Grace nicht. Zeit wird injiziert. Unbekannte Produkte vergeben keine neuen Rechte. Die API-Integration von T04/T22 ist nachgewiesen.
+**Outcome:** The domain computes reliable access rights from normalized provider states.
 
-**Grenze:** Keine echte Provider-Anbindung, keine Tarifwechsel oder Proration.
+**Scope:** Models, status/product mappings, and `deriveEntitlements(subscriptions, now)` according to sections 7–8 of the project plan. No HTTP/AWS dependencies in the domain. Connect the Free/Premium read model and protected history access.
 
-## P06 Stripe-Kauf und verlässliche Verarbeitung
+**Acceptance:** Manual scenarios cover active grants, pending state, cancellation at period end, expiration, revocation, a 24-hour grace period following a previously valid grant, and multiple providers. Retries do not extend grace. Time is injected. Unknown products grant no new access. API integration for T04/T22 is demonstrated.
 
-**Ergebnis:** Ein echter Stripe-Testkauf führt über Webhook und SQS zu zentralen Berechtigungen.
+**Boundary:** No real provider connection, plan changes, or proration.
 
-**Umfang:** Kleine Test-Webseite mit Auth0, serverseitiges Customer-Mapping und idempotenter Checkout. Signierter Webhook, Arbeitsqueue/DLQ und Processor. Normalisierung sowie gemeinsame DynamoDB-Transaktion für Zustand, Entitlements, Abschlussmarkierung und Outbox. Revisionsbedingungen und Wiederholungen gehören zu diesem Task, nicht erst zur späteren Härtung.
+## P06 Stripe purchase and reliable processing
 
-**Abnahme:** T05–T12, T15–T18 im jeweils passenden lokalen/Live-Umfang nachweisen. Testkauf aktiviert Zugriff; manipulierter Webhook und fremde Kontozuordnung scheitern. Queue-Ausfall erzeugt kein Erfolgs-ACK. Duplikate und konkurrierende Updates verlieren oder vervielfachen keine Grants. Ein Fehler erreicht die DLQ und ist nach Korrektur wieder verarbeitbar.
+**Outcome:** A real Stripe test purchase produces central entitlements through the webhook and SQS.
 
-**Grenze:** Outbox wird bereits geschrieben, aber ihr EventBridge-Publisher folgt in P08. Keine Live-Zahlungen. Bei fehlenden Testzugängen den lokalen Teil und die noch fehlenden Live-Fälle genau dokumentieren.
+**Scope:** Small test website with Auth0, server-side customer mapping, and idempotent checkout. Signed webhook, work queue/DLQ, and processor. Normalization and a shared DynamoDB transaction for state, entitlements, completion marker, and outbox. Revision conditions and retries belong in this task, not a later hardening phase.
 
-## P07 Apple-/Google-Mocks
+**Acceptance:** Demonstrate T05–T12 and T15–T18 in their appropriate local/live scope. A test purchase activates access; a tampered webhook or wrong account assignment fails. Queue outages produce no success acknowledgement. Duplicate and concurrent updates neither lose nor multiply grants. A failing message reaches the DLQ and can be processed after the cause is fixed.
 
-**Ergebnis:** Zwei weitere Provider verwenden denselben fachlichen Verarbeitungsweg wie Stripe.
+**Boundary:** Outbox entries are already written, but the EventBridge publisher follows in P08. No live payments. If test credentials are missing, document the local portion and outstanding live scenarios precisely.
 
-**Umfang:** Adapter und getrennte simulierte Provider-Zustände; Dev-Skript für Kauf, Verlängerung, Kündigung, Ablauf, Widerruf, falschen Besitzer und Ausfall. Ereignisauslösung muss abschaltbar sein.
+## P07 Apple/Google mocks
 
-**Abnahme:** Fixtures aus Abschnitt 10 sind reproduzierbar. T10–T15 bestehen auch mit Mocks. Das Ende eines Mock-Abos entzieht keine gültigen Rechte aus Stripe. Zustandsablage und lokales Subscription-Lesemodell sind unabhängig.
+**Outcome:** Two additional providers use the same domain processing path as Stripe.
 
-**Grenze:** Keine echten Apple-/Google-APIs. Dev-Hilfen erhalten keinen öffentlichen ungeschützten HTTP-Endpunkt.
+**Scope:** Adapters and separate simulated provider states; a development script for purchase, renewal, cancellation, expiration, revocation, wrong owner, and outage. Event emission must be optional.
 
-## P08 Outbox-Publisher und EventBridge
+**Acceptance:** Section 10 fixtures are reproducible. T10–T15 also pass with mocks. Ending a mock subscription does not revoke valid Stripe access. Provider state storage and the local subscription read model are independent.
 
-**Ergebnis:** Gespeicherte fachliche Änderungen erreichen nachvollziehbar einen Event-Consumer.
+**Boundary:** No real Apple/Google APIs. Development helpers must not expose a public, unprotected HTTP endpoint.
 
-**Umfang:** Publisher, stabiler Domain-Event-Identifier, EventBridge-Bus/Regel und Event-Log-Consumer. Offene Einträge bleiben bis zur bestätigten Annahme erhalten. Fehler bei Target-Zustellung und bei asynchroner Consumer-Ausführung getrennt sichtbar machen.
+## P08 Outbox publisher and EventBridge
 
-**Abnahme:** T19 prüft Teilfehler trotz HTTP 200 sowie Abbruch nach dem Senden. Wiederholung verliert keine Events; Duplikate sind an stabiler fachlicher ID erkennbar. Ein Live-Event lässt sich von der Outbox bis zum Consumer-Log verfolgen. Entitlement-Zugriff hängt nicht vom Event-Log-Consumer ab.
+**Outcome:** Persisted domain changes reach an event consumer and can be traced.
 
-## P09 Reconciliation und Ablauf
+**Scope:** Publisher, stable domain event identifier, EventBridge bus/rule, and event log consumer. Entries remain pending until acceptance is confirmed. Make target delivery failures and asynchronous consumer execution failures visible separately.
 
-**Ergebnis:** Verpasste Updates werden aus dem Provider-Zustand repariert.
+**Acceptance:** T19 covers partial failures despite HTTP 200 and a crash after publication. Retries lose no events; duplicates can be identified by stable domain event IDs. Trace a live event from the outbox to the consumer log. Entitlement access does not depend on the event log consumer.
 
-**Umfang:** Periodischer und manuell auslösbarer Lauf, Pagination, Discovery über bekannte Stripe-Customer und Synchronisationsaufträge durch den vorhandenen Processor. Fällige Ablaufgrenzen berücksichtigen; keine zweite fachliche Implementierung.
+## P09 Reconciliation and expiration
 
-**Abnahme:** T20–T22 bestehen. Ein unterdrücktes Mock-Event wird repariert; ein Stripe-Abo ohne initialen Webhook wird entdeckt. Provider-Ausfälle löschen keine bestehenden Zustände. Wiederholung desselben Laufs ist unschädlich. Das Sieben-Minuten-Demoziel unter gesunden Abhängigkeiten prüfen oder fehlenden Live-Nachweis nennen.
+**Outcome:** Missed updates are repaired from provider state.
 
-## P10 CI/CD, Betrieb und Abschlussdemo
+**Scope:** Scheduled and manually triggered runs, pagination, discovery through known Stripe customers, and synchronization jobs through the existing processor. Reevaluate due expiration boundaries; do not implement a second domain processing path.
 
-**Ergebnis:** Änderungen sind reproduzierbar prüfbar und die Demo ist nachvollziehbar vorführbar.
+**Acceptance:** T20–T22 pass. A suppressed mock event is repaired; a Stripe subscription whose initial webhook was missed is discovered. Provider outages do not erase existing states. Repeating a run is harmless. Check the seven-minute demo target under healthy dependencies or identify the missing live evidence.
 
-**Umfang:** Vorhandene lokale Checks in GitHub Actions übernehmen, OIDC für die vereinbarte Dev-Stage, CloudWatch-Signale und Smoke-Tests. Den konkreten Repository-/Environment-Kontext für IAM verwenden. Kurzes Demo-Protokoll und Cleanup-Anleitung ergänzen.
+## P10 CI/CD, operations, and final demo
 
-**Abnahme:** Vollständige Testmatrix und Definition of Done aus Abschnitten 15/17 durchgehen. CI und ein autorisiertes Dev-Deployment nachweisen. DLQ/Redrive, Outbox und Reconciliation vorführen. Checklisten nur für tatsächlich bestandene Nachweise abhaken. Offene Punkte, getestete Plattform, Commit/Arbeitsstand und Datum dokumentieren.
+**Outcome:** Changes can be verified reproducibly, and the demo can be presented clearly.
 
-**Grenze:** Keine Produktionsfreigabe und kein automatisch ausgeführtes destruktives Cleanup.
+**Scope:** Reuse local checks in GitHub Actions, OIDC for the agreed development stage, CloudWatch signals, and manual smoke requests. Use the actual repository/environment context for IAM. Add a short demo record and cleanup instructions.
 
-## Übergabeformat
+**Acceptance:** Review the complete scenario matrix and definition of done in sections 15/17. Demonstrate CI and an authorized development deployment. Show DLQ/redrive, outbox, and reconciliation. Check off only criteria supported by actual evidence. Record open issues, platform checked, commit/working state, and date.
 
-Unter einer begonnenen Aufgabe einen kurzen Arbeitsvermerk ergänzen:
+**Boundary:** No production release or automatically executed destructive cleanup.
+
+## Handoff format
+
+Add a brief work record under a task once it has started:
 
 ```text
-Datum:
+Date:
 Status:
-Umgesetzt:
-Geprüft: konkreter Befehl oder manueller Ablauf und Ergebnis
-Noch offen: fehlende Implementierung oder fehlender Nachweis
-Nächster Schritt:
+Implemented:
+Verified: exact command or manual flow and result
+Outstanding: missing implementation or evidence
+Next step:
 ```
 
-Keine Secrets oder kompletten Logs einfügen. Ein fehlender Zugang wird nicht als bestandene Prüfung und ein fertiges Dokument nicht als implementiertes System gewertet.
+Do not include secrets or full logs. Missing access is not a passed check, and a completed document is not an implemented system.

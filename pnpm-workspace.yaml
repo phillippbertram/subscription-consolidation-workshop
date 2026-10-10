@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+  - infra
+
+engineStrict: true
+saveExact: true
+allowBuilds:
+  esbuild: true
+minimumReleaseAgeExclude:
+  - '@types/node@24.19.2'
+  - prettier@3.9.10

@@ -1,0 +1,22 @@
+{
+  "name": "@premiumpass/bff",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --env-file-if-exists=.env src/local.ts",
+    "start": "node --env-file-if-exists=.env dist/local.js",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist"
+  },
+  "dependencies": {
+    "@hono/aws-lambda": "1.0.1",
+    "@hono/node-server": "2.1.4",
+    "hono": "4.13.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
+  }
+}

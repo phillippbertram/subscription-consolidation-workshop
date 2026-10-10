@@ -1,238 +1,238 @@
 # PremiumPass
 
-## Projektübersicht für ein Hands-on-Wochenende
+## Project overview for a hands-on weekend
 
-**Ziel:** Eine React-Native-Demo-App mit Auth0 und einem AWS-Backend bauen, das Abonnements aus mehreren Kaufkanälen in zentrale, serverseitig geprüfte Berechtigungen übersetzt.
+**Goal:** Build a React Native demo app with Auth0 and an AWS backend that translates subscriptions from multiple purchase channels into central, server-verified entitlements.
 
-**Umfang:** Rund 16 Stunden Umsetzung, verteilt auf Samstag und Sonntag, bei vorbereiteten Accounts und funktionierender Entwicklungsumgebung. Wer React Native oder CDK komplett neu aufsetzt, sollte zusätzliche Einrichtungszeit einplanen. Die App bleibt klein; der Schwerpunkt liegt auf Backend-Architektur und nachvollziehbarer Fehlerbehandlung.
+**Scope:** About 16 hours of implementation across Saturday and Sunday, assuming prepared accounts and a working development environment. Allow additional setup time if starting React Native or CDK from scratch. Keep the app small; focus on backend architecture and understandable failure handling.
 
-**Stand:** 10. Oktober 2026. Dieses Dokument ist ein Bauplan; seine Checklisten beschreiben die noch zu implementierenden und zu prüfenden Ergebnisse. Einstieg und ausführbare Befehle stehen im [README](README.md), Agent-Regeln in [AGENTS.md](AGENTS.md), Entscheidungsstatus in [docs/DECISIONS.md](docs/DECISIONS.md) und umsetzbare Aufgaben in [docs/TASKS.md](docs/TASKS.md).
+**As of:** October 10, 2026. This document is a blueprint; its checklists describe outcomes to implement and verify. See the [README](README.md) for setup and executable commands, [AGENTS.md](AGENTS.md) for agent rules, [docs/DECISIONS.md](docs/DECISIONS.md) for decision status, and [docs/TASKS.md](docs/TASKS.md) for actionable tasks. Code and documentation use English throughout.
 
-PremiumPass ist eine fiktive Lernanwendung mit synthetischen Score-Daten. Sie dient zur Vorbereitung auf Aufgaben rund um Mobile BFFs, AWS Serverless und Subscription-Systeme. Sie bildet keine bekannte interne Architektur oder reale Bonitätslogik der SCHUFA ab.
+PremiumPass is a fictional learning application with synthetic score data. It prepares you for work on mobile BFFs, AWS Serverless, and subscription systems. It does not represent any known internal SCHUFA architecture or real credit-scoring logic.
 
-## Inhalt
+## Contents
 
-1. [Ergebnis und Projektumfang](#1-ergebnis-und-projektumfang)
-2. [Lernziele](#2-lernziele)
-3. [Vorbereitung und Technologieentscheidungen](#3-vorbereitung-und-technologieentscheidungen)
-4. [Architektur und Verantwortlichkeiten](#4-architektur-und-verantwortlichkeiten)
-5. [React Native und Auth0](#5-react-native-und-auth0)
-6. [API und Benutzerzuordnung](#6-api-und-benutzerzuordnung)
-7. [Subscriptions und Entitlements](#7-subscriptions-und-entitlements)
-8. [DynamoDB und Nebenläufigkeit](#8-dynamodb-und-nebenläufigkeit)
-9. [Stripe Billing im Testmodus](#9-stripe-billing-im-testmodus)
-10. [Apple und Google als Provider-Mocks](#10-apple-und-google-als-provider-mocks)
-11. [Events und zuverlässige Verarbeitung](#11-events-und-zuverlässige-verarbeitung)
+1. [Outcome and scope](#1-outcome-and-scope)
+2. [Learning objectives](#2-learning-objectives)
+3. [Preparation and technology choices](#3-preparation-and-technology-choices)
+4. [Architecture and responsibilities](#4-architecture-and-responsibilities)
+5. [React Native and Auth0](#5-react-native-and-auth0)
+6. [API and user mapping](#6-api-and-user-mapping)
+7. [Subscriptions and entitlements](#7-subscriptions-and-entitlements)
+8. [DynamoDB and concurrency](#8-dynamodb-and-concurrency)
+9. [Stripe Billing in test mode](#9-stripe-billing-in-test-mode)
+10. [Apple and Google provider mocks](#10-apple-and-google-provider-mocks)
+11. [Events and reliable processing](#11-events-and-reliable-processing)
 12. [Reconciliation](#12-reconciliation)
-13. [Security und Betrieb](#13-security-und-betrieb)
-14. [Repository und CI/CD](#14-repository-und-cicd)
-15. [Tests und Fehlerexperimente](#15-tests-und-fehlerexperimente)
-16. [Samstag und Sonntag](#16-samstag-und-sonntag)
-17. [Abnahme und Abschlussdemo](#17-abnahme-und-abschlussdemo)
-18. [Vertiefung nach dem Wochenende](#18-vertiefung-nach-dem-wochenende)
-19. [Offizielle Quellen](#19-offizielle-quellen)
+13. [Security and operations](#13-security-and-operations)
+14. [Repository and CI/CD](#14-repository-and-cicd)
+15. [Manual checks and failure experiments](#15-manual-checks-and-failure-experiments)
+16. [Saturday and Sunday](#16-saturday-and-sunday)
+17. [Acceptance and final demo](#17-acceptance-and-final-demo)
+18. [Further work after the weekend](#18-further-work-after-the-weekend)
+19. [Official sources](#19-official-sources)
 
-## 1 Ergebnis und Projektumfang
+## 1 Outcome and scope
 
-Am Sonntag kannst du dich in der App anmelden, den Free-Zustand sehen, im Browser einen Stripe-Testkauf durchführen und anschließend Premium-Funktionen über dieselbe Identität nutzen. Danach demonstrierst du Kündigung, Ablauf, doppelte Ereignisse und die Reparatur eines verpassten Updates.
+By Sunday, you can log into the app, see the Free state, complete a Stripe test purchase in the browser, and use Premium features with the same identity. Then demonstrate cancellation, expiration, duplicate events, and recovery from a missed update.
 
-| Funktion | Free | Premium |
+| Feature | Free | Premium |
 |---|---|---|
-| Profil und aktueller synthetischer Score | Ja | Ja |
-| Historische Demo-Score-Werte | Nein | Ja |
-| Erweiterte Demo-Auswertung | Nein | Ja |
-| Berechtigung für Benachrichtigungen | Nein | Ja, als Feature-Flag |
+| Profile and current synthetic score | Yes | Yes |
+| Historical demo scores | No | Yes |
+| Extended demo analysis | No | Yes |
+| Notification entitlement | No | Yes, as a feature flag |
 
-**Konkretes Demoprodukt:** `premium_monthly`, fiktiv 4,99 EUR pro Monat. Stripe verarbeitet ausschließlich Testzahlungen. Tatsächliche Push-Mitteilungen, E-Mails und fachliche Bonitätsauswertungen gehören nicht zum Wochenende.
+**Demo product:** `premium_monthly`, a fictional EUR 4.99 per month. Stripe processes test payments only. Actual push notifications, emails, and credit analysis are outside the weekend scope.
 
-### Verpflichtender Kern
+### Required core
 
-- React Native mit TypeScript, drei Screens und echtem Auth0-Login.
-- AWS HTTP API als HTTP-Einstieg, Auth0-Tokenprüfung direkt in den TypeScript-Lambdas und DynamoDB.
-- Stripe Billing mit gehostetem Checkout, Webhook und Testabonnement.
-- SQS mit DLQ, idempotente Verarbeitung und Behandlung konkurrierender Updates.
-- Zentrale Subscription- und Entitlement-Logik für Stripe sowie Apple-/Google-Mocks.
-- EventBridge mit einem sichtbaren Consumer und einer kleinen Outbox für ausstehende Events.
-- Periodische und manuell auslösbare Reconciliation.
-- CDK, automatisierte Backend-Tests, GitHub Actions und eine reproduzierbare Abschlussdemo.
+- React Native with TypeScript, three screens, and real Auth0 login.
+- AWS HTTP API as the HTTP entry point, Auth0 token verification directly in TypeScript Lambdas, and DynamoDB.
+- Stripe Billing with hosted checkout, webhook, and test subscription.
+- SQS with DLQ, idempotent processing, and concurrent update handling.
+- Central subscription and entitlement logic for Stripe and Apple/Google mocks.
+- EventBridge with an observable consumer and a small outbox for pending events.
+- Scheduled and manually triggered reconciliation.
+- CDK, manual functional checks, GitHub Actions, and a reproducible final demo.
 
-### Bewusst begrenzt
+### Deliberate limits
 
-Ein AWS-Account, eine Region, eine Dev-Stage, ein Premiumprodukt und zwei Testnutzer genügen. Baue die App für eine primäre Testplattform, etwa den iOS-Simulator. Ein zusätzlicher Android-Durchlauf ist eine Erweiterung und wird nur dann als geprüft dokumentiert, wenn er tatsächlich stattgefunden hat.
+One AWS account, one region, one development stage, one Premium product, and two test users are enough. Build the app for one primary verification platform, such as the iOS simulator. An additional Android run is an extension; record it as verified only if it actually happened.
 
-Echte Store-Käufe, App-Store-Veröffentlichung, Tarifwechsel, Proration, Steuerlogik, Refund-Abwicklung, Account-Merging und produktionsreife Hochverfügbarkeit bleiben Folgethemen. Apple und Google erhalten deterministische Adapter-Mocks; diese beweisen keine echte Store-Integration.
+Real store purchases, app store publication, plan changes, proration, tax logic, refund processing, account merging, and production-grade high availability remain follow-up topics. Apple and Google use deterministic adapter mocks; these do not prove real store integration.
 
-**Kaufweg:** Stripe startet auf einer separaten kleinen Test-Webseite. Die mobile App zeigt Status und Berechtigungen. Für eine Veröffentlichung müssen Produkt, Vertriebsregion, Storefront und jeweils geltende Zahlungsregeln gesondert geprüft werden. Ein externer Browser macht einen Kaufweg nicht automatisch zulässig. Siehe [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) und [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738).
+**Purchase path:** Stripe checkout starts on a separate small test website. The mobile app displays status and entitlements. Before publication, review the product, distribution region, storefront, and applicable payment rules separately. Using an external browser does not automatically make a purchase path compliant. See the [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) and [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738).
 
-## 2 Lernziele
+## 2 Learning objectives
 
-| Thema | Hands-on-Aufgabe | Was du danach erklären kannst |
+| Topic | Hands-on exercise | What you can explain afterward |
 |---|---|---|
-| OAuth/OIDC und Auth0 | Native Anmeldung und JWT-Prüfung im Backend bauen | Unterschied zwischen Identität, Tokenvalidierung, Scopes und fachlicher Berechtigung |
-| Mobile BFF | App-gerechte Statusantworten und Premium-Endpunkt bauen | Warum die App keine Provider-Details für ihre Autorisierung benötigt |
-| AWS Lambda und TypeScript | Kleine Handler mit gemeinsamer Domainlogik deployen | Grenzen zwischen Transport, Fachlogik und externen Adaptern |
-| DynamoDB | Access Patterns, Conditional Writes und Transaktionen implementieren | Wie parallele Updates ohne verlorene Änderungen verarbeitet werden |
-| Stripe Billing | Testabonnement abschließen und Lifecycle verarbeiten | Warum Checkout-Erfolg und Premium-Freigabe getrennt sind |
-| SQS und DLQ | Duplikate, Retries und einen permanenten Fehler provozieren | Warum mindestens einmal zugestellte Nachrichten idempotente Consumer brauchen |
-| EventBridge | Fachliche Änderungen routen und beobachten | Unterschied zwischen einer Arbeitsqueue und einem Event-Bus |
-| Provider-Abstraktion | Apple-/Google-Fixtures durch dieselbe Pipeline schicken | Was ein normalisiertes Modell vereinfacht und wo Provider-Unterschiede bleiben |
-| Reconciliation | Einen verpassten Webhook ohne erneute Zustellung reparieren | Wie ein System aus dem Provider-Zustand wieder konsistent wird |
-| CI/CD und Betrieb | Geprüftes Dev-Deployment über OIDC ausführen | Unterschied zwischen lokal bestandenem Test und live geprüftem Ablauf |
+| OAuth/OIDC and Auth0 | Implement native login and backend JWT verification | Identity, token validation, scopes, and domain access rights are different concepts |
+| Mobile BFF | Build app-oriented status responses and a Premium endpoint | Why the app needs no provider details to authorize access |
+| AWS Lambda and TypeScript | Deploy small handlers with shared domain logic | Boundaries between transport, domain logic, and external adapters |
+| DynamoDB | Implement access patterns, conditional writes, and transactions | How concurrent updates avoid lost changes |
+| Stripe Billing | Purchase a test subscription and process its lifecycle | Why checkout success and Premium activation are separate |
+| SQS and DLQ | Trigger duplicates, retries, and a permanent failure | Why at-least-once delivery requires idempotent consumers |
+| EventBridge | Route and observe domain changes | The difference between a work queue and an event bus |
+| Provider abstraction | Send Apple/Google fixtures through the same pipeline | What normalization simplifies and where provider differences remain |
+| Reconciliation | Repair a missed webhook without redelivery | How provider state restores system consistency |
+| CI/CD and operations | Perform a verified development deployment through OIDC | The difference between a successful local check and a verified live flow |
 
-## 3 Vorbereitung und Technologieentscheidungen
+## 3 Preparation and technology choices
 
-### Vor dem ersten Arbeitsblock
+### Before the first work session
 
-- [ ] AWS-Dev-Account, CLI-Zugang über SSO oder ein geeignetes lokales Profil und Region festlegen, beispielsweise `eu-central-1`.
-- [ ] Auth0-Tenant, Native Application und Custom API anlegen; zwei Testnutzer vorbereiten.
-- [ ] Eine zusätzliche Auth0-SPA-Anwendung für die lokale Test-Webseite im selben Tenant anlegen. Beide Clients verwenden dieselbe API-Audience und dieselbe Benutzerverbindung.
-- [ ] Stripe-Testumgebung, Produkt und wiederkehrenden Testpreis vorbereiten.
-- [ ] Xcode/Simulator oder Android Studio/Emulator starten; React-Native-Development-Build prüfen.
-- [ ] Node.js, Paketmanager, CDK und Stripe CLI bereitstellen; GitHub-Repository anlegen.
-- [ ] Kleines AWS-Budget mit Warnung einrichten. Eine Budgetwarnung ist keine automatische Kostensperre.
+- [ ] Choose an AWS development account, CLI access through SSO or a suitable local profile, and a region such as `eu-central-1`.
+- [ ] Create an Auth0 tenant, Native Application, and Custom API; prepare two test users.
+- [ ] Create an additional Auth0 SPA application for the local test website in the same tenant. Both clients use the same API audience and user connection.
+- [ ] Prepare a Stripe test environment, product, and recurring test price.
+- [ ] Start Xcode/Simulator or Android Studio/Emulator and check the React Native development build.
+- [ ] Set up Node.js, the package manager, CDK, and Stripe CLI; create a GitHub repository.
+- [ ] Configure a small AWS budget with an alert. A budget alert does not automatically cap spending.
 
-Für diese Vorbereitung etwa 45–90 Minuten reservieren; längere Installationen und Accountfreischaltungen kommen gegebenenfalls hinzu.
+Allow about 45–90 minutes for preparation, plus any longer installations or account activation delays.
 
-| Bereich | Entscheidung für die Demo |
+| Area | Demo choice |
 |---|---|
-| Mobile | React Native, TypeScript, Expo Development Build, `react-native-auth0` |
-| Test-Webseite | Minimale Vite-Seite, Auth0 SPA SDK, Login und Checkout-Button |
-| Backend | TypeScript auf AWS Lambda, gemeinsame Domainmodule; HTTP-Framework noch offen |
-| Runtime | Node.js 24 auf Lambda; kompatible lokale Toolchain und Abhängigkeiten im Lockfile fixieren |
-| API | API Gateway **HTTP API** für Routing, CORS und Throttling; kein Gateway-Authorizer |
-| API-Authentifizierung | Gemeinsame Auth-Komponente im Backend für Auth0-Access-Tokens und Scopes |
-| Datenbank | Eine DynamoDB-Tabelle für die Demo, On-Demand-Kapazität |
-| Asynchronität | SQS Standard Queue, Processing-DLQ, EventBridge Custom Bus |
-| Infrastruktur | AWS CDK v2 in TypeScript, ein Dev-Stack |
-| Tests | Vitest für Backend/Domain, CDK Assertions, wenige Live-Smoke-Tests |
-| Deployment | GitHub Actions mit AWS OIDC, Dev-Deployment zunächst manuell auslösbar |
+| Mobile | React Native, TypeScript, Expo development build, `react-native-auth0` |
+| Test website | Minimal Vite page, Auth0 SPA SDK, login and checkout button |
+| Backend | Hono and TypeScript on AWS Lambda, shared domain modules |
+| Runtime | Node.js 24 on Lambda; pin compatible local tooling and dependencies in the lockfile |
+| API | API Gateway **HTTP API** for routing, CORS, and throttling; no Gateway authorizer |
+| API authentication | Shared backend authentication component for Auth0 access tokens and scopes |
+| Database | One demo DynamoDB table with on-demand capacity |
+| Asynchronous processing | SQS Standard Queue, processing DLQ, EventBridge custom bus |
+| Infrastructure | AWS CDK v2 in TypeScript, one development stack |
+| Verification | No automated tests; typechecking, linting, builds, CDK synthesis, and manual functional checks |
+| Deployment | GitHub Actions with AWS OIDC; development deployment initially triggered manually |
 
-`react-native-auth0` benötigt native Komponenten und funktioniert nicht in Expo Go. Expo-, React-Native- und SDK-Versionen anhand der Kompatibilitätsangaben auswählen. [Auth0 SDK](https://github.com/auth0/react-native-auth0) · [AWS Lambda Runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)
+`react-native-auth0` requires native components and does not work in Expo Go. Select Expo, React Native, and SDK versions using their compatibility guidance. [Auth0 SDK](https://github.com/auth0/react-native-auth0) · [AWS Lambda Runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html)
 
-### Stand der Framework-Wahl
+### Framework selection
 
-Ein Backend-Framework ist **noch nicht festgelegt**. Die Nutzerpräferenz lautet **Hono oder Fastify**; Hono ist die aktuelle Empfehlung, aber noch nicht bestätigt. NestJS wird nicht weiterverfolgt. Fest stehen TypeScript, AWS Lambda und gemeinsam genutzte Domainmodule. Die Auswahl erfolgt vor dem Backend-Skeleton und wird in [docs/DECISIONS.md](docs/DECISIONS.md) dokumentiert. Die Authentifizierung wird als Middleware beziehungsweise Hook des gewählten Frameworks umgesetzt. Für JWT-Verifikation eine etablierte Bibliothek verwenden; `jose` ist empfohlen. Keine eigene Kryptografie implementieren.
+**Hono is selected** as the HTTP framework; the user delegated the choice with straightforward Lambda integration as the priority. A shared app factory contains routes and authentication middleware. The local entry uses `@hono/node-server`; the Lambda entry uses `handle(app)` from `@hono/aws-lambda`. Hono middleware authenticates requests before protected routes, without a Gateway authorizer. Use an established JWT library; `jose` is recommended. Do not implement custom cryptography. Details are in [docs/DECISIONS.md](docs/DECISIONS.md). [Hono Lambda](https://hono.dev/docs/getting-started/aws-lambda) · [Hono Node.js](https://hono.dev/docs/getting-started/nodejs)
 
-SQS-Processor, Reconciliation und Outbox bleiben unabhängig vom HTTP-Framework. Der fachliche Ablauf und die Sicherheitsanforderungen gelten für alle Varianten.
+The SQS processor, reconciliation, and outbox remain independent of the HTTP framework. The domain remains independent of Hono.
 
-## 4 Architektur und Verantwortlichkeiten
+## 4 Architecture and responsibilities
 
 ```mermaid
 flowchart TD
     App[React Native App] --> Auth[Auth0 Universal Login]
-    Web[Test-Webseite] --> Auth
+    Web[Test website] --> Auth
     App --> API[API Gateway HTTP API]
     Web --> API
-    API --> BFF[Mobile BFF Lambda mit JWT-Pruefung]
+    API --> BFF[Mobile BFF Lambda with JWT verification]
     BFF --> DB[(DynamoDB)]
-    BFF --> Stripe[Stripe Billing Testmodus]
-    Stripe --> Hook[Webhook Lambda mit Signaturpruefung]
-    Hook --> Queue[SQS Arbeitsqueue]
-    Mock[Dev-Skript und Provider-Mocks] --> Queue
-    Timer[Zeitplan alle 5 Minuten] --> Recon[Reconciliation Lambda]
+    BFF --> Stripe[Stripe Billing test mode]
+    Stripe --> Hook[Webhook Lambda with signature verification]
+    Hook --> Queue[SQS work queue]
+    Mock[Development script and provider mocks] --> Queue
+    Timer[Schedule every 5 minutes] --> Recon[Reconciliation Lambda]
     Recon --> Queue
     Queue --> Worker[Subscription Processor]
-    Queue --> DLQ[Processing DLQ nach Retries]
-    Worker --> Provider[Stripe API oder Mock-Zustand]
+    Queue --> DLQ[Processing DLQ after retries]
+    Worker --> Provider[Stripe API or mock state]
     Worker --> DB
-    DB --> Publisher[Outbox Publisher jede Minute]
+    DB --> Publisher[Outbox Publisher every minute]
     Publisher --> Bus[EventBridge Custom Bus]
-    Bus --> Observer[Event-Log Consumer]
+    Bus --> Observer[Event Log Consumer]
     Observer --> Logs[CloudWatch]
 ```
 
-**Leserichtung:** App und Test-Webseite melden sich bei Auth0 an und senden dessen Access Token über API Gateway an das BFF. Das BFF verifiziert das Token, prüft die benötigten Scopes und stellt erst danach benutzerbezogene Daten bereit oder erzeugt Checkout-Sessions. Webhooks und Reconciliation liefern Arbeitsaufträge an SQS. Der Processor liest den aktuellen Provider-Zustand und speichert daraus Subscriptions, Entitlements und ausstehende Domain Events gemeinsam. Der Publisher liest die Outbox; EventBridge verteilt deren Events an einen beobachtbaren Consumer.
+**Flow:** The app and test website sign in through Auth0 and send its access token through API Gateway to the BFF. The BFF verifies the token and required scopes before returning user data or creating checkout sessions. Webhooks and reconciliation submit work to SQS. The processor reads current provider state and stores subscriptions, entitlements, and pending domain events together. The publisher reads the outbox; EventBridge distributes its events to an observable consumer.
 
-| Komponente | Verantwortung |
+| Component | Responsibility |
 |---|---|
-| BFF Lambda | Auth0-Access-Token verifizieren, Scopes prüfen, Eingaben validieren, Kontozuordnung auflösen, Lesemodelle liefern, Checkout starten |
-| Webhook Lambda | Stripe-Signatur prüfen, unterstützte Events auf SQS schreiben, erst danach bestätigen |
-| Subscription Processor | Provider lesen, Zustand normalisieren, Berechtigungen ableiten, atomar persistieren |
-| Provider-Adapter | Unterschiede von Stripe, Apple-Mock und Google-Mock kapseln |
-| Reconciliation Lambda | Fällige Konten/Subscriptions finden und erneute Synchronisation anstoßen |
-| Outbox Publisher | Noch nicht bestätigte Domain Events an EventBridge senden |
-| Event-Log Consumer | Änderungen mit stabiler Event-ID in CloudWatch sichtbar machen |
+| BFF Lambda | Verify Auth0 access tokens and scopes, validate input, resolve account ownership, return read models, initiate checkout |
+| Webhook Lambda | Verify the Stripe signature, enqueue supported events in SQS, then acknowledge |
+| Subscription Processor | Read provider state, normalize it, derive entitlements, persist atomically |
+| Provider adapter | Encapsulate differences between Stripe, Apple mock, and Google mock |
+| Reconciliation Lambda | Find due accounts/subscriptions and request synchronization |
+| Outbox Publisher | Send unacknowledged domain events to EventBridge |
+| Event Log Consumer | Make changes visible in CloudWatch with stable event IDs |
 
-Subscription Service und Entitlement Service sind hier **logisch getrennte Module im selben Processor**. Dadurch können ihre Änderungen in einer DynamoDB-Transaktion liegen. Eine zusätzliche asynchrone Entitlement-Projektion wäre ein späterer Ausbau. EventBridge ist in dieser Demo der Verteilweg für fachliche Änderungen; die Freigabe des Premium-Endpunkts hängt nicht von der Laufzeit des Event-Log-Consumers ab.
+Subscription Service and Entitlement Service are **logically separate modules in the same processor**. Their changes can therefore share a DynamoDB transaction. An additional asynchronous entitlement projection would be a later extension. EventBridge distributes domain changes in this demo; Premium endpoint access does not depend on how quickly the event log consumer runs.
 
-## 5 React Native und Auth0
+## 5 React Native and Auth0
 
-### Drei Screens
+### Three screens
 
-| Screen | Inhalt und Verhalten |
+| Screen | Content and behavior |
 |---|---|
-| Login | Universal Login öffnen, Abbruch/Fehler zeigen, Logout ermöglichen |
-| Dashboard | Profil, synthetischen Score, Free/Premium und Aktualisieren-Button anzeigen |
-| Premium | Features und Subscription-Status zeigen, geschützte Historie laden, laufende Synchronisation erklären |
+| Login | Open Universal Login, display cancellation/errors, support logout |
+| Dashboard | Display profile, synthetic score, Free/Premium status, and refresh button |
+| Premium | Display features and subscription status, load protected history, explain synchronization in progress |
 
-Nach App-Fokus und manueller Aktualisierung wird `/v1/me/entitlements` erneut geladen. Während der Kaufverarbeitung zeigt die App einen Wartezustand. Optional alle zwei Sekunden für maximal 30 Sekunden pollen; danach bleibt der Aktualisieren-Button verfügbar. Offline gecachte Anzeige ist kein Nachweis einer gültigen Backend-Berechtigung.
+Reload `/v1/me/entitlements` when the app gains focus and on manual refresh. Display a waiting state while a purchase is being processed. Optionally poll every two seconds for up to 30 seconds; afterward, keep the refresh button available. An offline cached display is not evidence of a valid backend entitlement.
 
-### Authentifizierung umsetzen
+### Implement authentication
 
-1. Native Auth0-Anwendung mit Authorization Code Flow und PKCE konfigurieren.
-2. Bundle Identifier, Android Package Name, App-Scheme sowie Callback- und Logout-URLs exakt nach SDK-Anleitung hinterlegen.
-3. Für die Custom API eine eigene Audience verwenden, beispielsweise `https://api.premiumpass.example`. Das ist ein API-Identifier und muss keine erreichbare Website sein.
-4. Beim Login `openid profile email` und die benötigten API-Scopes anfordern: `read:me`, `read:premium`, für die Test-Webseite zusätzlich `write:checkout`.
-5. Access Tokens über den Credentials Manager des SDK beziehen und erneuern. Falls längerfristiger Login gewünscht ist, Refresh Token Rotation und die erforderliche Offline-Access-Konfiguration ergänzen.
-6. Den API-Aufruf mit `Authorization: Bearer <access-token>` senden; ein ID Token dient nicht als API-Zugang.
+1. Configure a native Auth0 application with Authorization Code Flow and PKCE.
+2. Configure the bundle identifier, Android package name, app scheme, callback URLs, and logout URLs exactly as required by the SDK guide.
+3. Give the Custom API its own audience, such as `https://api.premiumpass.example`. This is an API identifier and need not be a reachable website.
+4. Request `openid profile email` and required API scopes at login: `read:me`, `read:premium`, and additionally `write:checkout` for the test website.
+5. Obtain and renew access tokens through the SDK Credentials Manager. For longer-lived login, add refresh token rotation and the required offline access configuration.
+6. Send API requests with `Authorization: Bearer <access-token>`; an ID token is not an API credential.
 
-Tokens gehören nicht in AsyncStorage oder Logs. Auth0-Domain und Client-ID sind öffentliche App-Konfiguration; ein Client Secret gehört nicht in die native App. Konkrete SDK-Aufrufe an der gewählten Version ausrichten. [Auth0 React Native SDK](https://github.com/auth0/react-native-auth0)
+Do not store tokens in AsyncStorage or logs. The Auth0 domain and client ID are public app configuration; a client secret does not belong in a native app. Use SDK calls appropriate to the selected version. [Auth0 React Native SDK](https://github.com/auth0/react-native-auth0)
 
-### Tokenprüfung direkt im Backend
+### Verify tokens directly in the backend
 
-API Gateway reicht den `Authorization`-Header an die HTTP-Lambda weiter. Es wird weder ein JWT Authorizer noch ein Lambda Authorizer am Gateway eingerichtet. Die gemeinsame Auth-Komponente läuft vor allen geschützten BFF-Routen; neue Routen sind standardmäßig geschützt. Auth0 stellt weiterhin Tokens aus und übernimmt den Login.
+API Gateway forwards the `Authorization` header to the HTTP Lambda. Configure neither a JWT authorizer nor a Lambda authorizer at the Gateway. The shared authentication component runs before every protected BFF route; new routes are protected by default. Auth0 still issues tokens and handles login.
 
-Die Backend-Komponente prüft mit einer etablierten JWT-Bibliothek:
+The backend component uses an established JWT library to check:
 
-1. Bearer-Header und Tokenformat; bloßes Dekodieren genügt nicht.
-2. Signatur gegen die öffentlichen Schlüssel des konfigurierten Auth0-Tenants; für die Demo ausschließlich `RS256` zulassen.
-3. Exakten `iss` einschließlich Slash, die konfigurierte API-Audience in `aud`, erforderliches `exp`, gegebenenfalls `nbf` und ein nicht leeres `sub`. Eine kleine feste Zeittoleranz festlegen.
-4. Die für die Route erforderlichen Scopes aus dem verifizierten `scope`-Claim.
+1. The Bearer header and token format; decoding alone is insufficient.
+2. The signature against public keys from the configured Auth0 tenant; allow only `RS256` for the demo.
+3. Exact `iss`, including its trailing slash, the configured API audience in `aud`, required `exp`, optional `nbf`, and a non-empty `sub`. Set a small fixed clock tolerance.
+4. Route-specific scopes from the verified `scope` claim.
 
-Aus den geprüften Claims entsteht ein interner Auth-Kontext mit `issuer`, `subject` und `scopes`. Nur dieser Kontext darf die Benutzerzuordnung steuern. Keine ungeprüften Claims, Client-User-IDs oder `requestContext.authorizer`-Werte als Identitätsnachweis verwenden. ID Tokens werden nicht als API-Access-Tokens akzeptiert. [Auth0 Access Token Validation](https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens) · [Auth0 JWT Validation](https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens)
+Build an internal authentication context containing `issuer`, `subject`, and `scopes` from verified claims. Only this context may determine user mapping. Never treat unverified claims, client-provided user IDs, or `requestContext.authorizer` values as proof of identity. Do not accept ID tokens as API access tokens. [Auth0 Access Token Validation](https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens) · [Auth0 JWT Validation](https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens)
 
-### Schlüsselabruf und Fehlerverhalten
+### Key retrieval and failure behavior
 
-Die JWKS-Adresse wird aus der fest konfigurierten, vertrauenswürdigen Auth0-Domain bezogen; keine vom Token vorgegebene URL abrufen. Schlüssel über warme Lambda-Aufrufe hinweg cachen, Rotation unterstützen und bei unbekanntem `kid` nur begrenzt neu laden. Netzwerk-Timeouts und ein Refresh-Limit verhindern einen unbeschränkten Abruf pro Anfrage. [Auth0 JSON Web Key Sets](https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-key-sets)
+Derive the JWKS URL from the fixed, trusted Auth0 domain; do not fetch a URL supplied by a token. Cache keys across warm Lambda invocations, support rotation, and limit refreshes for unknown `kid` values. Network timeouts and refresh limits prevent unbounded retrieval per request. [Auth0 JSON Web Key Sets](https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-key-sets)
 
-Fehlende oder ungültige Tokens führen zu `401`; ein gültiges Token ohne nötigen Scope zu `403`. Schlägt der Schlüsselabruf technisch fehl und kann das Token auch mit dem gültigen Cache nicht verifiziert werden, wird kein Zugriff gewährt; die Demo antwortet mit `503`. Kann ein Token mit einem weiterhin gültig gecachten Schlüssel vollständig geprüft werden, benötigt es keinen zusätzlichen Online-Aufruf bei Auth0.
+Missing or invalid tokens return `401`; a valid token without the required scope returns `403`. If key retrieval fails and the token cannot be verified using the valid cache, grant no access; the demo returns `503`. A token that can be fully verified using a still-valid cached key requires no additional online Auth0 request.
 
-Der Stripe-Webhook besitzt einen eigenen Handler mit Stripe-Signaturprüfung und benötigt kein Auth0-Token. CORS-Preflights übernimmt API Gateway. SQS- und Zeitplan-Handler werden über AWS-Berechtigungen aufgerufen und übernehmen keinen mobilen Benutzer-Token.
+The Stripe webhook has its own handler and signature verification and needs no Auth0 token. API Gateway handles CORS preflights. AWS permissions control SQS and scheduled handlers; these do not accept a mobile user's token.
 
-### Authentifizierung von Autorisierung unterscheiden
+### Separate authentication from authorization
 
-Die Scope-Prüfung findet ebenfalls im Backend statt. `read:premium` ist die technische Voraussetzung für die Route; anschließend entscheidet die aktuelle Entitlement-Prüfung über die Premiumdaten. Ein authentifizierter Free-Nutzer mit diesem Scope erhält weiterhin `403`.
+Scope checks also run in the backend. `read:premium` is the technical prerequisite for the route; the current entitlement check then decides access to Premium data. An authenticated Free user with that scope still receives `403`.
 
-Da ungültige Aufrufe erst im Backend abgewiesen werden, erreichen sie bereits Lambda. Gateway-Throttling und Lambda-Concurrency bleiben deshalb Teil der Dev-Konfiguration.
+Invalid requests are rejected only after reaching Lambda. Gateway throttling and Lambda concurrency therefore remain part of the development configuration.
 
-## 6 API und Benutzerzuordnung
+## 6 API and user mapping
 
-### Geplante Endpunkte
+### Planned endpoints
 
-JWT- und Scope-Prüfungen in dieser Tabelle erfolgen vollständig im Backend.
+JWT and scope checks in this table run entirely in the backend.
 
-| Methode und Pfad | Schutz | Ergebnis |
+| Method and path | Protection | Result |
 |---|---|---|
-| `GET /v1/me` | JWT, `read:me` | Eigene interne User-ID und minimales Profil |
-| `GET /v1/me/subscriptions` | JWT, `read:me` | Eigene normalisierte Abonnements und Synchronisationsstatus |
-| `GET /v1/me/entitlements` | JWT, `read:me` | Effektive Features, Revision und Gültigkeitsgrenzen |
-| `GET /v1/premium/score-history` | JWT, `read:premium`, Entitlement | Synthetische Historie oder `403` |
-| `POST /v1/billing/stripe/checkout-session` | JWT, `write:checkout` | Gehostete Test-Checkout-URL |
-| `POST /v1/webhooks/stripe` | Stripe-Signatur | `2xx` nach erfolgreicher Queue-Annahme |
+| `GET /v1/me` | JWT, `read:me` | Own internal user ID and minimal profile |
+| `GET /v1/me/subscriptions` | JWT, `read:me` | Own normalized subscriptions and synchronization status |
+| `GET /v1/me/entitlements` | JWT, `read:me` | Effective features, revision, and validity boundaries |
+| `GET /v1/premium/score-history` | JWT, `read:premium`, entitlement | Synthetic history or `403` |
+| `POST /v1/billing/stripe/checkout-session` | JWT, `write:checkout` | Hosted test checkout URL |
+| `POST /v1/webhooks/stripe` | Stripe signature | `2xx` after successful queue acceptance |
 
-Reconciliation und Mock-Szenarien werden über lokale Dev-Skripte mit AWS-IAM-Rechten ausgelöst. Dafür ist kein öffentlich erreichbarer Admin-Endpunkt nötig.
+Trigger reconciliation and mock scenarios through local development scripts with AWS IAM permissions. No public admin endpoint is needed.
 
-**Fehlerkonvention:** `400` für ungültige Nutzdaten oder Webhook-Signaturen; `401` für fehlende/ungültige Anmeldung; `403` für fehlenden Scope beziehungsweise fehlendes Entitlement; `409` für widersprüchliche Idempotenzdaten oder einen bereits laufenden Kaufversuch; `503` bei technisch nicht möglicher Tokenverifikation ohne verwendbaren Schlüsselcache. Interne Details bleiben im Log; API-Fehler enthalten Code und Request-ID.
+**Error convention:** `400` for invalid payloads or webhook signatures; `401` for missing/invalid authentication; `403` for a missing scope or entitlement; `409` for conflicting idempotency data or an ongoing purchase attempt; `503` when token verification is technically unavailable without a usable key cache. Keep internal details in logs; API errors contain a code and request ID.
 
-### Konten zuverlässig verbinden
+### Link accounts reliably
 
-Aus dem validierten Paar `iss` und `sub` wird einmalig eine interne `userId` erzeugt. E-Mail-Adressen sind kein stabiler Schlüssel. Die Zuordnung zu `stripeCustomerId` entsteht ausschließlich serverseitig und wird vor dem Checkout gespeichert.
+Create an internal `userId` once from the validated `iss`/`sub` pair. Email addresses are not stable keys. Create the `stripeCustomerId` mapping only on the server and persist it before checkout.
 
-Die Test-Webseite meldet sich mit demselben Auth0-Konto und derselben Connection wie die App an. Zwei verschiedene Auth0-Identitäten werden auch bei gleicher E-Mail nicht automatisch zusammengeführt.
+The test website signs in with the same Auth0 account and connection as the app. Do not automatically merge two different Auth0 identities, even when their email addresses match.
 
-Der Client übergibt beim Checkout nur `planId: "premium_monthly"` und einen Idempotency-Key. `userId`, Stripe-Customer, Preis, Rücksprung-URLs und kaufberechtigtes Produkt bestimmt das Backend. Ein mitgesendeter fremder User-Identifier darf die Kontozuordnung nicht verändern.
+At checkout, the client sends only `planId: "premium_monthly"` and an idempotency key. The backend determines `userId`, Stripe customer, price, return URLs, and the purchasable product. A supplied identifier belonging to another user must not change account ownership.
 
-Beispiel einer geplanten API-Antwort:
+Example planned API response:
 
 ```json
 {
@@ -249,13 +249,13 @@ Beispiel einer geplanten API-Antwort:
 }
 ```
 
-`effectiveUntil` bezeichnet die nächste relevante Ablaufgrenze im aktuellen Lesemodell. Der Backend-Check wertet Zeitgrenzen bei jedem Zugriff neu aus; er verlässt sich nicht allein auf gespeicherte Booleans.
+`effectiveUntil` is the next relevant expiration boundary in the current read model. Reevaluate time boundaries on every backend access; do not rely solely on stored booleans.
 
-## 7 Subscriptions und Entitlements
+## 7 Subscriptions and entitlements
 
-Eine **Subscription** beschreibt den beim Provider beobachteten Vertrag. Ein **Entitlement** beschreibt die daraus abgeleitete fachliche Zugriffsberechtigung. Der Provider ist führend für seinen Zahlungs-/Vertragszustand; PremiumPass ist führend für die Zuordnung dieser Fakten zu eigenen Features.
+A **subscription** describes the contract observed at the provider. An **entitlement** describes the resulting domain access right. The provider is authoritative for its payment/contract state; PremiumPass is authoritative for mapping those facts to its own features.
 
-### Normalisiertes Modell
+### Normalized model
 
 ```typescript
 type Provider = 'stripe' | 'apple_mock' | 'google_mock';
@@ -279,91 +279,91 @@ interface Subscription {
 }
 ```
 
-`accessUntil` ist eine **verifizierte Berechtigungsgrenze**. Sie darf nicht blind aus dem nominellen Ende einer noch unbezahlten Abrechnungsperiode übernommen werden. Stripe-Mapping und Fixtures liefern diese Grenze nach der unten festgelegten Demopolicy.
+`accessUntil` is a **verified access boundary**. Never copy it blindly from the nominal end of an unpaid billing period. Stripe mapping and fixtures produce this boundary according to the demo policy below.
 
-### Explizite Demopolicy
+### Explicit demo policy
 
-| Zustand | Zugriff |
+| State | Access |
 |---|---|
-| Kein Abonnement / `pending` | Free |
-| `trialing` | Bis zum bestätigten Trial-Ende; Trial im Checkout zunächst ausgeschaltet |
-| `active` | Bis `accessUntil`, sofern keine bestätigte Sperre vorliegt |
-| `active` und `cancelAtPeriodEnd=true` | Premium bleibt bis zur bestätigten Ablaufgrenze bestehen |
-| `past_due` | Bereits gewährter Zeitraum bleibt gültig; 24 Stunden Grace ab dessen Ende, sofern zuvor Zugriff bestand |
-| `paused`, `canceled`, `expired`, `revoked` | Diese Subscription gewährt keinen Zugriff |
-| Provider technisch nicht erreichbar | Letzten verifizierten Stand behalten; keine neue Laufzeit erfinden |
+| No subscription / `pending` | Free |
+| `trialing` | Until the confirmed trial end; trials are initially disabled in checkout |
+| `active` | Until `accessUntil`, unless a confirmed block applies |
+| `active` and `cancelAtPeriodEnd=true` | Premium continues until the confirmed expiration boundary |
+| `past_due` | Previously granted access remains valid; 24 hours of grace after it ends, provided access existed before |
+| `paused`, `canceled`, `expired`, `revoked` | This subscription grants no access |
+| Provider technically unavailable | Keep the last verified state; do not invent an additional access period |
 
-Die Grace Period wird für die Demo auf **24 Stunden** festgelegt und nur nach einem zuvor verifizierten Zugriffszeitraum gewährt. Retries dürfen ihren Beginn nicht neu setzen. Ein erstmalig fehlgeschlagener Kauf erhält dadurch keinen Premiumzugang. Diese Regel ist eine eigene Produktentscheidung, keine allgemeine Stripe-/Apple-/Google-Vorgabe.
+The demo sets a **24-hour** grace period only after a previously verified access period. Retries must not reset its start. A purchase that failed initially does not gain Premium access through grace. This is a product decision, not a general Stripe/Apple/Google rule.
 
-Für Stripe gilt im Demo-Mapping: `incomplete` → `pending`, `incomplete_expired` → `expired`, `unpaid` → gesperrt, hier normalisiert als `expired`. Den Originalstatus zusätzlich speichern. `cancel_at_period_end=true` ist ein Merkmal einer noch laufenden Subscription; es bedeutet nicht sofort `canceled`. Ein Refund wird im Kernumfang nicht automatisch mit einem Widerruf gleichgesetzt. Die echte Refund-Policy bleibt ein Folgethema. [Stripe Subscription Lifecycle](https://docs.stripe.com/billing/subscriptions/overview)
+Stripe demo mapping: `incomplete` → `pending`, `incomplete_expired` → `expired`, `unpaid` → blocked, normalized here as `expired`. Also retain the original status. `cancel_at_period_end=true` is a property of a still-running subscription; it does not immediately mean `canceled`. The core scope does not automatically equate refunds with revocation. A real refund policy remains a follow-up topic. [Stripe Subscription Lifecycle](https://docs.stripe.com/billing/subscriptions/overview)
 
-### Mehrere Kaufkanäle
+### Multiple purchase channels
 
-Die Features eines Nutzers ergeben sich aus der Vereinigung seiner aktuell gültigen Grants. Endet Apple-Mock, während Stripe noch gültig ist, bleibt Premium aktiv. Deshalb darf ein einzelnes Provider-Ereignis niemals pauschal `isPremium=false` für den gesamten Nutzer setzen.
+A user's features are the union of all currently valid grants. If the Apple mock ends while Stripe remains valid, Premium stays active. A single provider event must therefore never blindly set `isPremium=false` for the whole user.
 
-Implementiere die Berechnung als pure Funktion `deriveEntitlements(subscriptions, now)`. Die Uhr wird als Parameter übergeben, damit Ablaufgrenzen ohne Wartezeit testbar sind. Bei unbekanntem Produkt oder nicht verstandenem Provider-Status erfolgt keine neue Freigabe; der Fall bleibt sichtbar zur Klärung.
+Implement the calculation as the pure function `deriveEntitlements(subscriptions, now)`. Pass time as a parameter so expiration boundaries can be checked without waiting. Unknown products or unrecognized provider states grant no new access; keep these cases visible for investigation.
 
-## 8 DynamoDB und Nebenläufigkeit
+## 8 DynamoDB and concurrency
 
-### Access Patterns zuerst
+### Access patterns first
 
-1. Identität aus `iss` und `sub` auf interne User-ID abbilden.
-2. Eigenes Profil, eigene Subscriptions und Entitlements lesen.
-3. Provider-Customer oder Provider-Subscription einem Nutzer zuordnen.
-4. Ein bereits verarbeitetes Event erkennen.
-5. Fällige Synchronisationen und ausstehende Outbox-Einträge finden.
+1. Map an `iss`/`sub` identity to an internal user ID.
+2. Read the user's own profile, subscriptions, and entitlements.
+3. Map a provider customer or subscription to a user.
+4. Detect an event that has already been processed.
+5. Find due synchronizations and pending outbox entries.
 
-### Vorschlag für eine Demotabelle
+### Proposed demo table
 
-| PK | SK | Inhalt |
+| PK | SK | Contents |
 |---|---|---|
-| `IDENTITY#<identityHash>` | `MAP` | `iss`, `sub`, interne `userId` |
-| `USER#<userId>` | `PROFILE` | Minimalprofil, Stripe-Customer-Zuordnung |
-| `USER#<userId>` | `SUB#<provider>#<id>` | Normalisierte Subscription |
-| `USER#<userId>` | `ENTITLEMENTS` | Grants, effektive Features, Aggregatrevision |
-| `PROVIDER#<provider>#<externalId>` | `OWNER` | Eindeutige Besitzerzuordnung, Objekttyp |
-| `EVENT#<provider>#<eventId>` | `PROCESSED` | Zeitpunkt, Ergebnis, optional Aufbewahrungsgrenze |
-| `CHECKOUT#<userId>#<requestId>` | `REQUEST` | Anfragehash, Stripe-Key, Session-ID und Bearbeitungsstatus |
-| `OUTBOX#<domainEventId>` | `EVENT` | Payload, `pending`/`sent`, Erzeugungszeit |
-| `MOCK#<provider>#<id>` | `STATE` | Separater simulierter Provider-Zustand |
+| `IDENTITY#<identityHash>` | `MAP` | `iss`, `sub`, internal `userId` |
+| `USER#<userId>` | `PROFILE` | Minimal profile, Stripe customer mapping |
+| `USER#<userId>` | `SUB#<provider>#<id>` | Normalized subscription |
+| `USER#<userId>` | `ENTITLEMENTS` | Grants, effective features, aggregate revision |
+| `PROVIDER#<provider>#<externalId>` | `OWNER` | Unique ownership mapping, object type |
+| `EVENT#<provider>#<eventId>` | `PROCESSED` | Timestamp, result, optional retention boundary |
+| `CHECKOUT#<userId>#<requestId>` | `REQUEST` | Request hash, Stripe key, session ID, processing status |
+| `OUTBOX#<domainEventId>` | `EVENT` | Payload, `pending`/`sent`, creation time |
+| `MOCK#<provider>#<id>` | `STATE` | Separate simulated provider state |
 
-Der Identitätshash wird aus einer eindeutigen Serialisierung von `iss` und `sub` gebildet. Provider-IDs immer mit Provider und Objekttyp namespacen.
+Compute the identity hash from an unambiguous serialization of `iss` and `sub`. Always namespace provider IDs by provider and object type.
 
-Für die winzige Demo dürfen Reconciliation und Outbox-Publisher paginierte Scans nutzen. Das ist eine bewusste Kosten-/Skalierungsgrenze: Scan-Filter sparen keine gelesene Kapazität. Als spätere Verbesserung einen nach Fälligkeit abgefragten, gegebenenfalls partitionierten GSI vorsehen. Normale Nutzeranfragen verwenden `GetItem` beziehungsweise `Query` auf ihrer Partition.
+For this tiny demo, reconciliation and the outbox publisher may use paginated scans. This is a deliberate cost/scaling limit: scan filters do not save read capacity. A later improvement is a due-time GSI, partitioned if necessary. Normal user requests use `GetItem` or `Query` on their partition.
 
-### Atomare Verarbeitung
+### Atomic processing
 
-Eine erfolgreiche Änderung schreibt in **einer** DynamoDB-Transaktion:
+A successful change writes the following in **one** DynamoDB transaction:
 
-1. Das Event als verarbeitet, nur wenn dessen ID noch nicht existiert.
-2. Die normalisierte Subscription.
-3. Die aus allen Subscriptions berechneten Entitlements mit erhöhter Aggregatrevision.
-4. Einen Outbox-Eintrag mit stabiler Domain-Event-ID, sofern sich der fachliche Zustand geändert hat.
+1. The event completion marker, only if its ID does not already exist.
+2. The normalized subscription.
+3. Entitlements derived from all subscriptions, with an incremented aggregate revision.
+4. An outbox entry with a stable domain event ID, if domain state changed.
 
-Die Bedingung auf der bisherigen Aggregatrevision verhindert verlorene Updates bei mehreren Subscriptions desselben Nutzers. Alle Schreiber verwenden diesen gemeinsamen Pfad. Bei einem Konflikt werden lokale Daten **und der Provider-Zustand erneut gelesen**, danach wird neu gerechnet. Begrenzte unmittelbare Versuche mit Jitter; danach übernimmt der SQS-Retry.
+A condition on the previous aggregate revision prevents lost updates across multiple subscriptions belonging to one user. All writers use this shared path. On conflict, reread **both local data and provider state**, then recompute. Use a bounded number of immediate attempts with jitter; afterward, let SQS retry.
 
-Die relevante lokale Revision vor dem Provider-Abruf lesen und beim Commit prüfen. Revision und zugehörige lokale Subscription-Daten aus der Basistabelle mit konsistenten Reads laden; zuerst die Revision, danach die Subscriptions. Die Commit-Bedingung erkennt Änderungen während dieses Leseablaufs. Dadurch kann ein parallel bereits abgeschlossener neuerer Commit nicht von einem später abgeschlossenen alten Abruf überschrieben werden. Provider-Reads und lokale Transaktion sind dennoch keine verteilte Transaktion; zwischenzeitliche externe Änderungen werden durch weitere Events und Reconciliation korrigiert.
+Read the relevant local revision before fetching provider state and check it at commit time. Load the revision and related local subscription data from the base table using consistent reads: revision first, subscriptions afterward. The commit condition detects changes during this read sequence. This prevents a stale fetch that finishes later from overwriting a newer concurrent commit. Provider reads and the local transaction are still not a distributed transaction; subsequent events and reconciliation correct intervening external changes.
 
-Bei unverändertem fachlichem Zustand die Verifizierung aktualisieren und das Arbeitsereignis abschließen, aber kein weiteres fachliches Änderungsereignis erzeugen. Das verhindert Event-Schleifen. [DynamoDB Transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html)
+When domain state is unchanged, update verification metadata and complete the work event without emitting another domain change event. This prevents event loops. [DynamoDB Transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html)
 
-TTL dient ausschließlich zum späteren Aufräumen abgeschlossener technischer Datensätze. DynamoDB löscht abgelaufene TTL-Einträge nicht exakt zum Ablaufzeitpunkt. Entitlement-Ablauf wird deshalb im Code geprüft; offene Outbox-Einträge werden nicht per TTL entfernt. [DynamoDB TTL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)
+TTL is only for eventual cleanup of completed technical records. DynamoDB does not delete expired TTL records at the exact expiration time. Enforce entitlement expiration in code; do not delete pending outbox entries through TTL. [DynamoDB TTL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)
 
-## 9 Stripe Billing im Testmodus
+## 9 Stripe Billing in test mode
 
-### Checkout einrichten
+### Set up checkout
 
-1. Testprodukt `PremiumPass Premium` und monatlichen Preis anlegen.
-2. Nur die serverseitig konfigurierte `priceId` für `premium_monthly` akzeptieren; Menge eins, Karten-Testzahlung, kein Trial oder Tarifwechsel im Kernumfang.
-3. Beim ersten Kauf einen Stripe-Customer serverseitig erzeugen und dessen Besitzerzuordnung speichern. Den Erzeugungsschritt ebenfalls idempotent behandeln.
-4. Checkout-Session mit `mode=subscription`, dem gespeicherten Customer und freigegebenen Success-/Cancel-URLs anlegen.
-5. Eine interne User-Referenz serverseitig in Session und Subscription-Metadaten hinterlegen. Diese Metadaten unterstützen die Zuordnung, ersetzen aber nicht die Prüfung der gespeicherten Customer-Zugehörigkeit.
-6. Die Test-Webseite öffnet die zurückgegebene gehostete Checkout-URL.
+1. Create the `PremiumPass Premium` test product and a monthly price.
+2. Accept only the server-configured `priceId` for `premium_monthly`; quantity one, test card payment, no trial or plan changes in the core scope.
+3. Create a Stripe customer server-side on the first purchase and store its ownership mapping. Make this creation step idempotent as well.
+4. Create a checkout session with `mode=subscription`, the stored customer, and approved success/cancel URLs.
+5. Add an internal user reference to session and subscription metadata on the server. This metadata helps with mapping but does not replace verification of stored customer ownership.
+6. The test website opens the returned hosted checkout URL.
 
-Für jeden Kaufversuch einen stabilen Idempotency-Key verwenden. Derselbe Schlüssel mit anderem Anfrageinhalt führt lokal zu `409`. Parallele Versuche desselben Nutzers über einen bedingten Datensatz für den laufenden Kaufversuch begrenzen. Nach einem Timeout die zugehörige Session wiederfinden, statt sofort eine neue Subscription zu erzeugen. Die begrenzte Aufbewahrung von Stripe-Idempotency-Keys ersetzt keine eigene dauerhafte Kaufzuordnung. [Stripe Checkout Session API](https://docs.stripe.com/api/checkout/sessions/create) · [Stripe Idempotency](https://docs.stripe.com/api/idempotent_requests)
+Use a stable idempotency key for each purchase attempt. Reusing a key with different request contents returns local `409`. Restrict concurrent attempts by one user with a conditional record for the active purchase attempt. After a timeout, recover the associated session instead of immediately creating another subscription. Stripe's limited idempotency key retention does not replace a durable local purchase mapping. [Stripe Checkout Session API](https://docs.stripe.com/api/checkout/sessions/create) · [Stripe Idempotency](https://docs.stripe.com/api/idempotent_requests)
 
-### Webhooks verarbeiten
+### Process webhooks
 
-Mindestens abonnieren:
+Subscribe to at least:
 
 - `checkout.session.completed`
 - `customer.subscription.created`
@@ -372,23 +372,23 @@ Mindestens abonnieren:
 - `invoice.paid`
 - `invoice.payment_failed`
 
-Der Handler prüft `Stripe-Signature` mit dem Secret dieses Endpunkts gegen die unveränderten Request-Bytes. Bei API Gateway gegebenenfalls den Base64-Body korrekt dekodieren, bevor die Stripe-Bibliothek ihn prüft. Erst nach der Signaturprüfung parsen und einen kleinen Synchronisationsauftrag auf SQS schreiben. Nur erfolgreiches Enqueueing wird mit `2xx` bestätigt; bei Queue-Ausfall kommt ein Fehler zurück, damit Stripe erneut zustellen kann. Nicht benötigte, gültig signierte Eventtypen dürfen bewusst ohne Verarbeitung bestätigt werden. [Stripe Webhooks](https://docs.stripe.com/webhooks)
+The handler verifies `Stripe-Signature` with this endpoint's secret against unchanged request bytes. Correctly decode an API Gateway Base64 body, if present, before passing it to the Stripe library. Parse and enqueue a small synchronization job only after signature verification. Return `2xx` only after successful enqueueing; return an error during a queue outage so Stripe can retry. Validly signed event types that are not needed may intentionally be acknowledged without processing. [Stripe Webhooks](https://docs.stripe.com/webhooks)
 
-Der Auftrag enthält beispielsweise Provider, Event-ID, Eventtyp, betroffene Objekt-ID, Eingangszeit und Correlation-ID. Keine Kartendaten und keine kompletten sensiblen Payloads in Logs übernehmen.
+A job contains fields such as provider, event ID, event type, affected object ID, receipt time, and correlation ID. Do not log card data or complete sensitive payloads.
 
-**Freigaberegel:** Weder Success-Redirect noch `checkout.session.completed` allein aktiviert Premium. Der Processor lädt die tatsächliche Subscription sowie die für den aktuellen Leistungszeitraum relevante Rechnung. Im vereinfachten Tarifmodell erweitert eine bezahlte passende Rechnung die Zugriffsgrenze nur zusammen mit einem dafür gültigen Subscription-Zustand. Ein isoliertes `invoice.paid` genügt nicht. Stripe weist darauf hin, dass auch `active` nicht zwangsläufig bedeutet, dass sämtliche älteren Rechnungen bezahlt sind. [Stripe Subscription Webhooks](https://docs.stripe.com/billing/subscriptions/webhooks)
+**Activation rule:** Neither the success redirect nor `checkout.session.completed` alone activates Premium. The processor loads the actual subscription and the invoice relevant to the current service period. In the simplified plan model, a matching paid invoice extends the access boundary only together with a valid subscription state. An isolated `invoice.paid` is insufficient. Stripe notes that even `active` does not necessarily mean all older invoices have been paid. [Stripe Subscription Webhooks](https://docs.stripe.com/billing/subscriptions/webhooks)
 
-IDs und Periodenfelder aus der gepinnten Stripe-API-/SDK-Version verwenden. Keine älteren Beispiele ungeprüft übernehmen, insbesondere bei Subscription-Items und Rechnungsreferenzen. Lokale Stripe-CLI-Weiterleitung und deployter Webhook besitzen unterschiedliche Signing-Secrets.
+Use IDs and period fields from the pinned Stripe API/SDK version. Do not copy older examples without checking them, especially subscription items and invoice references. Local Stripe CLI forwarding and the deployed webhook use different signing secrets.
 
-### Drei Stripe-Übungen
+### Three Stripe exercises
 
-1. Testkauf abschließen und die Freigabe in App und Backend beobachten.
-2. Im Stripe-Testdashboard zum Periodenende kündigen; Premium muss bis zum Ende erhalten bleiben.
-3. Ein separates, über API angelegtes Test-Clock-Szenario für Verlängerung oder fehlgeschlagene Folgezahlung verwenden. Die Uhr ist eine Stripe-Testfunktion, keine Änderung der Uhr des gesamten AWS-Systems. Unterstützte Abläufe anhand der [Stripe Test Clocks](https://docs.stripe.com/billing/testing/test-clocks) auswählen.
+1. Complete a test purchase and observe activation in the app and backend.
+2. Cancel at period end in the Stripe test dashboard; Premium must remain active until that boundary.
+3. Use a separate API-created test clock scenario for renewal or a failed recurring payment. The clock is a Stripe testing feature, not a change to the entire AWS system clock. Choose supported flows using [Stripe Test Clocks](https://docs.stripe.com/billing/testing/test-clocks).
 
-## 10 Apple und Google als Provider-Mocks
+## 10 Apple and Google provider mocks
 
-### Gemeinsamer Vertrag
+### Shared contract
 
 ```typescript
 interface BillingProvider {
@@ -400,54 +400,54 @@ interface PurchaseVerifier {
 }
 ```
 
-`ProviderSnapshot` enthält Besitzerreferenz, Produkt, Originalstatus, Zugriffsgrenzen und Provider-Metadaten. `VerifiedPurchase` verbindet eine verifizierte Kaufreferenz mit dem erwarteten Nutzer. Stripe verwendet Checkout; eine Store-Kaufverifikation muss deshalb nicht künstlich in jeden Adapter gezwungen werden.
+`ProviderSnapshot` contains the owner reference, product, original status, access boundaries, and provider metadata. `VerifiedPurchase` associates a verified purchase reference with the expected user. Stripe uses checkout, so do not artificially force store purchase verification into every adapter.
 
-Implementierungen: `StripeBillingProvider`, `AppleMockBillingProvider`, `GoogleMockBillingProvider`. Die Mocks lesen ihren Zustand aus eigenen Fixture-Datensätzen, getrennt vom lokalen Subscription-Lesemodell. Nur so kann Reconciliation einen absichtlich veralteten lokalen Zustand tatsächlich reparieren.
+Implementations: `StripeBillingProvider`, `AppleMockBillingProvider`, `GoogleMockBillingProvider`. Mocks read state from their own fixture records, separate from the local subscription read model. This separation lets reconciliation actually repair a deliberately stale local state.
 
-### Deterministische Szenarien
+### Deterministic scenarios
 
-| Fixture | Erwarteter Zustand |
+| Fixture | Expected state |
 |---|---|
-| `purchase_active` | Zugeordneter Testnutzer erhält Premium |
-| `renewal_paid` | Gültigkeitsgrenze wird einmalig verlängert |
-| `cancel_at_period_end` | Laufender Zugriff bleibt bis zur Grenze erhalten |
-| `expired` | Grant dieses Providers endet |
-| `revoked` | Grant dieses Providers wird sofort entzogen |
-| `payment_failed` | Bestehende Laufzeit/definierte Grace gilt; keine unbegrenzte Verlängerung |
-| `provider_unavailable` | Synchronisation schlägt wiederholbar fehl |
-| `wrong_owner` | Verifikation lehnt die fremde Kaufreferenz ab |
+| `purchase_active` | The assigned test user receives Premium |
+| `renewal_paid` | The validity boundary is extended once |
+| `cancel_at_period_end` | Current access remains valid until its boundary |
+| `expired` | This provider's grant ends |
+| `revoked` | This provider's grant is revoked immediately |
+| `payment_failed` | Existing access/defined grace applies; no unlimited extension |
+| `provider_unavailable` | Synchronization fails in a reproducible way |
+| `wrong_owner` | Verification rejects another user's purchase reference |
 
-Ein Dev-Skript ändert den Mock-Zustand und sendet optional einen Synchronisationsauftrag. Mit `emitEvent=false` entsteht der Reconciliation-Testfall. Für Duplikate dieselbe Event-ID erneut verwenden; für verspätete Zustellung eine ältere Benachrichtigung nach einer neueren senden. Der Processor liest trotzdem den aktuellen Mock-Zustand.
+A development script updates mock state and optionally emits a synchronization job. `emitEvent=false` creates the reconciliation scenario. Reuse the same event ID for duplicates; send an older notification after a newer one to simulate delayed delivery. The processor still reads current mock state.
 
-Apple- und Google-spezifische IDs, Environment und Statuswerte bleiben als Providerdaten erhalten. Die Mocks simulieren fachliche Szenarien; sie implementieren keine echte JWS-/Zertifikatsprüfung und keine Google-Pub/Sub-Authentifizierung.
+Retain Apple/Google-specific IDs, environment, and statuses as provider data. Mocks simulate domain scenarios; they implement neither real JWS/certificate verification nor Google Pub/Sub authentication.
 
-Spätere echte Adapter benötigen unter anderem Apple-Transaktionsvalidierung und Server Notifications sowie Google-Kaufvalidierung, Acknowledgement und Real-time Developer Notifications. Lokale StoreKit-Tests und Tests gegen Apples Sandbox sind unterschiedliche Stufen; Google erfordert passende Play-Konfiguration und Testkonten. [Apple Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) · [Google Billing Tests](https://developer.android.com/google/play/billing/test)
+Later real adapters require Apple transaction validation and Server Notifications, plus Google purchase validation, acknowledgement, and Real-time Developer Notifications. Local StoreKit checks and Apple's sandbox are different stages; Google requires appropriate Play configuration and test accounts. [Apple Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) · [Google Billing Tests](https://developer.android.com/google/play/billing/test)
 
-## 11 Events und zuverlässige Verarbeitung
+## 11 Events and reliable processing
 
-### SQS als Arbeitsqueue
+### SQS as the work queue
 
-Nutze eine Standard Queue. Zustellungen dürfen mehrfach und in anderer Reihenfolge eintreffen; fachliche Korrektheit entsteht im Processor. Eine FIFO-Queue allein würde weder verspätete Provider-Webhooks noch alle externen Race Conditions lösen.
+Use a Standard Queue. Deliveries may be duplicated or reordered; the processor enforces domain correctness. A FIFO queue alone would solve neither delayed provider webhooks nor all external race conditions.
 
-**Startkonfiguration für die Demo:** Processor-Timeout 30 Sekunden, Batchgröße eins, kein Batchfenster, Visibility Timeout mindestens 180 Sekunden, `maxReceiveCount=5`, Source-Retention vier Tage und DLQ-Retention 14 Tage. Werte unter tatsächlicher Laufzeit prüfen. AWS empfiehlt mindestens das Sechsfache des Lambda-Timeouts zuzüglich eines gegebenenfalls konfigurierten Batchfensters. [AWS SQS Event Source](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html)
+**Initial demo configuration:** Processor timeout 30 seconds, batch size one, no batching window, visibility timeout at least 180 seconds, `maxReceiveCount=5`, source retention four days, and DLQ retention 14 days. Verify these values under actual runtime conditions. AWS recommends at least six times the Lambda timeout plus any batching window. [AWS SQS Event Source](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html)
 
-Provider-Aufrufe erhalten eigene kurze Timeouts; bei `429` und temporären Fehlern begrenzte Retries mit Backoff/Jitter. Danach den Auftrag fehlschlagen lassen. Keine langen Warteschleifen innerhalb einer Lambda ausführen.
+Provider calls have their own short timeouts; use bounded retries with backoff/jitter for `429` and transient failures. Then fail the job. Do not run long waiting loops inside a Lambda.
 
-Bei späterer Batchverarbeitung `ReportBatchItemFailures` aktivieren und nur fehlgeschlagene SQS-Message-IDs melden. Sonst können erfolgreiche Nachrichten desselben Batches erneut verarbeitet werden. Die DLQ wird über die Redrive-Policy der **SQS-Quellqueue** angebunden. [AWS SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html)
+If batch processing is added later, enable `ReportBatchItemFailures` and report only failed SQS message IDs. Otherwise, successful messages in the same batch may be processed again. Attach the DLQ through the **source SQS queue's** redrive policy. [AWS SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html)
 
-### Idempotenz und Reihenfolge
+### Idempotency and ordering
 
-- Deduplizieren anhand von Provider und Event-ID; die Event-ID ist nicht die SQS-Message-ID.
-- Ein Event wird erst innerhalb der erfolgreichen Zustandstransaktion als abgeschlossen markiert.
-- Verschiedene Events mit gleichem fachlichem Ergebnis erzeugen keine doppelte Verlängerung.
-- Webhooks dienen als Anlass, den aktuellen Provider-Zustand zu lesen.
-- `event.created` ist kein verlässlicher vollständiger Sortierschlüssel; verschiedene Stripe-Events können denselben Sekunden-Zeitstempel haben. [Stripe Event Ordering](https://docs.stripe.com/webhooks#event-ordering)
+- Deduplicate by provider and event ID; the event ID is not the SQS message ID.
+- Mark an event complete only within the successful state transaction.
+- Different events with the same domain outcome must not extend access twice.
+- Use webhooks as triggers to read current provider state.
+- `event.created` is not a reliable total ordering key; different Stripe events may share the same timestamp to the second. [Stripe Event Ordering](https://docs.stripe.com/webhooks#event-ordering)
 
-### Kleine Outbox für EventBridge
+### Small outbox for EventBridge
 
-Das direkte Muster „Datenbank speichern, danach Event senden“ hat ein Absturzfenster. Deshalb speichert die Transaktion ein `pending`-Event mit stabiler `domainEventId`. Ein Publisher wird jede Minute aufgerufen, liest offene Einträge und sendet sie an den per CDK erzeugten Bus.
+The direct pattern of saving the database and then sending an event has a crash window. Instead, the transaction stores a `pending` event with a stable `domainEventId`. A publisher runs every minute, reads pending entries, and sends them to the bus created by CDK.
 
-Beispiel:
+Example:
 
 ```json
 {
@@ -464,320 +464,332 @@ Beispiel:
 }
 ```
 
-`PutEvents` kann bei HTTP `200` einzelne fehlgeschlagene Einträge zurückmelden. Der Publisher prüft `FailedEntryCount` und jedes Ergebnis; nur angenommene Events werden als `sent` markiert. Ein Absturz nach dem Senden kann Duplikate erzeugen. Die stabile fachliche Event-ID und die Aggregatrevision erlauben späteren Consumern eine idempotente Verarbeitung. [EventBridge PutEvents](https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEvents.html)
+`PutEvents` may report individual failed entries despite HTTP `200`. The publisher checks `FailedEntryCount` and every result; only accepted events are marked `sent`. A crash after sending may create duplicates. Stable domain event IDs and aggregate revisions allow later consumers to process events idempotently. [EventBridge PutEvents](https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEvents.html)
 
-Der Demo-Consumer protokolliert `domainEventId`, Revision und Grund. Doppelte Logzeilen sind zulässig und erkennbar; sie entsprechen keinen doppelten fachlichen Änderungen. EventBridge-Annahme beweist noch nicht die erfolgreiche Consumer-Ausführung. Für die Lambda als Ziel eine Failure-Destination für fehlgeschlagene asynchrone Ausführungen vorsehen; Zustellfehler am EventBridge-Target separat durch Retry/DLQ behandeln.
+The demo consumer logs `domainEventId`, revision, and reason. Duplicate log lines are allowed and identifiable; they do not represent duplicate domain changes. EventBridge acceptance does not prove successful consumer execution. Configure a failure destination for failed asynchronous invocations of the target Lambda; handle EventBridge target delivery failures separately through retries/DLQ.
 
-### DLQ wieder abarbeiten
+### Reprocess the DLQ
 
-Fehler anhand der Correlation-ID untersuchen, Ursache beheben, dann gezielt mit begrenzter Rate redriven. Ein kontrolliertes Gift-Event demonstriert den Weg in die DLQ. Ein Redrive ohne Fehlerkorrektur würde nur dieselbe Schleife wiederholen.
+Investigate failures using the correlation ID, fix the cause, and then redrive selected messages at a bounded rate. A controlled poison event demonstrates the path into the DLQ. Redriving without fixing the cause would repeat the same loop.
 
 ## 12 Reconciliation
 
-Reconciliation synchronisiert den lokalen Zustand erneut mit dem Provider. Sie verwendet dieselbe Normalisierung, Entitlement-Berechnung und Transaktion wie Webhook-Aufträge.
+Reconciliation resynchronizes local state with the provider. It uses the same normalization, entitlement calculation, and transaction as webhook jobs.
 
-### Ablauf alle fünf Minuten
+### Run every five minutes
 
-1. Bekannte Customer-Zuordnungen und fällige Subscription-Datensätze paginiert lesen.
-2. Für Stripe pro bekanntem Customer die relevanten Subscriptions inklusive beendeter Zustände ermitteln. Dadurch wird auch eine Subscription entdeckt, deren erster Webhook nie ankam.
-3. Für die Mocks deren separate Zustandsablage lesen.
-4. Synchronisationsaufträge mit deterministischer ID aus Provider, Referenz und Lauf-ID auf SQS schreiben. Innerhalb desselben Laufs sind Duplikate unschädlich; der nächste Lauf besitzt neue IDs.
-5. Lokale Abweichungen über den gemeinsamen Processor reparieren und als `reconciliation` kennzeichnen.
-6. `lastReconciledAt`, Fehler und gefundene Abweichungen erfassen. Bei Provider-Ausfällen keine Subscription aus einem fehlenden Antwortobjekt als beendet interpretieren.
+1. Read known customer mappings and due subscription records with pagination.
+2. For each known Stripe customer, discover relevant subscriptions, including ended states. This also finds subscriptions whose initial webhook never arrived.
+3. Read the mocks' separate state storage.
+4. Enqueue synchronization jobs with deterministic IDs based on provider, reference, and run ID. Duplicates within one run are harmless; the next run uses new IDs.
+5. Repair local discrepancies through the shared processor and label the reason `reconciliation`.
+6. Record `lastReconciledAt`, failures, and discrepancies found. During provider outages, do not interpret a missing response object as an ended subscription.
 
-Die Stripe-Customer-Zuordnung muss schon vor dem Checkout existieren, damit Schritt zwei auch ohne lokale Subscription möglich ist. Extern im Dashboard angelegte, keinem bekannten Kundenkonto zugeordnete Käufe werden nicht automatisch einem Nutzer zugewiesen.
+The Stripe customer mapping must exist before checkout so step two also works without a local subscription. Purchases created externally in the dashboard and not associated with a known customer account are not automatically assigned to a user.
 
-Unabhängig von Provider-Änderungen muss der Processor fällige Ablaufgrenzen neu bewerten. Damit verschwinden abgelaufene Grants auch ohne Kündigungs-Webhook. Die synchrone Prüfung im Premium-Endpunkt verhindert bereits vorher Zugriff über die zulässige Grenze hinaus.
+Regardless of provider changes, the processor must reevaluate due expiration boundaries. Expired grants therefore disappear even without a cancellation webhook. The synchronous Premium endpoint check already prevents access beyond the allowed boundary before reconciliation runs.
 
-### Konkretes Experiment
+### Concrete experiment
 
-Apple-Mock zunächst aktivieren. Dann den Mock auf `expired` ändern und das Event absichtlich unterdrücken. Die gespeicherte Subscription bleibt zunächst alt. Reconciliation manuell anstoßen und zeigen, dass sie diesen Datensatz sowie das Entitlement korrigiert. Danach denselben Lauf erneut auslösen: kein zusätzlicher fachlicher Effekt.
+Activate the Apple mock. Then change it to `expired` and deliberately suppress the event. The stored subscription initially remains stale. Trigger reconciliation manually and show that it corrects the subscription record and entitlement. Trigger the same run again: no additional domain effect.
 
-**Messbares Demoziel:** Reparatur eines verpassten Updates innerhalb von sieben Minuten bei gesunden Abhängigkeiten — fünf Minuten bis zum nächsten Lauf plus Verarbeitungspuffer. Das ist ein selbst gesetztes Abnahmekriterium, keine AWS-Garantie.
+**Measurable demo target:** Repair a missed update within seven minutes under healthy dependencies: five minutes until the next run plus processing buffer. This is a project acceptance target, not an AWS guarantee.
 
-## 13 Security und Betrieb
+## 13 Security and operations
 
-### Sicherheitsgrenzen
+### Security boundaries
 
-| Grenze | Umsetzung |
+| Boundary | Implementation |
 |---|---|
-| Benutzer → Backend | JWT-Signatur und Claims im Backend prüfen, Route-Scopes und Besitzerprüfung durchsetzen |
-| App → Premiumdaten | Entitlement und Ablaufzeit bei jedem geschützten Aufruf prüfen |
-| Stripe → Webhook | Signaturprüfung vor Enqueueing; für diese Route kein Auth0-JWT verlangen |
-| Dev-Skript → AWS | Lokales AWS-Profil/IAM; Mock-Funktionen ausschließlich in Dev bereitstellen |
-| Lambda → AWS-Ressourcen | Eigene Rollen mit auf Tabellen, Queue, Bus und Secrets begrenzten Rechten |
-| GitHub → AWS | OIDC mit auf Repository und Branch/Environment begrenzter Trust Policy |
+| User → backend | Verify JWT signatures and claims in the backend; enforce route scopes and ownership checks |
+| App → Premium data | Check entitlement and expiration on every protected request |
+| Stripe → webhook | Verify the signature before enqueueing; do not require an Auth0 JWT for this route |
+| Development script → AWS | Local AWS profile/IAM; provide mock functions only in development |
+| Lambda → AWS resources | Separate roles with permissions restricted to required tables, queue, bus, and secrets |
+| GitHub → AWS | OIDC with a trust policy restricted to repository and branch/environment |
 
-Stripe-Secret-Key und Webhook-Secret liegen in AWS Secrets Manager; Lambdas erhalten nur die benötigten Leserechte. CDK-Ausgaben enthalten keine Geheimnisse. Beispielkonfiguration und `.env.example` dürfen ausschließlich Platzhalter beziehungsweise öffentliche Werte enthalten.
+Store the Stripe secret key and webhook secret in AWS Secrets Manager; give Lambdas only the read permissions they need. CDK outputs contain no secrets. Example configuration and `.env.example` may contain only placeholders or public values.
 
-Der BFF benötigt keine Schreibrechte auf fachliche Entitlements. Diese liegen beim Processor. Provider-Customer- und Kaufzuordnungen werden per Conditional Write gegen Besitzerwechsel geschützt. Ein späterer echter Store-Adapter muss zusätzlich verhindern, dass dieselbe Kaufreferenz von einem zweiten Nutzer beansprucht wird.
+The BFF needs no write access to domain entitlements; the processor owns those writes. Protect provider customer and purchase mappings against ownership changes with conditional writes. A later real store adapter must also prevent a second user from claiming the same purchase reference.
 
-Zod oder ein vergleichbares Schemawerkzeug validiert Requests und normalisierte Events. Produkte und Redirect-Ziele sind serverseitig zugelassen. Für die lokale Test-Webseite CORS auf die konkrete Origin begrenzen; CORS ersetzt keine Autorisierung. Payloadgröße, API-Throttling und Lambda-Concurrency bewusst begrenzen.
+Use Zod or an equivalent schema tool to validate requests and normalized events. Allowlist products and redirect destinations on the server. Restrict CORS for the local test website to its actual origin; CORS does not replace authorization. Deliberately limit payload size, API throttling, and Lambda concurrency.
 
-Verwende ausschließlich Testdaten. Bearer Tokens, Signing-Secrets, vollständige Zahlungsobjekte und personenbezogene Daten gehören nicht in Logs. Technische Referenzen, Request-IDs und Statuswechsel genügen für diese Demo.
+Use test data only. Do not log Bearer tokens, signing secrets, full payment objects, or personal data. Technical references, request IDs, and status transitions are sufficient for this demo.
 
-### Beobachtbarkeit
+### Observability
 
-Strukturierte Logs enthalten mindestens `requestId`, `correlationId`, `provider`, `providerEventId`, `domainEventId`, `revision`, `outcome` und gegebenenfalls einen nicht sensitiven Fehlercode. Nicht vorhandene Felder werden ausgelassen.
+Structured logs include at least `requestId`, `correlationId`, `provider`, `providerEventId`, `domainEventId`, `revision`, `outcome`, and, where applicable, a non-sensitive error code. Omit fields that are unavailable.
 
-| Signal | Startwert für die Demo |
+| Signal | Initial demo threshold |
 |---|---|
-| Sichtbare Nachrichten in Processing-DLQ | Alarm ab einer Nachricht |
-| Alter der ältesten SQS-Nachricht | Alarm über zwei Minuten |
-| Wiederholte Processor-/Reconciliation-Fehler | Alarm bei mehreren Fehlern im kurzen Beobachtungsfenster |
-| Alter des ältesten offenen Outbox-Eintrags | Alarm über drei Minuten |
-| Letzter erfolgreicher Reconciliation-Lauf | Alarm bei mehr als zehn Minuten ohne Erfolg |
+| Visible messages in the processing DLQ | Alert at one message |
+| Age of the oldest SQS message | Alert above two minutes |
+| Repeated processor/reconciliation failures | Alert after multiple failures within a short observation window |
+| Age of the oldest pending outbox entry | Alert above three minutes |
+| Last successful reconciliation run | Alert after more than ten minutes without success |
 
-Schwellwerte sind Übungswerte. Log-Retention auf beispielsweise sieben Tage begrenzen. Für EventBridge-Target- und Lambda-Consumer-Fehler die entsprechenden Failure-Queues mitbeobachten. Ein Event, das auf dem Bus angenommen wurde, ist noch kein Nachweis, dass die Zielverarbeitung erfolgreich abgeschlossen wurde. [EventBridge DLQs](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html) · [Lambda Async Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)
+Thresholds are exercise values. Limit log retention, for example to seven days. Monitor the corresponding failure queues for EventBridge target and Lambda consumer failures as well. Acceptance by the bus is not evidence that target processing completed successfully. [EventBridge DLQs](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html) · [Lambda Async Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html)
 
-### Kosten und Aufräumen
+### Cost and cleanup
 
-Ein kleiner Dev-Stack verwendet keine VPC und keinen NAT Gateway, sofern keine privaten Ressourcen benötigt werden. Datenmenge, Logs und periodische Aufrufe begrenzen; keine pauschale Kostenfreiheit annehmen. Nach der Demo Zeitpläne stoppen oder den Dev-Stack entfernen und die tatsächlichen Kosten kontrollieren.
+The small development stack uses no VPC or NAT Gateway unless private resources are required. Limit data volume, logs, and scheduled invocations; do not assume everything is free. After the demo, stop schedules or remove the development stack and review actual costs.
 
-Eine Removal-Policy für Demodaten ausdrücklich festlegen. Ein späteres `cdk destroy` betrifft nur den ausgewählten Dev-Stack; Stripe-Webhooks/Testabos und Auth0-Anwendungen werden dadurch nicht automatisch gelöscht. CDK-Bootstrap-Ressourcen bleiben ebenfalls gesondert zu betrachten.
+Explicitly choose a removal policy for demo data. A later `cdk destroy` affects only the selected development stack; it does not automatically remove Stripe webhooks/test subscriptions or Auth0 applications. Treat CDK bootstrap resources separately as well.
 
-## 14 Repository und CI/CD
+## 14 Repository and CI/CD
 
-### Geplante Struktur
+### Planned structure
+
+A private **pnpm workspace monorepo** keeps the app, backend, and infrastructure together. One shared lockfile fixes dependencies. The target structure below grows incrementally: P01 creates only root tooling and `services/bff`; P03 adds `infra`.
 
 ```text
-premiumpass/
+schufa-lab/
   apps/
-    mobile/                  React Native und Auth0
-    checkout-web/            Test-Webseite
-  packages/
-    domain/                  Subscription-Modell und Entitlement-Regeln
-    providers/               Stripe sowie Apple-/Google-Mocks
-    persistence/             DynamoDB-Zugriff und Transaktionen
-    contracts/               API- und Event-Schemas
-    auth/                    JWT-Verifikation, JWKS-Cache und Scope-Prüfung
+    mobile/                  React Native, Expo development build, Auth0
+    checkout-web/            Small Stripe test website
   services/
-    bff/
-    stripe-webhook/
-    subscription-processor/
-    reconciliation/
-    outbox-publisher/
-    event-log/
-  infra/                     CDK-Stack und Assertions
-  scripts/                   Seed, Mock-Szenarien, Reconcile und Smoke-Test
-  tests/                     Integrationstests und Fixtures
-  docs/                      Architekturentscheidungen und Demo-Protokoll
-  .github/workflows/
-  .env.example
+    bff/                     Hono app, local entry, and Lambda entry
+    stripe-webhook/          Separate HTTP handler with raw-body signature verification
+    workers/                 Separate Lambda entries for processor,
+                             reconciliation, outbox publisher, and event log
+  packages/
+    domain/                  Subscription model and entitlement rules
+    contracts/               Shared API and event schemas
+    providers/               Stripe and Apple/Google mocks, when sharing is needed
+    persistence/             DynamoDB access and transactions, when sharing is needed
+  infra/                     CDK app and stack
+  scripts/                   Seed, mock scenarios, and reconciliation
+  docs/                      Decisions, tasks, and demo record
+  .github/workflows/         Added later with CI/CD
+  package.json               Private root, toolchain pins, shared scripts
+  pnpm-workspace.yaml        apps/*, services/*, packages/*, infra
+  pnpm-lock.yaml             One lockfile for the repository
+  tsconfig.base.json         Shared base with package-specific extensions
+  AGENTS.md
+  PROJECT_PLAN.md
   README.md
 ```
 
-Die Ordner sind Verantwortungsbereiche, keine Aufforderung, sechs unabhängig veröffentlichte Pakete einzurichten. Gemeinsame Workspace-Abhängigkeiten und ein Deployment genügen.
+**Package boundaries:**
 
-### Infrastruktur reproduzierbar machen
+- Each workspace package gets its own `package.json`, `private: true`, a name such as `@premiumpass/bff`, and its own scripts. Use `workspace:*` for internal dependencies and explicit package exports for imports, not relative paths into another package's `src` directory.
+- `domain` contains business rules without Hono, AWS, or React dependencies. `contracts` contains transferable DTOs and schemas; the mobile app imports neither backend adapters nor secret configuration.
+- Authentication middleware initially stays in the BFF. Provider and persistence code starts in its service and is extracted into a package only when actual sharing is needed. No empty speculative packages or cyclic dependencies.
+- A workspace package need not correspond to one Lambda function. CDK bundles each required entry separately; `workers` can provide multiple functions. Infrastructure must not import application entry points that start servers.
+- Do not create test packages or test frameworks. Node and Expo may use different TypeScript configurations.
+- Root scripts coordinate typechecking, linting, formatting checks, and builds through pnpm. Turbo/Nx or a custom build system are not planned for this demo. Document executable commands in the README only after introducing them.
 
-CDK erzeugt HTTP API, Lambda-Funktionen, Tabelle, Queue/DLQ, Custom Bus, Regeln, Zeitpläne, Loggruppen und IAM-Rollen. Die HTTP-Routen erhalten keinen Gateway-Authorizer. Issuer und Audience werden als nicht geheime Backend-Konfiguration bereitgestellt; die HTTP-Lambda benötigt ausgehenden HTTPS-Zugriff auf den festgelegten Auth0-JWKS-Endpunkt. Secrets werden separat mit ihren echten Werten befüllt. Auth0-Anwendungen und Stripe-Testprodukte zunächst manuell konfigurieren und die nicht geheimen IDs dokumentieren.
+pnpm supports this workspace structure, and `workspace:*` requires local package resolution. [pnpm Workspaces](https://pnpm.io/workspaces)
 
-Vor dem ersten Deployment die gewählte Account-/Region-Kombination bootstrappen. Bootstrapping richtet unter anderem Ressourcen für Deployment-Artefakte ein und ist nicht dasselbe wie das Deployment des Anwendungsstacks. [AWS CDK Bootstrapping](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html)
+### Reproducible infrastructure
 
-### CI auf jedem Pull Request
+CDK creates the HTTP API, Lambda functions, table, queue/DLQ, custom bus, rules, schedules, log groups, and IAM roles. HTTP routes have no Gateway authorizer. Supply issuer and audience as non-secret backend configuration; the HTTP Lambda needs outbound HTTPS access to the configured Auth0 JWKS endpoint. Populate real secret values separately. Initially configure Auth0 applications and Stripe test products manually and document their non-secret IDs.
 
-1. Gepinnte Node-/Paketmanager-Version verwenden und Lockfile strikt installieren.
-2. Format, Lint und TypeScript prüfen.
-3. Domain-, Adapter- und relevante Integrationstests ausführen.
-4. CDK synthetisieren und Infrastruktur-Assertions ausführen.
-5. Build-Artefakte beziehungsweise Testberichte bereitstellen.
+Bootstrap the selected account/region combination before the first deployment. Bootstrapping creates resources such as deployment artifact storage and is separate from deploying the application stack. [AWS CDK Bootstrapping](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html)
 
-Tests mit Mocks laufen ohne Cloud-Secrets. Ein PR aus unbekanntem Fork erhält weder Stripe-Zugang noch AWS-Deployment-Rechte.
+### CI on every pull request
 
-### CD in die Dev-Stage
+1. Use pinned Node/package manager versions and install with the frozen lockfile.
+2. Check formatting, linting, and TypeScript.
+3. Build the application.
+4. Synthesize CDK once infrastructure exists.
+5. Publish build artifacts.
 
-Ein `workflow_dispatch` aus dem vorgesehenen Branch führt nach bestandener CI das Dev-Deployment aus. AWS-Zugang erfolgt über kurzlebige OIDC-Credentials; `id-token: write` und `contents: read` nur im passenden Job vergeben. Die Trust Policy prüft `aud=sts.amazonaws.com` und das tatsächlich verwendete `sub`-Format des Repositorys beziehungsweise Environments. Keine allgemeine Freigabe für beliebige Repositories oder Branches. [GitHub OIDC mit AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)
+Local mock runs require no cloud secrets. A PR from an unknown fork receives neither Stripe credentials nor AWS deployment permissions.
 
-Anschließend einen Live-Smoke-Test ausführen: unautorisierter Aufruf wird abgewiesen, geschützter Testaufruf funktioniert, ein kontrolliertes Mock-Event erreicht den Processor. Für automatisierte positive Auth-Tests einen eigenen, eingeschränkten Testclient mit Testidentität verwenden; keinen Auth0-Admin-Token einsetzen. Der echte mobile Login bleibt zusätzlich ein manueller Test.
+### CD to the development stage
 
-Ein fehlgeschlagener Smoke-Test markiert das Deployment als fehlgeschlagen. Für die Demo reicht ein dokumentierter Rückweg durch erneutes Deployen des vorherigen funktionsfähigen Commits; automatische Canary-Deployments sind eine Vertiefung.
+A `workflow_dispatch` from the intended branch deploys to development after CI passes. Use short-lived OIDC credentials for AWS access; grant `id-token: write` and `contents: read` only in the relevant job. The trust policy checks `aud=sts.amazonaws.com` and the actual repository/environment `sub` format. Do not allow arbitrary repositories or branches. [GitHub OIDC with AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws)
 
-## 15 Tests und Fehlerexperimente
+Then check manually: an unauthorized request is rejected, a protected request works, and a controlled mock event reaches the processor. Use a dedicated test identity, not an Auth0 admin token. Also verify real mobile login manually.
 
-### Testschichten
+Record a failed manual run as missing/failed evidence in the demo record. For the demo, a documented rollback by redeploying the previous working commit is sufficient; automated canary deployments are a later topic.
 
-| Ebene | Inhalt | Aussage |
+## 15 Manual checks and failure experiments
+
+### Manual verification layers
+
+| Layer | Contents | Evidence |
 |---|---|---|
-| Unit | JWT-Verifikation und Scopes sowie Statusmapping, Produktmapping, Ablauf-/Grace-Regeln, mehrere Provider | Auth-Komponente und fachliche Regeln funktionieren für definierte Eingaben |
-| Adapter/Contract | Stripe-Payload-Fixtures, Mock-Provider, unbekannte Statuswerte | Externe Modelle werden kontrolliert übersetzt |
-| Integration | Geschützte Backend-Routen, Auth-Kontext, DynamoDB-Transaktion, Conditional Writes, Inbox/Outbox | Auth-Prüfung greift vor Fachlogik; für AWS-Semantik zusätzlich Dev-Stack nutzen |
-| Infrastruktur | HTTP-Lambda-Integration ohne Gateway-Authorizer, Auth-Konfiguration, IAM, Queue/DLQ, Zeitpläne, Timeout/Retention | CDK erzeugt die vorgesehenen Ressourcen |
-| Live-End-to-End | Auth0 → App → AWS → echter Stripe-Testkauf → Entitlements | Die reale Integration funktioniert auf der dokumentierten Testplattform |
+| Domain logic | JWT verification and scopes, status/product mapping, expiration/grace rules, multiple providers | Authentication and domain rules work for defined inputs |
+| Adapters | Stripe payload fixtures, mock providers, unknown statuses | External models are translated in a controlled way |
+| Integration | Protected backend routes, authentication context, DynamoDB transaction, conditional writes, inbox/outbox | Authentication runs before domain logic; use the development stack to verify AWS semantics as well |
+| Infrastructure | HTTP/Lambda integration without a Gateway authorizer, authentication configuration, IAM, queue/DLQ, schedules, timeout/retention | CDK creates the intended resources |
+| Live end-to-end | Auth0 → app → AWS → real Stripe test purchase → entitlements | Real integration works on the documented verification platform |
 
-Keine umfassende UI-Testsuite für das Wochenende. Die drei Screens werden anhand weniger nachvollziehbarer manueller Schritte geprüft. Ein grüner Unit-Test ersetzt keinen Live-Stripe- oder Simulator-Durchlauf.
+**User requirement:** Do not write automated tests or configure a test framework for this learning project. The following scenarios are a manual learning and demo checklist. Typechecking, linting, formatting checks, and builds remain automated development checks; a successful build does not replace a live run.
 
-### Verbindliche Testmatrix
+### Manual scenarios (T01–T22)
 
-| Nr. | Experiment | Erwartung |
+| ID | Experiment | Expected result |
 |---|---|---|
-| T01 | Gültiges Access Token mit Scope | `200` auf eigener Profilroute |
-| T02 | Token fehlt, ist manipuliert/abgelaufen, hat falsche Audience/Issuer oder einen unzulässigen Algorithmus | Backend liefert `401`, Fachlogik wird nicht ausgeführt |
-| T03 | Gültiges Token ohne erforderlichen Scope | Backend liefert `403`, Fachlogik wird nicht ausgeführt |
-| T04 | Free-Nutzer mit Scope ruft Premium-Historie auf | `403`; nach Freigabe `200` |
-| T05 | Nutzer B übergibt Identifikatoren von A | Keine fremden Daten und keine fremde Kaufzuordnung |
-| T06 | Stripe-Testkauf mit demselben Account in Web und App | Passende Subscription und Premium nach Synchronisation |
-| T07 | Derselbe Checkout-Request zweimal, einschließlich gleichzeitig | Derselbe Kaufversuch; kein zweites Abo durch denselben Request |
-| T08 | Manipulierter oder falsch signierter Webhook | `400`, kein SQS-Auftrag |
-| T09 | Queue-Annahme fällt beim Webhook aus | Kein Erfolgs-ACK; erneute Zustellung möglich |
-| T10 | Dasselbe Provider-Event zehnmal senden | Ein fachlicher Effekt und keine zehn Laufzeitverlängerungen |
-| T11 | Altes Event nach neuerem zustellen | Aktueller Provider-Zustand bleibt maßgeblich |
-| T12 | Zwei Provider desselben Nutzers parallel ändern | Kein verlorenes Update; gültige verbleibende Grants bleiben wirksam |
-| T13 | Zum Periodenende kündigen, dann Uhr über die Grenze setzen | Vor Ablauf Premium, danach gemäß Policy gesperrt |
-| T14 | Verlängerung scheitert und Grace läuft ab | Keine unbegrenzte oder durch Retries verlängerte Berechtigung |
-| T15 | Provider liefert Timeout oder `429` | Begrenzte Retries; keine erfundene neue Laufzeit |
-| T16 | Dauerhaft fehlerhafter Auftrag | Nach Wiederholungen in DLQ; Alarm wird sichtbar |
-| T17 | Fehler beheben und DLQ-Auftrag redriven | Erfolgreiche Verarbeitung ohne doppelten Effekt |
-| T18 | Abbruch vor beziehungsweise nach DynamoDB-Commit injizieren | Vor Commit keine Teiländerung; nach Commit ist Wiederholung unschädlich |
-| T19 | `PutEvents` teilweise fehlerhaft oder Publisher nach Senden abbrechen | Offene Einträge bleiben wiederholbar; Duplikate sind identifizierbar |
-| T20 | Mock-Zustand ändern, Event unterdrücken | Reconciliation repariert lokalen Zustand innerhalb des Demoziels |
-| T21 | Neuen Stripe-Kauf verarbeiten, initialen Webhook kontrolliert auslassen | Reconciliation entdeckt das Abo über den bekannten Customer |
-| T22 | Gültigen Grant per Zeitablauf ohne neues Event beenden | Premium-API lehnt bereits anhand der Zeitgrenze ab |
+| T01 | Valid access token with scope | `200` on the user's own profile route |
+| T02 | Missing, tampered, or expired token; wrong audience/issuer; disallowed algorithm | Backend returns `401`; no domain logic executes |
+| T03 | Valid token without the required scope | Backend returns `403`; no domain logic executes |
+| T04 | Free user with the scope requests Premium history | `403`; `200` after activation |
+| T05 | User B submits identifiers belonging to A | No access to another user's data or purchase ownership |
+| T06 | Stripe test purchase using the same account in web and app | Correct subscription and Premium access after synchronization |
+| T07 | Send the same checkout request twice, including concurrently | Same purchase attempt; no second subscription for the same request |
+| T08 | Tampered or incorrectly signed webhook | `400`, no SQS job |
+| T09 | Queue acceptance fails during webhook handling | No success acknowledgement; redelivery remains possible |
+| T10 | Send the same provider event ten times | One domain effect, not ten access extensions |
+| T11 | Deliver an older event after a newer one | Current provider state remains authoritative |
+| T12 | Update two providers for one user concurrently | No lost update; remaining valid grants stay effective |
+| T13 | Cancel at period end, then move the clock beyond that boundary | Premium before expiration; access denied afterward according to policy |
+| T14 | Renewal fails and grace expires | No unlimited access or grace extended by retries |
+| T15 | Provider times out or returns `429` | Bounded retries; no invented access extension |
+| T16 | Permanently failing job | DLQ after retries; an alert becomes visible |
+| T17 | Fix the cause and redrive the DLQ message | Successful processing without duplicate effects |
+| T18 | Inject a crash before or after the DynamoDB commit | No partial changes before commit; harmless retry after commit |
+| T19 | Partial `PutEvents` failure or publisher crash after sending | Pending entries remain retryable; duplicates are identifiable |
+| T20 | Change mock state and suppress the event | Reconciliation repairs local state within the demo target |
+| T21 | Process a new Stripe purchase while deliberately skipping its initial webhook | Reconciliation discovers the subscription through the known customer |
+| T22 | Let a valid grant expire without another event | Premium API already denies access based on the time boundary |
 
-Die Auth-Komponente zusätzlich mit lokal signierten Testtokens und kontrolliertem JWKS testen: Schlüsselrotation, unbekanntes `kid`, Cache-Wiederverwendung und JWKS-Ausfall ohne prüfbaren Schlüssel. Bei fehlender Verifizierbarkeit erfolgt keine Freigabe. Ein HTTP-Integrationstest ruft den BFF-Handler direkt auf und weist nach, dass die Schutzwirkung nicht vom Gateway abhängt.
+Also check the authentication component with locally signed test tokens and a controlled JWKS: key rotation, unknown `kid`, cache reuse, and a JWKS outage without a usable key. Grant no access when verification is impossible. Call the local BFF directly over HTTP to confirm that protection does not depend on the Gateway.
 
-T10–T19 lassen sich überwiegend mit deterministischen Fixtures und Fehler-Injektion testen. T06 muss einen echten Stripe-Testkauf abdecken. T16/T17 zusätzlich im AWS-Dev-Stack demonstrieren, damit die reale DLQ-Konfiguration geprüft ist.
+T10–T19 can largely be explored with deterministic fixtures and failure injection. T06 must include a real Stripe test purchase. Also demonstrate T16/T17 in the AWS development stack to verify the real DLQ configuration.
 
-Tests dürfen eine gemeinsame injizierbare Uhr verwenden. Zeitreisen in Unit-Tests oder Mock-Fixtures sind von Stripe Test Clocks zu unterscheiden. Testdaten und Simulationsergebnisse niemals als echte Store-Verifikation ausweisen.
+Manual scenarios may use a shared injectable clock. Time travel with mock data is distinct from Stripe Test Clocks. Never present test data or simulation results as real store verification.
 
-## 16 Samstag und Sonntag
+## 16 Saturday and Sunday
 
-**Arbeitsmodell:** Je acht Stunden Nettozeit, Mittagspause von 13:00 bis 14:00. Kurze Pausen innerhalb der Blöcke einplanen. Der Plan ist für einen erfahrenen Entwickler ambitioniert; Versions- oder Accountprobleme verlängern ihn. Kleine Tests während der Implementierung schreiben, die Nachmittagsblöcke für Integration und Fehlerexperimente nutzen.
+**Working model:** Eight hours of work each day, with lunch from 13:00 to 14:00. Include short breaks within work blocks. The plan is ambitious for an experienced developer; version or account issues will extend it. Try the implementation manually as it grows; use afternoon sessions for integration and failure experiments.
 
-### Samstag vom Login zum ersten Premiumzugriff
+### Saturday: from login to first Premium access
 
-| Zeit | Arbeit | Sichtbares Ergebnis |
+| Time | Work | Visible result |
 |---|---|---|
-| 09:00–10:00 | HTTP-Framework entscheiden, Workspace, CDK, HTTP API, erste Lambda und Tabelle | Backend-Skeleton und Dev-Stack deploybar |
-| 10:00–11:00 | Auth0-API, Backend-Tokenprüfung, JWKS-Cache, Scopes, Identitätsmapping | Eigene Profilroute im Backend geschützt; negative Tokenfälle nachvollziehbar |
-| 11:00–13:00 | React Native mit Login, Dashboard und Premium-Screen; Entitlement-Lesemodell | App meldet Nutzer A an und zeigt Free; Premium-Endpunkt antwortet `403` |
-| 13:00–14:00 | Mittagspause | — |
-| 14:00–15:30 | Test-Webseite, Auth0-Weblogin, Stripe-Customer und Checkout | Gehosteter Testkauf mit korrekt gebundenem Account möglich |
-| 15:30–17:00 | Webhook, SQS, Processor, Stripe-Mapping, atomare Speicherung | Signiertes Event führt zu zentralem Subscription-/Entitlement-Zustand |
-| 17:00–18:00 | Vollständiger Stripe-Durchlauf, Nutzer B, Duplikat-Smoke-Test | App zeigt Premium; B bleibt Free; erste Testnotizen gespeichert |
+| 09:00–10:00 | Hono skeleton, pnpm workspace, CDK, HTTP API, first Lambda and table | Deployable backend skeleton and development stack |
+| 10:00–11:00 | Auth0 API, backend token verification, JWKS cache, scopes, identity mapping | Own profile route protected in the backend; invalid-token cases understood |
+| 11:00–13:00 | React Native login, dashboard, Premium screen, entitlement read model | User A logs in and sees Free; Premium endpoint returns `403` |
+| 13:00–14:00 | Lunch | — |
+| 14:00–15:30 | Test website, Auth0 web login, Stripe customer and checkout | Hosted test purchase with correct account association |
+| 15:30–17:00 | Webhook, SQS, processor, Stripe mapping, atomic persistence | Signed event produces central subscription/entitlement state |
+| 17:00–18:00 | Complete Stripe flow, user B, duplicate-event smoke check | App shows Premium; B remains Free; initial verification notes saved |
 
-**Samstagsmeilenstein:** Ein realer Stripe-Testkauf führt über Webhook und Queue zum serverseitig erlaubten Premiumzugriff. Die UI gibt niemals allein wegen einer Checkout-Rückkehr Premium frei.
+**Saturday milestone:** A real Stripe test purchase grants server-authorized Premium access through webhook and queue processing. The UI never enables Premium solely because checkout redirected back.
 
-### Sonntag Fehlerfälle und reproduzierbarer Betrieb
+### Sunday: failures and reproducible operation
 
-| Zeit | Arbeit | Sichtbares Ergebnis |
+| Time | Work | Visible result |
 |---|---|---|
-| 09:00–10:00 | Apple-/Google-Adapter, getrennte Mock-Zustände, Szenario-Skript | Beide Mocks verwenden denselben Processor und dieselben Regeln |
-| 10:00–11:15 | Idempotenz und Nebenläufigkeit vervollständigen; Retry/DLQ | Duplikate, Konflikte und permanenter Fehler kontrolliert behandelt |
-| 11:15–12:15 | Outbox-Publisher, EventBridge und Event-Log-Consumer | Fachliche Änderung erscheint mit stabiler ID im Consumer-Log |
-| 12:15–13:00 | Reconciliation-Zeitplan, Customer-Discovery, Ablaufprüfung | Verpasstes Mock-Event wird automatisch repariert |
-| 13:00–14:00 | Mittagspause | — |
-| 14:00–15:00 | Testmatrix automatisieren, Reconciliation-/Outbox-Fehler testen | Kritische Invarianten durch Tests abgedeckt |
-| 15:00–16:00 | GitHub Actions, OIDC, CDK Assertions und Dev-Deployment | Deployment aus einem bekannten Commit erfolgreich |
-| 16:00–17:15 | CloudWatch, reale DLQ/Redrive, zweite Identität, Live-Regression | Betriebssignale und Sicherheitsgrenzen nachgewiesen |
-| 17:15–18:00 | Abschlussdemo, README, offene Punkte und Cleanup | Reproduzierbare Demo mit ehrlichem Prüfstatus |
+| 09:00–10:00 | Apple/Google adapters, separate mock states, scenario script | Both mocks use the same processor and rules |
+| 10:00–11:15 | Finish idempotency and concurrency handling; retries/DLQ | Duplicates, conflicts, and permanent failures handled predictably |
+| 11:15–12:15 | Outbox publisher, EventBridge, event log consumer | Domain change appears in the consumer log with a stable ID |
+| 12:15–13:00 | Reconciliation schedule, customer discovery, expiration checks | Missed mock event repaired automatically |
+| 13:00–14:00 | Lunch | — |
+| 14:00–15:00 | Walk through scenarios manually; trigger reconciliation/outbox failures | Critical flows understood and documented |
+| 15:00–16:00 | GitHub Actions, OIDC, CDK synthesis, development deployment | Successful deployment from a known commit |
+| 16:00–17:15 | CloudWatch, real DLQ/redrive, second identity, live regression | Operational signals and security boundaries demonstrated |
+| 17:15–18:00 | Final demo, README, open issues, cleanup | Reproducible demo with an accurate verification status |
 
-### Wenn die Zeit knapp wird
+### If time runs short
 
-Zuerst Styling, zweiten mobilen Plattformlauf, echte Push-Mitteilungen und zusätzliche Tarife streichen. Mocks per Skript bedienen, keinen Admin-Screen bauen. Ein günstigerer Zwischenschritt ist, CD zunächst manuell auszulösen und vorhandene Dev-Zugänge zu verwenden.
+Cut styling, the second mobile platform run, real push notifications, and additional plans first. Operate mocks through scripts instead of building an admin screen. A smaller intermediate step is manually triggered CD using existing development access.
 
-Signaturprüfung, Besitzerzuordnung, Entitlement-Prüfung, Idempotenz und die atomare Speicherung bleiben Bestandteil des Kerns. Bleiben Kernpunkte offen, den Stand als **Teil-MVP** dokumentieren und die offenen Abnahmekriterien benennen. Die vollständige robuste Variante muss dann in einem weiteren Block abgeschlossen werden.
+Signature verification, ownership mapping, entitlement checks, idempotency, and atomic persistence remain core requirements. If core items remain open, document the result as a **partial MVP** and list the outstanding acceptance criteria. Complete the full robust version in another work session.
 
-## 17 Abnahme und Abschlussdemo
+## 17 Acceptance and final demo
 
-### Definition of Done
+### Definition of done
 
-- [ ] Eine frische lokale Einrichtung ist anhand des README mit nicht geheimen Konfigurationswerten nachvollziehbar.
-- [ ] Die Wahl zwischen Hono und Fastify ist dokumentiert.
-- [ ] Der Dev-Stack wird vollständig per CDK erzeugt; externe Auth0-/Stripe-Schritte sind dokumentiert.
-- [ ] Alle Benutzer-Routen prüfen Auth0-Tokens und Scopes im Backend; dafür ist kein Gateway-Authorizer erforderlich.
-- [ ] JWT-Signatur, Claims, Schlüsselrotation und JWKS-Ausfälle sind getestet; der Stripe-Webhook verwendet seinen separaten Signaturschutz.
-- [ ] Auf der dokumentierten mobilen Testplattform funktionieren Login, Logout und erneutes Laden des Status.
-- [ ] Der Stripe-Testkauf von Nutzer A schaltet Premium bei gesunden Abhängigkeiten innerhalb des gesetzten Demoziels von 30 Sekunden nach verarbeitbarem Webhook frei.
-- [ ] Nutzer B erhält weder fremde Daten noch Premium durch manipulierte IDs.
-- [ ] Apple- und Google-Mocks verwenden dieselbe zentrale Subscription-/Entitlement-Logik.
-- [ ] Kündigung zum Periodenende, Ablauf, Zahlungsausfall und mehrere Provider erfüllen die definierte Policy.
-- [ ] Zehn Zustellungen desselben Events erzeugen nur einen fachlichen Effekt.
-- [ ] Parallele Updates verlieren keine gültige Berechtigung; Konflikte werden wiederholt.
-- [ ] Ein permanenter Fehler landet in der DLQ und lässt sich nach Fehlerkorrektur erfolgreich redriven.
-- [ ] Ein Abbruch zwischen Zustandsspeicherung und Eventversand verliert kein Outbox-Event.
-- [ ] EventBridge und Consumer sind anhand einer `domainEventId` nachvollziehbar; Target- und Ausführungsfehler sind auffindbar.
-- [ ] Reconciliation repariert einen verpassten Zustandswechsel und entdeckt ein Abo mit ausgefallenem initialem Webhook.
-- [ ] Zeitbasierte Berechtigungen laufen auch ohne neues Provider-Event aus.
-- [ ] CI ist grün, ein Dev-Deployment über OIDC wurde durchgeführt und Smoke-Tests sind dokumentiert.
-- [ ] Geheimnisse und vollständige Tokens fehlen in Repository, App-Bundle und Logs.
-- [ ] README nennt Kosten-/Cleanup-Schritte, Demo-Grenzen sowie nicht durchgeführte Prüfungen.
+- [ ] A fresh local setup can be reproduced from the README using non-secret configuration values.
+- [ ] Hono starts locally; the same app structure is verified through the Lambda adapter.
+- [ ] CDK creates the entire development stack; external Auth0/Stripe steps are documented.
+- [ ] All user routes verify Auth0 tokens and scopes in the backend without requiring a Gateway authorizer.
+- [ ] JWT signatures, claims, key rotation, and JWKS outages have been checked; the Stripe webhook uses its separate signature protection.
+- [ ] Login, logout, and status refresh work on the documented mobile platform.
+- [ ] User A's Stripe test purchase activates Premium within the demo target of 30 seconds after a processable webhook under healthy dependencies.
+- [ ] User B gains neither another user's data nor Premium access by manipulating IDs.
+- [ ] Apple and Google mocks use the same central subscription/entitlement logic.
+- [ ] Cancellation at period end, expiration, payment failure, and multiple providers follow the defined policy.
+- [ ] Ten deliveries of one event produce only one domain effect.
+- [ ] Concurrent updates lose no valid entitlement; conflicts are retried.
+- [ ] A permanent failure reaches the DLQ and can be redriven successfully after correction.
+- [ ] A crash between state persistence and event publication loses no outbox event.
+- [ ] EventBridge and consumer processing can be traced through `domainEventId`; target and execution failures are discoverable.
+- [ ] Reconciliation repairs a missed state change and discovers a subscription whose initial webhook was missed.
+- [ ] Time-based entitlements expire even without a new provider event.
+- [ ] CI is green, a development deployment through OIDC has completed, and manual smoke checks are documented.
+- [ ] Secrets and complete tokens are absent from the repository, app bundle, and logs.
+- [ ] The README documents cost/cleanup steps, demo limits, and checks not performed.
 
-Die 30-Sekunden- und Sieben-Minuten-Ziele messen die eigene Demo unter gesunden Abhängigkeiten. Sie sind keine zugesicherte Provider-Latenz oder Produktions-SLA.
+The 30-second and seven-minute targets measure this demo under healthy dependencies. They are not guaranteed provider latency or production SLAs.
 
-### Abschlussdemo in etwa zehn Minuten
+### Final demo in about ten minutes
 
-1. **Minute 0–1:** Architektur erklären und die drei Begriffe Identität, Subscription und Entitlement trennen.
-2. **Minute 1–3:** Als A anmelden, Free sehen, Stripe-Testkauf im Browser abschließen, App aktualisieren, Historie laden.
-3. **Minute 3–4:** Als B anmelden und den fehlenden Premiumzugriff zeigen.
-4. **Minute 4–5:** Dasselbe Ereignis mehrfach senden und unveränderte fachliche Wirkung nachweisen.
-5. **Minute 5–6:** Eine Mock-Kündigung und den Ablauf mit kontrollierter Uhr demonstrieren.
-6. **Minute 6–8:** Mock-Zustand ohne Event ändern; manuelle Reconciliation repariert das Lesemodell.
-7. **Minute 8–9:** Vorbereiteten DLQ-Fall, Fehlerkorrektur und Redrive zeigen.
-8. **Minute 9–10:** Domain Event, Pipeline und drei bewusste Architekturentscheidungen erläutern.
+1. **Minutes 0–1:** Explain the architecture and distinguish identity, subscription, and entitlement.
+2. **Minutes 1–3:** Log in as A, show Free, complete a Stripe test purchase in the browser, refresh the app, and load history.
+3. **Minutes 3–4:** Log in as B and show that Premium access is unavailable.
+4. **Minutes 4–5:** Send the same event multiple times and demonstrate unchanged domain effects.
+5. **Minutes 5–6:** Demonstrate mock cancellation and expiration using a controlled clock.
+6. **Minutes 6–8:** Change mock state without an event; manual reconciliation repairs the read model.
+7. **Minutes 8–9:** Show a prepared DLQ case, correction, and redrive.
+8. **Minutes 9–10:** Explain the domain event, pipeline, and three deliberate architecture decisions.
 
-### Nachweise im Repository
+### Evidence in the repository
 
-Ein kurzes `docs/demo-protokoll.md` enthält Commit, Datum, Stage/Region, getestete Plattform, ausgeführte Testfälle und verbleibende Lücken. Dazu genügen wenige geschwärzte Screenshots und technische Referenzen. Nur tatsächlich ausgeführte Tests als bestanden markieren.
+A short `docs/demo-record.md` records the commit, date, stage/region, platform checked, scenarios performed, and remaining gaps. A few redacted screenshots and technical references are sufficient. Mark only checks actually performed as successful.
 
-Halte drei Entscheidungen in knappen Notizen fest: serverseitige Entitlements statt Client-Flag; atomare Subscription-/Entitlement-Änderung mit Outbox; periodischer Provider-Abgleich zusätzlich zu Webhooks.
+Record three decisions in brief notes: server-side entitlements instead of a client flag; atomic subscription/entitlement updates with an outbox; periodic provider reconciliation in addition to webhooks.
 
-## 18 Vertiefung nach dem Wochenende
+## 18 Further work after the weekend
 
-| Thema | Nächste Hands-on-Aufgabe |
+| Topic | Next hands-on exercise |
 |---|---|
-| Apple real | StoreKit-Teststufen vergleichen, Sandbox-Kauf durchführen, signierte Transaktionen und Server Notifications validieren |
-| Google real | Play-Testkonto, Purchase Token, serverseitige Validierung, Acknowledgement und RTDN verbinden |
-| Skalierung | Scan durch Fälligkeitsindizes ersetzen; Provider-Rate-Limits und begrenzte Parallelität messen |
-| Event-System | Outbox per DynamoDB Streams publizieren, Wiederanlauf und längere Ausfälle erproben |
-| Fachmodell | Up-/Downgrade, mehrere Produkte, Proration, Refunds und Account-Linking explizit modellieren |
-| Deployment | Lambda-Versionen/Aliases, Canary und automatischen Rollback ergänzen |
-| Mobile | Zweite Plattform, echte Kaufwiederherstellung und bessere Offline-/Fehlerzustände prüfen |
-| Betrieb | Lasttest, Zeit bis zur Konsistenz und Alarmqualität messen |
+| Real Apple integration | Compare StoreKit testing stages, make a sandbox purchase, validate signed transactions and Server Notifications |
+| Real Google integration | Connect a Play test account, purchase token, server-side validation, acknowledgement, and RTDN |
+| Scaling | Replace scans with due-time indexes; measure provider rate limits and bounded concurrency |
+| Event system | Publish the outbox through DynamoDB Streams; explore recovery and longer outages |
+| Domain model | Explicitly model upgrades/downgrades, multiple products, proration, refunds, and account linking |
+| Deployment | Add Lambda versions/aliases, canary deployment, and automatic rollback |
+| Mobile | Check a second platform, real purchase restoration, and better offline/error states |
+| Operations | Measure load behavior, time to consistency, and alert quality |
 
-Fragen für die eigene Nachbesprechung: Was schützt gegen doppelte Zustellung? Wo ist die Quelle des Vertragszustands? Welche Fehler kann Reconciliation reparieren? Wie wird eine fremde Kaufreferenz abgewehrt? Was passiert, wenn die Zahlung bestätigt ist, aber der Provider vorübergehend nicht erreichbar ist? Welche Kompromisse würden bei einem Produktionssystem nicht mehr reichen?
+Retrospective questions: What protects against duplicate delivery? Where is the authoritative contract state? Which failures can reconciliation repair? How is another user's purchase reference rejected? What happens when payment is confirmed but the provider is temporarily unavailable? Which compromises would no longer be sufficient in production?
 
-## 19 Offizielle Quellen
+## 19 Official sources
 
-Die Links führen zu Herstellerdokumentation. API-Versionen, SDK-Kompatibilität und Store-Regeln vor einer späteren Implementierung beziehungsweise Veröffentlichung erneut prüfen. Zeitpläne, Demotarif, Grace Policy und Abnahmeschwellen in diesem Dokument sind bewusst gewählte Projektvorgaben.
+These links point to vendor documentation. Recheck API versions, SDK compatibility, and store rules before later implementation or publication. Schedules, demo pricing, grace policy, and acceptance thresholds in this document are deliberately chosen project requirements.
 
-### Auth0 und Mobile
+### Auth0 and mobile
 
-- [Auth0 React Native SDK](https://github.com/auth0/react-native-auth0) — native Einrichtung, Expo-Kompatibilität und Credentials Manager.
-- [Auth0 Expo Authentication Guide](https://developer.auth0.com/resources/guides/mobile/react-native/expo-authentication) — Audience und geschützte API-Aufrufe.
-- [Auth0 Access Token Validation](https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens) — Verifikation der API-Access-Tokens und Scopes im Backend.
-- [Auth0 JWT Validation](https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens) — Signaturprüfung und etablierte JWT-Bibliotheken.
-- [Auth0 JSON Web Key Sets](https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-key-sets) — öffentliche Signaturschlüssel und Rotation.
+- [Auth0 React Native SDK](https://github.com/auth0/react-native-auth0) — native setup, Expo compatibility, and Credentials Manager.
+- [Auth0 Expo Authentication Guide](https://developer.auth0.com/resources/guides/mobile/react-native/expo-authentication) — audience and protected API requests.
+- [Auth0 Access Token Validation](https://auth0.com/docs/secure/tokens/access-tokens/validate-access-tokens) — backend verification of API access tokens and scopes.
+- [Auth0 JWT Validation](https://auth0.com/docs/secure/tokens/json-web-tokens/validate-json-web-tokens) — signature verification and established JWT libraries.
+- [Auth0 JSON Web Key Sets](https://auth0.com/docs/secure/tokens/json-web-tokens/json-web-key-sets) — public signing keys and rotation.
 
 ### AWS Serverless
 
-- [Lambda Runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) — unterstützte Node.js-Laufzeiten.
-- [Lambda mit SQS](https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html) — Zustell- und Verarbeitungsmodell.
-- [SQS Event Source konfigurieren](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html) — Timeout, Batches und Queue-Konfiguration.
-- [SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html) — Retries und Partial Batch Responses.
-- [DynamoDB Transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html) — atomare Änderungen und Konflikte.
-- [DynamoDB TTL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html) — asynchrones Aufräumen abgelaufener Daten.
-- [EventBridge PutEvents](https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEvents.html) — Ergebnisse pro gesendetem Event.
-- [EventBridge DLQs](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html) — fehlgeschlagene Target-Zustellung.
-- [Lambda Async Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html) — Fehler nach asynchroner Annahme.
-- [CDK Bootstrapping](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html) — Vorbereitung einer Account-/Region-Kombination.
+- [Lambda Runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) — supported Node.js runtimes.
+- [Lambda with SQS](https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html) — delivery and processing model.
+- [SQS Event Source configuration](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html) — timeout, batches, and queue configuration.
+- [SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html) — retries and partial batch responses.
+- [DynamoDB Transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis.html) — atomic changes and conflicts.
+- [DynamoDB TTL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html) — asynchronous cleanup of expired records.
+- [EventBridge PutEvents](https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEvents.html) — results for individual published events.
+- [EventBridge DLQs](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-dlq.html) — failed target delivery.
+- [Lambda Async Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-error-handling.html) — failures after asynchronous acceptance.
+- [CDK Bootstrapping](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html) — preparing an account/region combination.
 
 ### Stripe Billing
 
-- [Checkout Session anlegen](https://docs.stripe.com/api/checkout/sessions/create) — serverseitiger Start des gehosteten Checkouts.
-- [Subscription Lifecycle](https://docs.stripe.com/billing/subscriptions/overview) — Zustände und Lebenszyklus.
-- [Subscription Webhooks](https://docs.stripe.com/billing/subscriptions/webhooks) — Rechnungs-/Subscription-Ereignisse und Zugriff.
-- [Webhook-Grundlagen](https://docs.stripe.com/webhooks) — Signaturen, Duplikate, Zustellreihenfolge und Retries.
-- [Idempotente Requests](https://docs.stripe.com/api/idempotent_requests) — Wiederholung schreibender Stripe-Aufrufe.
-- [Test Clocks](https://docs.stripe.com/billing/testing/test-clocks) — kontrollierte Billing-Testabläufe.
+- [Create a Checkout Session](https://docs.stripe.com/api/checkout/sessions/create) — server-side initiation of hosted checkout.
+- [Subscription Lifecycle](https://docs.stripe.com/billing/subscriptions/overview) — states and lifecycle.
+- [Subscription Webhooks](https://docs.stripe.com/billing/subscriptions/webhooks) — invoice/subscription events and access.
+- [Webhook basics](https://docs.stripe.com/webhooks) — signatures, duplicates, delivery order, and retries.
+- [Idempotent Requests](https://docs.stripe.com/api/idempotent_requests) — retries for Stripe writes.
+- [Test Clocks](https://docs.stripe.com/billing/testing/test-clocks) — controlled billing scenarios.
 
-### Store-Tests und Veröffentlichung
+### Store testing and publication
 
-- [Apple StoreKit Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) — lokale Tests und Sandbox.
-- [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) — Zahlungs- und Kaufregeln im jeweiligen Kontext.
-- [Google Play Billing Tests](https://developer.android.com/google/play/billing/test) — License Tester und Subscription-Szenarien.
-- [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738) — Anforderungen an Zahlungen in Play-Apps.
+- [Apple StoreKit Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) — local testing and sandbox.
+- [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) — payment and purchase rules in their applicable context.
+- [Google Play Billing Tests](https://developer.android.com/google/play/billing/test) — license testers and subscription scenarios.
+- [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738) — payment requirements for Play apps.
 
 ### CI/CD
 
-- [GitHub Actions OIDC mit AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws) — kurzlebige Credentials und eingeschränkte Trust Policies.
+- [GitHub Actions OIDC with AWS](https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-aws) — short-lived credentials and restricted trust policies.

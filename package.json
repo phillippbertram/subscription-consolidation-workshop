@@ -1,0 +1,26 @@
+{
+  "name": "premiumpass",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": "24.19.0",
+    "pnpm": "12.10.1"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @premiumpass/bff dev",
+    "start": "pnpm --filter @premiumpass/bff start",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write \"**/*.{ts,js,mjs,json,yaml,yml}\"",
+    "format:check": "prettier --check \"**/*.{ts,js,mjs,json,yaml,yml}\"",
+    "build": "pnpm -r build",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.12.0",
+    "prettier": "3.9.10",
+    "typescript-eslint": "8.71.1"
+  }
+}

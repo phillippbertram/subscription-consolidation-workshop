@@ -1,0 +1,10 @@
+node_modules/
+dist/
+build/
+coverage/
+cdk.out/
+.expo/
+.pnpm-store/
+work/
+.codex-log/
+pnpm-lock.yaml
