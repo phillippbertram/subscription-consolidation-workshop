@@ -16,13 +16,13 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P03 | Small AWS stack and user persistence       | P01; P02 for a protected live request | partial  |
 | P04 | Mobile login through to the user's profile | P02, P03 local portion                | complete |
 | P05 | Subscription and entitlement domain rules  | P01, P02, P03 local portion           | complete |
-| P06 | Stripe purchase and reliable processing    | P02, P03, P05                         | open     |
+| P06 | Stripe purchase and reliable processing    | P02, P03, P05                         | partial  |
 | P07 | Apple/Google mocks                         | P05, P06                              | open     |
 | P08 | Outbox publisher and EventBridge           | P06                                   | open     |
 | P09 | Reconciliation and expiration              | P07, P08                              | open     |
 | P10 | CI/CD, operations, and final demo          | P04, P06–P09                          | open     |
 
-**Next step:** P06: Stripe test checkout and reliable webhook processing. P04 and P05 are complete for the local iOS workflow. P03's outstanding live AWS evidence remains separate; no deployment was performed during P05.
+**Next step:** Configure and manually verify P06 step 1 with Auth0/Stripe test values, then implement signed webhooks and reliable processing in step 2. P04 and P05 are complete for the local iOS workflow. P03's outstanding live AWS evidence remains separate; no deployment was performed during P05.
 
 ## P00 Prepare the project for agents
 
@@ -148,6 +148,20 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 **Acceptance:** Demonstrate T05–T12 and T15–T18 in their appropriate local/live scope. A test purchase activates access; a tampered webhook or wrong account assignment fails. Queue outages produce no success acknowledgement. Duplicate and concurrent updates neither lose nor multiply grants. A failing message reaches the DLQ and can be processed after the cause is fixed.
 
 **Boundary:** Outbox entries are already written, but the EventBridge publisher follows in P08. No live payments. If test credentials are missing, document the local portion and outstanding live scenarios precisely.
+
+**Step 1 implementation (October 10, 2026):** Local-only Stripe test configuration, durable forward/reverse customer mapping, idempotent checkout endpoint, active-attempt locking, and bounded recovery after ambiguous provider responses. Added a React/Vite website with Auth0 React, Tailwind v4, and shadcn/ui. Customer/session metadata is assigned by the backend; redirects do not update entitlements. Setup, recovery rules, and required Auth0 SPA configuration are in [Stripe setup](STRIPE_SETUP.md); persisted fields are in the [data model](DYNAMODB_DATA_MODEL.md#stripe-customer-and-checkout-records). The user enters keys themselves.
+
+**Local evidence:** `pnpm check` passed formatting, lint, all workspace typechecks and builds; Vite reports a non-blocking approximately 546 kB JavaScript chunk warning. Manual DynamoDB Local checks with an isolated in-memory provider covered same-key reuse, changed-request conflict, competing attempts, expired replacement, completed-session blocking, existing subscriptions, lost-response recovery, concurrent same-key reuse and different attempts, and two customer owners. Temporary records were removed. Separate Hono requests with generated RS256 credentials and an isolated JWKS response covered 401, scope/machine/origin 403, invalid-body/key 400, successful server-derived ownership, CORS preflight, disabled checkout 503, and unchanged Free access. No runtime auth bypass or automated test files were added. The unconfigured React/shadcn page renders setup guidance with disabled login/checkout controls. `pnpm synth` passed; the template retains the `$default` route and has no Gateway authorizer. Checked 74 local documentation file links and `git diff --check`.
+
+**Web reload correction (October 10, 2026):** Replaced the memory-only Auth0 cache with the SDK local-storage cache, retaining valid tokens across page reloads and Stripe redirects. Refresh tokens remain disabled; renewal after expiry can still require login. Documented the storage tradeoff and same-origin login/reload/logout manual flow. Web formatting, linting, typechecking, and production build passed (existing chunk-size warning remains). Real session restoration after signing in with the new cache still needs user verification; no tenant or local secret configuration was changed.
+
+**Verified email prefill (October 10, 2026):** Checkout now resolves email server-side from the configured Auth0 UserInfo endpoint after JWT/scope/input validation. It requires an exact subject match, a valid email, and boolean `email_verified: true`. Owned Stripe customers, including existing records, receive the email before checkout creation or reuse. Creation idempotency parameters and DynamoDB records are unchanged. Missing verification blocks checkout with a safe UI message; no client-supplied email or ID token is accepted.
+
+**Email verification evidence:** `pnpm check` passed formatting, lint, workspace typechecks, and builds (existing web chunk-size warning remains). Manual Hono requests with generated signed tokens and process-local UserInfo responses covered verified success, unverified/string verification, subject mismatch, invalid email, rate limiting, rejected token, body-email rejection, and missing scope. Invalid requests never reached checkout; input/scope failures never contacted UserInfo. The real Stripe SDK with a process-local synthetic HTTP transport demonstrated filling an existing customer's email, skipping an unchanged value, updating a changed value, rejecting ownership mismatch, sanitizing provider failure, and retrying on the same customer. No test files, runtime mocks, real account changes, or deployment were added. Actual Auth0-to-Stripe prefill still needs verification using a verified synthetic demo account.
+
+**Flow documentation (October 10, 2026):** Added [Stripe flow diagrams](STRIPE_FLOW.md) covering the local checkout sequence, actual DynamoDB references and atomic writes, retry/concurrency rules, the planned P06/P08/P09 processing path, and current entitlement reads. Linked the walkthrough from the README, setup, data-model, and subscription guides. All five Mermaid blocks parsed successfully with Mermaid 11.12.0 using temporary documentation tooling outside the workspace. Checked 64 local links including Markdown anchors, formatted the new document, and ran `git diff --check`. No application code, dependencies, tests, or deployment changed in this documentation update.
+
+**Still outstanding:** Real Auth0 SPA login, real Stripe customer/session creation and test purchase after user configuration, plus all step 2 webhook/SQS/DLQ/processor/entitlement/outbox acceptance criteria. Lambda checkout secret/IAM/CORS wiring is not implemented. P06 remains partial; no deployment or external account changes occurred.
 
 ## P07 Apple/Google mocks
 

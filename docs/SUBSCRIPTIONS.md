@@ -1,5 +1,7 @@
 # Subscriptions and entitlements
 
+See the [Stripe flow diagrams](STRIPE_FLOW.md) for checkout, DynamoDB relationships, subscription processing, and entitlement evaluation.
+
 P05 connects normalized subscription records, a pure access policy, DynamoDB reads, and the mobile dashboard. It makes no payment and does not implement provider synchronization. Implementation status is tracked only in [TASKS.md](TASKS.md#p05-subscription-and-entitlement-domain-rules).
 
 ## Read path

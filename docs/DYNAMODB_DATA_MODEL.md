@@ -1,5 +1,7 @@
 # DynamoDB data model
 
+See the [Stripe flow diagrams](STRIPE_FLOW.md) for checkout, DynamoDB relationships, subscription processing, and entitlement evaluation.
+
 This reference describes the records currently read by the BFF and written by the BFF or the local demo script. For implementation progress and verification evidence, see [P03 in the task plan](TASKS.md#p03-small-aws-stack-and-user-persistence). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
 
 ## Table structure
@@ -108,7 +110,7 @@ Existing profiles are read without updating their creation time. The profile flo
 
 ## Scope and source files
 
-The implemented model stores no email addresses, display names, tokens, Stripe customer IDs, materialized entitlements, provider ownership records, event markers, checkout requests, outbox entries, or mock provider state. Those future domain records remain in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
+The implemented model stores no email addresses, display names, tokens, materialized entitlements, event markers, outbox entries, or mock provider state. Those future domain records remain in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
 
 | Source | Responsibility |
 |---|---|
@@ -166,3 +168,31 @@ Reads use `pk = USER#<resolved-userId>` and `begins_with(sk, 'SUB#')`, `Consiste
 The local CLI transaction checks that the profile exists, then puts/deletes only `demo-p05-apple_mock` and `demo-p05-google_mock`. Each write requires either an absent record or the exact demo marker. `free` removes those two records; other subscriptions are preserved. Demo revisions restart at 1 with each explicitly selected scenario. Real provider monotonic revisions and aggregate concurrency are P06 responsibilities.
 
 See [subscription policy and scenarios](SUBSCRIPTIONS.md) for response examples and manual steps. There is no stored `ENTITLEMENTS` record, owner index, synchronization metadata beyond `verifiedAt`, or event/outbox record yet.
+
+## Stripe customer and checkout records
+
+The same table contains four technical record types for local checkout. Every record has string `pk`/`sk`; there are no new indexes or TTL fields. Times below are Unix seconds, unlike profile timestamps. The API still returns ISO dates.
+
+| Key | Fields | Purpose |
+|---|---|---|
+| `USER#<userId>` / `CUSTOMER#stripe` | `userId`, `requestId`, `createdAt`, optional `customerId` | Durable customer creation intent and resulting `cus_` reference |
+| `PROVIDER#stripe#CUSTOMER#<customerId>` / `OWNER` | `userId`, `customerId` | Reverse ownership lookup, written atomically with the forward mapping |
+| `CHECKOUT#<userId>#<requestId>` / `REQUEST` | `userId`, `requestId`, `fingerprint`, `customerId`, `priceId`, `successUrl`, `cancelUrl`, `createdAt`, `expiresAt`, optional `sessionId` | Immutable request parameters; resulting `cs_test_` reference added conditionally |
+| `USER#<userId>` / `CHECKOUT#ACTIVE` | `userId`, `requestId` | Conditional pointer serializing purchase attempts |
+
+`userId` and both request identifiers are UUIDs. `fingerprint` is SHA-256 of the serialized plan ID, price ID, and return URLs. The customer request ID is independent of a checkout request ID. Missing provider IDs mean a pending or unresolved operation, not permission to start a new one. No hosted checkout URL, payment payload, email, or token is stored.
+
+Synthetic completed customer mapping example:
+
+```json
+{
+  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "sk": "CUSTOMER#stripe",
+  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "requestId": "7bd20b71-fc13-4546-b424-f8cc0db45729",
+  "createdAt": 1791633600,
+  "customerId": "cus_synthetic"
+}
+```
+
+All lookups are consistent point reads. Customer intent creation is conditional; forward/reverse mappings are one transaction. Attempt reservation atomically creates the request and compares/replaces the active pointer. Saving the session requires the original fingerprint and an absent or identical session ID. Only a Stripe-confirmed expired session permits a new attempt. These records never grant entitlements. See [checkout recovery](STRIPE_SETUP.md#retries-and-recovery) for ambiguity windows and manual recovery boundaries.

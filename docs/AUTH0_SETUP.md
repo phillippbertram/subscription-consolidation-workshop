@@ -35,7 +35,7 @@ In the API's **Permissions** tab, add:
 |---|---|---|
 | `read:me` | Read the current user's profile and subscription status | Required by the current `GET /v1/me` |
 | `read:premium` | Request Premium demo content | Required by `GET /v1/premium/score-history`; also requires a valid entitlement |
-| `write:checkout` | Start checkout for the current user | Future web checkout route |
+| `write:checkout` | Start checkout for the current user | `POST /v1/billing/stripe/checkout-session` |
 
 These are custom API scopes. `openid profile email` are OIDC scopes requested during login, not entries to add to this API's permissions list. [API permissions](https://auth0.com/docs/get-started/apis/add-api-permissions).
 
@@ -107,7 +107,7 @@ Use the same account and connection when moving from mobile to web. The backend 
 
 ## 7. Configure the SPA for P06
 
-Create `PremiumPass Web` as a **Single Page Application**. It has its own Client ID but uses the same domain, API audience, connection, and demo accounts as mobile. For a proposed Vite development origin of `http://localhost:5173`, configure:
+Create `PremiumPass Web` as a **Single Page Application**. It has its own Client ID but uses the same domain, API audience, connection, and demo accounts as mobile. For the Vite development origin of `http://localhost:5173`, configure:
 
 | Application setting | Example |
 |---|---|
@@ -115,9 +115,11 @@ Create `PremiumPass Web` as a **Single Page Application**. It has its own Client
 | Allowed Logout URLs | `http://localhost:5173` |
 | Allowed Web Origins | `http://localhost:5173` |
 
-Use the actual origin and callback path chosen in P06, matching the SDK configuration exactly. The SPA SDK uses Authorization Code with PKCE. Request `openid profile email read:me read:premium write:checkout` and the Custom API audience. Do not ship a client secret to the browser. [SPA dashboard configuration](https://auth0.com/docs/quickstart/spa/vuejs) · [SPA SDK](https://auth0.com/docs/libraries/auth0-single-page-app-sdk).
+The React SDK uses Authorization Code with PKCE. The web app requests `openid profile email read:me write:checkout` and the Custom API audience. Do not ship a client secret to the browser. [SPA dashboard configuration](https://auth0.com/docs/quickstart/spa/react) · [SPA SDK](https://auth0.com/docs/libraries/auth0-single-page-app-sdk).
 
-Auth0's allowed origins do not configure BFF CORS. Browser-to-API CORS must be added separately in P06 for the actual web origin. Stripe return URLs also have a separate purpose from Auth0 callbacks.
+Checkout additionally requires a verified email on the Auth0 demo account. The backend obtains it from `/userinfo` with the already validated access token and compares the returned subject. The SPA already requests the required `openid` and `email` scopes; no custom claims or Management API credentials are needed. Complete the email verification flow and sign in again before checkout. See [verified email prefill](STRIPE_SETUP.md#verified-email-prefill).
+
+Auth0's allowed origins do not configure BFF CORS. The local BFF implements CORS for `WEB_ORIGIN` (default `http://localhost:5173`). Follow the [Stripe/web setup](STRIPE_SETUP.md) to configure both apps. Stripe return URLs also have a separate purpose from Auth0 callbacks.
 
 ## 8. Obtain a token and check the backend manually
 

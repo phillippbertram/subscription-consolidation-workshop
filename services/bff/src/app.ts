@@ -1,4 +1,10 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { bodyLimit } from 'hono/body-limit';
+import { z } from 'zod';
+import { CheckoutError } from './billing/contracts.js';
+import { getVerifiedCheckoutEmail } from './billing/auth0-email.js';
+import type { CheckoutService } from './billing/checkout-service.js';
 import { type AppEnv, authenticate, requireScopes } from './auth.js';
 import type { AuthConfig } from './config.js';
 import type { UserStore } from './users.js';
@@ -11,6 +17,7 @@ export function createApp(
   stores: { users: UserStore; subscriptions: SubscriptionStore },
   logLevel: LogLevel = 'info',
   now: () => Date = () => new Date(),
+  options: { checkout?: CheckoutService; webOrigin?: string } = {},
 ) {
   const app = new Hono<AppEnv>();
 
@@ -23,7 +30,26 @@ export function createApp(
   });
   app.use('*', requestLogger(logLevel));
 
+  if (options.webOrigin) {
+    app.use(
+      '/v1/*',
+      cors({
+        origin: options.webOrigin,
+        allowMethods: ['GET', 'POST', 'OPTIONS'],
+        allowHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key'],
+        exposeHeaders: ['X-Request-Id'],
+        maxAge: 600,
+      }),
+    );
+  }
+
   app.onError((_error, c) => {
+    if (_error instanceof CheckoutError) {
+      return c.json(
+        { error: { code: _error.code, requestId: c.get('requestId') } },
+        _error.status,
+      );
+    }
     return c.json(
       { error: { code: 'internal_error', requestId: c.get('requestId') } },
       500,
@@ -86,6 +112,68 @@ export function createApp(
           { date: '2026-10-01', score: 94 },
         ],
       });
+    },
+  );
+
+  app.post(
+    '/v1/billing/stripe/checkout-session',
+    requireScopes('write:checkout', 'openid', 'email'),
+    bodyLimit({
+      maxSize: 1024,
+      onError: (c) =>
+        c.json(
+          {
+            error: {
+              code: 'invalid_checkout_request',
+              requestId: String(c.get('requestId')),
+            },
+          },
+          400,
+        ),
+    }),
+    async (c) => {
+      const origin = c.req.header('Origin');
+      if (origin && origin !== options.webOrigin)
+        return c.json(
+          {
+            error: {
+              code: 'origin_not_allowed',
+              requestId: c.get('requestId'),
+            },
+          },
+          403,
+        );
+      if (!options.checkout)
+        throw new CheckoutError('checkout_unavailable', 503);
+      const key = z.uuid().safeParse(c.req.header('Idempotency-Key'));
+      const body = z
+        .object({ planId: z.string().min(1).max(64) })
+        .strict()
+        .safeParse(await c.req.json<unknown>().catch(() => null));
+      if (
+        !key.success ||
+        !body.success ||
+        !c.req
+          .header('Content-Type')
+          ?.toLowerCase()
+          .startsWith('application/json')
+      )
+        throw new CheckoutError('invalid_checkout_request', 400);
+      const identity = c.get('auth');
+      const verifiedEmail = await getVerifiedCheckoutEmail(
+        authConfig,
+        identity,
+        c.req.header('Authorization') ?? '',
+      );
+      const user = await stores.users.getOrCreate(identity);
+      return c.json(
+        await options.checkout.start(
+          user.userId,
+          key.data,
+          body.data.planId,
+          verifiedEmail,
+        ),
+      );
     },
   );
 

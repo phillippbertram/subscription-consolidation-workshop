@@ -1,3 +1,6 @@
+import { CheckoutService } from './billing/checkout-service.js';
+import { StripeBillingProvider } from './billing/stripe-provider.js';
+import { readStripeConfig, readWebOrigin } from './billing/config.js';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
 import {
@@ -11,10 +14,25 @@ import { createLogger, readLogLevel } from './logging.js';
 const config = readLocalConfig(process.env);
 const logLevel = readLogLevel(process.env, 'debug');
 const log = createLogger(logLevel);
+const stores = createPersistence(readDatabaseConfig(process.env, true));
+const stripe = readStripeConfig(process.env);
 const app = createApp(
   readAuthConfig(process.env),
-  createPersistence(readDatabaseConfig(process.env, true)),
+  stores,
   logLevel,
+  () => new Date(),
+  {
+    webOrigin: readWebOrigin(process.env),
+    ...(stripe
+      ? {
+          checkout: new CheckoutService(
+            stores.billing,
+            new StripeBillingProvider(stripe.secretKey),
+            stripe,
+          ),
+        }
+      : {}),
+  },
 );
 const server = serve({ fetch: app.fetch, ...config }, (info) => {
   log.info({

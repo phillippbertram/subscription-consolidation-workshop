@@ -24,7 +24,8 @@
     "db:up": "docker compose up -d dynamodb dynamodb-admin && pnpm --filter @premiumpass/bff run db:init",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs --tail=100 dynamodb",
-    "demo:subscription": "pnpm --filter @premiumpass/bff run demo:subscription"
+    "demo:subscription": "pnpm --filter @premiumpass/bff run demo:subscription",
+    "web:dev": "pnpm --filter @premiumpass/web dev"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -94,3 +94,13 @@ The BFF uses Pino with JSON stdout, per-request child loggers, and synchronous o
 Subscription access rules live in the pure `services/bff/src/domain` module, with time supplied by the caller. A separate workspace package is unnecessary until another service consumes the module. Zod validates persisted subscriptions at the adapter boundary. Unknown products/statuses remain visible and grant no access.
 
 P05 computes entitlements on reads of the user's subscriptions. It exposes each grant's source revision, without inventing a materialized aggregate revision. The transactional aggregate, event markers, outbox, and provider writers are part of P06. The local scenario command is a deliberately separate educational writer, fixed to DynamoDB Local.
+
+## P06 checkout website
+
+The user selected React, Tailwind CSS, and shadcn/ui for the website. `apps/web` uses Vite, the Auth0 React SDK, and a small set of locally owned shadcn components. Web Tailwind v4 is separate from mobile's NativeWind/Tailwind v3. The API hook reads its origin and injects current Auth0 credentials.
+
+Step 1 enables checkout in the local BFF only. Customer creation and checkout attempts have durable request identifiers, forward/reverse ownership checks, and a conditional per-user purchase lock. Browser redirects never write subscriptions or entitlements. Fixed expiry and bounded recovery windows deliberately stop ambiguous retries rather than risk duplicate purchases. Cloud secret/IAM wiring, lifecycle processing, and recovery automation remain later work. See [Stripe setup](STRIPE_SETUP.md).
+
+The web Auth0 SDK uses its built-in local-storage cache to retain valid sessions across reloads and Stripe redirects. Refresh tokens remain disabled; expired tokens may require interactive login if silent renewal is blocked. Persistent tokens are exposed to same-origin JavaScript, an explicit local-demo tradeoff. No custom token persistence or authentication flag is added.
+
+Checkout resolves verified email server-side through Auth0 UserInfo after access-token validation, including a subject match. It synchronizes the email onto the owned Stripe customer before session creation/reuse, including customers created before this feature. Email is contact data only, remains outside DynamoDB, and does not influence identity or entitlement ownership. Missing verification blocks checkout with an explicit error. Customer creation parameters stay stable for idempotent recovery; email synchronization is a separate repeatable update.

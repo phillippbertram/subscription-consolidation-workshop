@@ -41,27 +41,29 @@ export function requestLogger(level: LogLevel) {
     log.info({ event: 'http.request' });
 
     // A clone preserves the original request bytes for handlers/signatures.
-    const requestBody = level === 'debug' ? previewBody(c.req.raw) : undefined;
+    // Checkout URLs contain session credentials; billing stays metadata-only.
+    const includeDetails =
+      level === 'debug' && !c.req.path.startsWith('/v1/billing/');
+    const requestBody = includeDetails ? previewBody(c.req.raw) : undefined;
     await next();
 
     const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
     const status = c.res.status;
     const severity = status >= 500 ? 'error' : status >= 400 ? 'warn' : 'info';
-    const details =
-      level === 'debug'
-        ? {
-            query: c.req.queries(),
-            requestBody: await requestBody,
-            responseBody: await previewBody(c.res),
-            error: c.error
-              ? {
-                  name: c.error.name,
-                  message: c.error.message,
-                  stack: c.error.stack,
-                }
-              : undefined,
-          }
-        : {};
+    const details = includeDetails
+      ? {
+          query: c.req.queries(),
+          requestBody: await requestBody,
+          responseBody: await previewBody(c.res),
+          error: c.error
+            ? {
+                name: c.error.name,
+                message: c.error.message,
+                stack: c.error.stack,
+              }
+            : undefined,
+        }
+      : {};
     log[severity]({
       event: 'http.response',
       status,

@@ -14,6 +14,9 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
 | [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity, profile, and subscription records, fields, examples, and access patterns |
 | [Subscriptions](docs/SUBSCRIPTIONS.md) | Access policy, endpoints, and local Free/Premium scenarios |
+| [Stripe flow diagrams](docs/STRIPE_FLOW.md) | Checkout sequence, DynamoDB relationships, retries, and planned subscription processing |
+| [Stripe setup](docs/STRIPE_SETUP.md) | Local test configuration, customer ownership, checkout, and recovery |
+| [Web app](apps/web/README.md) | React, Tailwind, shadcn/ui, and Auth0 SPA startup |
 | [Mobile app](apps/mobile/README.md) | Expo development build, Auth0 login, and iOS Simulator against the local BFF |
 
 The project directory is the source of truth. Earlier Library files are historical exports.
@@ -68,6 +71,10 @@ Expected response: `{"status":"ok"}`. Stop with `Ctrl+C`.
 The local server requires `PORT`, an integer from 0 to 65535. The example uses 3000; 0 lets the operating system choose a free port, which appears in the startup log. `pnpm dev` and `pnpm start` read `services/bff/.env`; existing environment variables take precedence. To run without a file, supply `PORT`, `AUTH0_ISSUER`, `AUTH0_AUDIENCE`, `DYNAMODB_TABLE_NAME`, and the local `DYNAMODB_ENDPOINT` as environment variables. Missing or invalid values produce an explanatory error before the server starts. A port already in use produces a server error; in watch mode, the watcher then waits for a change or `Ctrl+C`.
 
 Startup requires public Auth0 and table configuration, but no Auth0 client secret. With a local DynamoDB endpoint, the SDK uses dummy credentials; AWS operation uses its normal credential chain. The placeholder configuration can start the server and serve `/health`; it cannot validate real tokens. Local `.env` files are ignored; `.env.example` is versioned. Do not put tokens or secrets in documentation or logs.
+
+## Local checkout website
+
+Follow [Stripe setup](docs/STRIPE_SETUP.md) to configure your own test key, monthly price, and Auth0 SPA. Run `pnpm web:dev` alongside the BFF and DynamoDB, then open http://localhost:5173. The React app uses Tailwind v4 and shadcn/ui. Checkout creates a customer and session; activation requires P06 step 2.
 
 ## Backend authentication
 
@@ -136,6 +143,8 @@ The same ID is returned in `X-Request-Id` and error bodies. Match it with `serve
 
 Local startup defaults to `LOG_LEVEL=debug`. The response log then also includes query parameters, request/response body previews, and the name, message, and stack of unexpected server errors. Synthetic JSON and plain-text bodies are not redacted. Previews use clones, keep the original body available to handlers, and are limited to 8 KiB and a 100 ms read window per preview. Unsupported, oversized, unavailable, or slow bodies get an omission marker. Headers, cookies, Auth0 tokens, and SDK error objects are not logged automatically; never put secrets in demo URLs or bodies.
 
+Billing routes always log metadata only, including at debug level; checkout URLs and payment payloads are excluded.
+
 Override the level in `services/bff/.env` or for one run:
 
 ```sh
@@ -164,6 +173,7 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 | `pnpm typecheck` | Typecheck all workspace packages |
 | `pnpm build` | Bundle local and Lambda entry points with esbuild |
 | `pnpm start` | Start the built local server without watch mode |
+| `pnpm web:dev` | Start the React checkout website on localhost:5173 |
 | `pnpm mobile:ios` | Build/install the native Expo app and start Metro for the iOS Simulator |
 | `pnpm mobile:dev` | Start Metro for the already installed mobile development app |
 | `pnpm db:up` | Start DynamoDB Local through Compose and automatically initialize its table |

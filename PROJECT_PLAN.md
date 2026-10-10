@@ -96,7 +96,7 @@ Allow about 45–90 minutes for preparation, plus any longer installations or ac
 | Area | Demo choice |
 |---|---|
 | Mobile | React Native, TypeScript, Expo development build, `react-native-auth0` |
-| Test website | Minimal Vite page, Auth0 SPA SDK, login and checkout button |
+| Test website | React/Vite, Tailwind v4, shadcn/ui, Auth0 React SDK, login and checkout |
 | Backend | Hono and TypeScript on AWS Lambda, shared domain modules |
 | Runtime | Node.js 24 on Lambda; pin compatible local tooling and dependencies in the lockfile |
 | API | API Gateway **HTTP API** for routing, CORS, and throttling; no Gateway authorizer |
@@ -197,7 +197,7 @@ Derive the JWKS URL from the fixed, trusted Auth0 domain; do not fetch a URL sup
 
 Missing or invalid tokens return `401`; a valid token without the required scope returns `403`. If key retrieval fails and the token cannot be verified using the valid cache, grant no access; the demo returns `503`. A token that can be fully verified using a still-valid cached key requires no additional online Auth0 request.
 
-The Stripe webhook has its own handler and signature verification and needs no Auth0 token. API Gateway handles CORS preflights. AWS permissions control SQS and scheduled handlers; these do not accept a mobile user's token.
+The Stripe webhook has its own handler and signature verification and needs no Auth0 token. The local Hono BFF handles CORS preflights for the configured web origin; cloud web CORS wiring follows with checkout deployment. AWS permissions control SQS and scheduled handlers; these do not accept a mobile user's token.
 
 ### Separate authentication from authorization
 
@@ -356,12 +356,14 @@ TTL is only for eventual cleanup of completed technical records. DynamoDB does n
 
 1. Create the `PremiumPass Premium` test product and a monthly price.
 2. Accept only the server-configured `priceId` for `premium_monthly`; quantity one, test card payment, no trial or plan changes in the core scope.
-3. Create a Stripe customer server-side on the first purchase and store its ownership mapping. Make this creation step idempotent as well.
+3. Resolve the verified email server-side through Auth0 `/userinfo`, requiring a subject match and `email_verified: true`. Create a Stripe customer server-side on the first purchase and store its ownership mapping. Keep creation idempotent, then synchronize the email separately on new or existing owned customers before checkout. Email never determines ownership.
 4. Create a checkout session with `mode=subscription`, the stored customer, and approved success/cancel URLs.
 5. Add an internal user reference to session and subscription metadata on the server. This metadata helps with mapping but does not replace verification of stored customer ownership.
 6. The test website opens the returned hosted checkout URL.
 
 Use a stable idempotency key for each purchase attempt. Reusing a key with different request contents returns local `409`. Restrict concurrent attempts by one user with a conditional record for the active purchase attempt. After a timeout, recover the associated session instead of immediately creating another subscription. Stripe's limited idempotency key retention does not replace a durable local purchase mapping. [Stripe Checkout Session API](https://docs.stripe.com/api/checkout/sessions/create) · [Stripe Idempotency](https://docs.stripe.com/api/idempotent_requests)
+
+The first implementation slice runs checkout locally; see [Stripe setup](docs/STRIPE_SETUP.md) for configuration, request/recovery rules, and the React website. Webhook processing and cloud wiring follow separately.
 
 ### Process webhooks
 
