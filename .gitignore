@@ -1,0 +1,23 @@
+# Local credentials and configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+.aws/
+.secrets/
+
+# Dependencies and generated output
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+cdk.out/
+.expo/
+*.tsbuildinfo
+
+# Local scratch and logs
+work/
+.codex-log/
+*.log
+.DS_Store
