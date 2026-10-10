@@ -57,7 +57,7 @@ pnpm db:up
 pnpm dev
 ```
 
-Copy the example only during initial setup; preserve an existing `.env` and add the Auth0 and DynamoDB fields shown below. Start Docker Desktop before `pnpm db:up`; that command starts DynamoDB Local and automatically creates its table. Data survives `pnpm db:down` and subsequent starts. See the [local database instructions](infra/README.md#local-dynamodb-and-manual-requests). Replace the placeholder issuer and audience to use real Auth0 tokens. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
+Copy the example only during initial setup; preserve an existing `.env` and add the Auth0 and DynamoDB fields shown below. Start Docker Desktop before `pnpm db:up`; that command starts DynamoDB Local and its browser GUI, then automatically creates the table. Open [DynamoDB Admin](http://127.0.0.1:8001) and select `premiumpass-local` to inspect the records. Data survives `pnpm db:down` and subsequent starts. See the [local database instructions](infra/README.md#local-dynamodb-and-manual-requests). Replace the placeholder issuer and audience to use real Auth0 tokens. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
 
 ```sh
 curl --fail http://127.0.0.1:3000/health

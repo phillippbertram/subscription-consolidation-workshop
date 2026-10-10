@@ -21,7 +21,7 @@
     "synth": "pnpm --filter @premiumpass/infra synth",
     "deploy:dev": "pnpm --filter @premiumpass/infra run deploy",
     "bootstrap:dev": "pnpm --filter @premiumpass/infra run bootstrap",
-    "db:up": "docker compose up -d dynamodb && pnpm --filter @premiumpass/bff run db:init",
+    "db:up": "docker compose up -d dynamodb dynamodb-admin && pnpm --filter @premiumpass/bff run db:init",
     "db:down": "docker compose down",
     "db:logs": "docker compose logs --tail=100 dynamodb",
     "demo:subscription": "pnpm --filter @premiumpass/bff run demo:subscription"

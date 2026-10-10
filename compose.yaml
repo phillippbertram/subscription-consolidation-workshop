@@ -18,5 +18,19 @@ services:
     volumes:
       - dynamodb-data:/home/dynamodblocal/data
 
+  dynamodb-admin:
+    image: aaronshaf/dynamodb-admin:5.3.4
+    depends_on:
+      - dynamodb
+    environment:
+      DYNAMO_ENDPOINT: http://dynamodb:8000
+      AWS_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      HOST: 0.0.0.0
+      PORT: '8001'
+    ports:
+      - '127.0.0.1:8001:8001'
+
 volumes:
   dynamodb-data:

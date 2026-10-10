@@ -48,7 +48,7 @@ The configured app scheme is `premiumpass`, and the iOS bundle identifier is `co
 premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 ```
 
-The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. No tokens are stored in AsyncStorage, displayed, or logged by the app.
+The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. Tokens remain in SDK-managed secure storage. The dashboard can temporarily display access and ID tokens for inspection; they are never written to AsyncStorage or logs.
 
 If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback above using your configured domain. Changing the callback allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes.
 
@@ -147,7 +147,7 @@ Sources: [Gluestack installation](https://gluestack.io/ui/docs/home/getting-star
 
 ### API client
 
-`ApiClient` owns a dedicated Axios instance with the configured API origin and a 15-second HTTP timeout. Its asynchronous request interceptor reads the current access token through an injected provider backed by Auth0's `getCredentials()`, then sets the Bearer header. Screens never read or pass tokens. No token is cached in the client or saved to Axios defaults; credentials stay in the SDK's secure storage. A failed credential lookup blocks the request, and a different API origin is rejected before reading credentials.
+`ApiClient` owns a dedicated Axios instance with the configured API origin and a 15-second HTTP timeout. Its asynchronous request interceptor reads the current access token through an injected provider backed by Auth0's `getCredentials()`, then sets the Bearer header. API-consuming screens never read or pass tokens; the separate session inspector reads an on-demand display snapshot from the SDK. No token is cached in the client or saved to Axios defaults; credentials stay in the SDK's secure storage. A failed credential lookup blocks the request, and a different API origin is rejected before reading credentials.
 
 The response interceptor converts transport and HTTP failures into `ApiError` with a safe message, a `code`, and an optional HTTP `status`. Raw Axios errors are not exposed because they contain request headers. Cancellation uses `AbortSignal`, including a check after asynchronous token retrieval. The HTTP timeout starts when Axios dispatches the network request; it does not limit the SDK credential lookup. There is no automatic retry or separate refresh-token flow in the client.
 
@@ -197,3 +197,18 @@ The profile screen composes `ProfileCard` and the feature-owned `subscriptions/P
 `ApiClient.getEntitlements()` and `getScoreHistory()` validate responses with Zod. History is requested explicitly so you can observe both a successful Premium response and a Free user's `403 premium_required`. A missing `read:premium` scope instead produces a permissions error. Sign out and sign in after configuring the new scope.
 
 Follow the [P05 scenario guide](../../docs/SUBSCRIPTIONS.md#local-manual-walkthrough) to switch local data between Free, Premium, grace, and expiration. All scores are synthetic. Real purchases and store adapters follow in later tasks.
+
+
+## Auth0 session inspector
+
+The dashboard's **Auth0 session** card shows the SDK user's name and email. Open **Show session details** for:
+
+- The OIDC profile exposed by `useAuth0().user`, including available standard and custom profile claims. The SDK uses camelCase names such as `emailVerified`; the ID-token view retains original claim names.
+- Credential metadata from `getCredentials()`: token type, granted scopes, access-token expiry, optional session expiry, and whether a refresh token exists.
+- Separate expandable access-token and ID-token sections, each with decoded JWT header and claims. **Show raw access token** / **Show raw ID token** reveals selectable original token text.
+
+The SDK remains responsible for credentials. `useSessionDetails` obtains a temporary snapshot when the panel opens or **Reload session details** is pressed; it does not force renewal or serve tokens to the API client. Closing the panel, starting sign-out, changing users, or leaving the foreground discards the inspector view. SDK failures show a message without logging credentials. Refresh-token values are not copied into the view.
+
+[Auth0's jwt-decode](https://github.com/auth0/jwt-decode) handles JWT decoding, including Unicode. Decoding is only for display, not signature verification or authorization. Opaque or malformed tokens show a fallback message. The backend still validates API access independently. The inspector uses the existing SDK profile; it does not fetch a separate `/userinfo` response or the Auth0 browser's session cookies.
+
+Manual flow: open the panel, compare profile fields with ID-token claims, inspect access-token audience/scopes/expiry, reveal and hide a raw token, reload the snapshot, and close/reopen the panel. Backgrounding the app closes the details. Sign-out removes the card with the rest of the authenticated dashboard.
