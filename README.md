@@ -12,6 +12,7 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 | [Tasks](docs/TASKS.md) | Small work packages with dependencies, status, and acceptance criteria |
 | [Auth0 setup](docs/AUTH0_SETUP.md) | Existing tenant setup: API, permissions, clients, users, and local configuration |
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
+| [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity and profile records, fields, examples, and access patterns |
 
 The project directory is the source of truth. Earlier Library files are historical exports.
 
@@ -44,10 +45,11 @@ Run all commands below from the repository root. The project pins **Node.js 24.1
 ```sh
 pnpm install --frozen-lockfile
 cp services/bff/.env.example services/bff/.env
+pnpm db:up
 pnpm dev
 ```
 
-Copy the example only during initial setup; preserve an existing `.env` and add the Auth0 and DynamoDB fields shown below. For profile requests, start DynamoDB Local and create its table using the [local database instructions](infra/README.md#local-dynamodb-and-manual-requests). Replace the placeholder issuer and audience to use real Auth0 tokens. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
+Copy the example only during initial setup; preserve an existing `.env` and add the Auth0 and DynamoDB fields shown below. Start Docker Desktop before `pnpm db:up`; that command starts DynamoDB Local and automatically creates its table. Data survives `pnpm db:down` and subsequent starts. See the [local database instructions](infra/README.md#local-dynamodb-and-manual-requests). Replace the placeholder issuer and audience to use real Auth0 tokens. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
 
 ```sh
 curl --fail http://127.0.0.1:3000/health
@@ -134,6 +136,9 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 | `pnpm typecheck` | Typecheck all workspace packages |
 | `pnpm build` | Bundle local and Lambda entry points with esbuild |
 | `pnpm start` | Start the built local server without watch mode |
+| `pnpm db:up` | Start DynamoDB Local through Compose and automatically initialize its table |
+| `pnpm db:down` | Stop/remove local database containers while preserving data |
+| `pnpm db:logs` | Show the latest local database logs |
 | `pnpm synth` | Synthesize the CDK stack locally, including its Lambda asset; no deployment |
 | `pnpm deploy:dev --dry-run` | Validate `infra/.env` and preview deployment commands without AWS requests |
 | `pnpm bootstrap:dev` | Check the configured AWS account, then bootstrap its selected region |

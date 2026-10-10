@@ -84,6 +84,8 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 **Deployment script update from October 10, 2026:** Added `pnpm deploy:dev` and the separate `pnpm bootstrap:dev`, using ignored `infra/.env` configuration and a versioned example. Both verify the selected profile's account against `AWS_ACCOUNT_ID` before starting CDK. `--dry-run` validates configuration and prints commands without invoking AWS or CDK. `pnpm check` passed; manually previewed both modes with synthetic configuration and confirmed that an invalid account ID exits with an error. No automated tests were added. Real STS verification, bootstrap, and deployment were not executed; the live acceptance criteria remain outstanding.
 
+**Local database workflow update from October 10, 2026:** Added Docker Compose with DynamoDB Local 3.3.1, loopback port 8000, and a persistent named volume. `pnpm db:up` starts the container and runs an idempotent initializer using the existing AWS SDK; it waits for readiness, creates the table when missing, and verifies its key schema. `pnpm db:down` preserves the volume; `pnpm db:logs` displays logs. `docker compose config --quiet` and `pnpm check` passed. Manually verified first startup/table creation, repeated startup, and down/up persistence using a temporary synthetic record, which was then removed. The local database was left running. No automated tests or AWS deployment were performed.
+
 ## P04 Mobile login through to the user's profile
 
 **Outcome:** Login → Auth0 → AWS BFF → own profile is visible on a named mobile platform.

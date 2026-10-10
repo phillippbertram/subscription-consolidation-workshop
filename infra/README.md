@@ -32,38 +32,40 @@ Transactional puts are authorized through `dynamodb:PutItem`; there is no separa
 
 ## Local DynamoDB and manual requests
 
-Use the official [DynamoDB Local download](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html), verify its published checksum, and extract it outside the repository. Java 17 or newer and the AWS CLI are needed for these commands. The P03 manual checks used DynamoDB Local 3.3.1.
-
-From the extracted directory, start an ephemeral database:
+Start Docker Desktop (or another local Docker Engine with Compose), install workspace dependencies, and run from the repository root:
 
 ```sh
-java -Djava.library.path=./DynamoDBLocal_lib -jar DynamoDBLocal.jar \
-  -inMemory -sharedDb -port 8000 -disableTelemetry
+pnpm db:up
 ```
 
-Stop with `Ctrl+C`; the in-memory data is then gone. For persistence across database restarts, replace `-inMemory` with `-dbPath ./data` after creating that directory. This local database is for synthetic data on your development machine.
+This starts the pinned `amazon/dynamodb-local:3.3.1` image through `compose.yaml`, waits for the database to respond, and creates `premiumpass-local` with string `pk`/`sk` keys and on-demand billing if it does not exist. Existing tables and records are preserved. The initializer checks the existing key schema and exits with an error if it is incompatible; it does not migrate or delete data. Startup retries are bounded, and initialization failures cause the pnpm command to fail.
 
-In another terminal, create the table using explicitly local credentials and endpoint:
+The container runs in the background and binds only to `127.0.0.1:8000`. Data lives in the named Docker volume `premiumpass-local_dynamodb-data`. The initializer runs on the host with the already-installed AWS SDK, a fixed loopback endpoint, and dummy credentials. No Java installation, AWS CLI, real AWS credentials, or manual table command is needed. Starting plain `docker compose up` starts only the database; use `pnpm db:up` for automatic table initialization.
 
-```sh
-AWS_ACCESS_KEY_ID=local AWS_SECRET_ACCESS_KEY=local AWS_DEFAULT_REGION=us-east-1 \
-  aws dynamodb create-table \
-  --endpoint-url http://127.0.0.1:8000 \
-  --table-name premiumpass-local \
-  --attribute-definitions AttributeName=pk,AttributeType=S AttributeName=sk,AttributeType=S \
-  --key-schema AttributeName=pk,KeyType=HASH AttributeName=sk,KeyType=RANGE \
-  --billing-mode PAY_PER_REQUEST \
-  --no-cli-pager
-```
-
-Create the table once per fresh database; an already-existing table does not need recreating. In `services/bff/.env`, add:
+In `services/bff/.env`, keep your Auth0 and `PORT` configuration and set:
 
 ```dotenv
 DYNAMODB_TABLE_NAME=premiumpass-local
 DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 ```
 
-Keep the existing `PORT`, `AUTH0_ISSUER`, and `AUTH0_AUDIENCE` values. `pnpm dev` uses a loopback endpoint with dummy credentials. No AWS account is contacted. Lambda rejects `DYNAMODB_ENDPOINT`; local overrides belong only to local development. Omitting the endpoint selects the AWS SDK's normal region/credential chain, so keep it set for this local exercise.
+Then start the backend:
+
+```sh
+pnpm dev
+```
+
+Database commands:
+
+| Command | Effect |
+|---|---|
+| `pnpm db:up` | Start/reuse the database container and ensure its table exists |
+| `pnpm db:down` | Remove the Compose containers and network; retain the data volume |
+| `pnpm db:logs` | Show the latest 100 database log lines |
+
+Repeated `db:up` calls are safe. After `db:down`, the next `db:up` uses the existing data. Avoid `docker compose down --volumes` unless you deliberately want to delete all local database data. If port 8000 is already occupied, stop the earlier local database before starting Compose. If initialization fails, inspect `pnpm db:logs` and rerun `pnpm db:up` once the cause is fixed.
+
+The initializer deliberately uses the fixed Compose table and endpoint; BFF configuration must match them. `pnpm dev` also uses dummy credentials when `DYNAMODB_ENDPOINT` is set. Omitting that variable selects the AWS SDK's normal region/credential chain. Lambda rejects this local-only variable. [DynamoDB Local Docker setup](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.DownloadingAndRunning.html) · [Local persistence options](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.UsageNotes.html).
 
 Use the [Auth0 setup guide](../docs/AUTH0_SETUP.md) for an actual user access token. Then perform the [README requests](../README.md#backend-authentication). Repeated requests must return the same `userId` and `createdAt`; another verified subject or issuer must get a different user. Query parameters and headers claiming another user ID must have no effect. A valid machine token returns `403 user_identity_required` and creates no profile.
 
