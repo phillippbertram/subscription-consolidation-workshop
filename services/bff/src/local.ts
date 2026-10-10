@@ -1,9 +1,9 @@
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
-import { readLocalConfig } from './config.js';
+import { readAuthConfig, readLocalConfig } from './config.js';
 
 const config = readLocalConfig(process.env);
-const app = createApp();
+const app = createApp(readAuthConfig(process.env));
 const server = serve({ fetch: app.fetch, ...config }, (info) => {
   console.info(
     `PremiumPass BFF listening on http://${config.hostname}:${info.port}`,

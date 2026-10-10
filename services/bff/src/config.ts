@@ -13,3 +13,42 @@ export function readLocalConfig(env: NodeJS.ProcessEnv) {
 
   return { port: Number(rawPort), hostname: '127.0.0.1' };
 }
+
+export interface AuthConfig {
+  issuer: string;
+  audience: string;
+}
+
+export function readAuthConfig(env: NodeJS.ProcessEnv): AuthConfig {
+  const issuer = env.AUTH0_ISSUER;
+  const audience = env.AUTH0_AUDIENCE;
+
+  if (!issuer || issuer.trim() !== issuer) {
+    throw new Error(
+      'AUTH0_ISSUER is required and must not contain surrounding whitespace.',
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(issuer);
+  } catch {
+    throw new Error(
+      'AUTH0_ISSUER must be an HTTPS origin with a trailing slash.',
+    );
+  }
+
+  if (url.protocol !== 'https:' || issuer !== `${url.origin}/`) {
+    throw new Error(
+      'AUTH0_ISSUER must be an HTTPS origin with a trailing slash and no path, credentials, query, or fragment.',
+    );
+  }
+
+  if (!audience || audience.trim() !== audience) {
+    throw new Error(
+      'AUTH0_AUDIENCE is required and must not contain surrounding whitespace. Use the Custom API identifier, not a client ID.',
+    );
+  }
+
+  return { issuer, audience };
+}

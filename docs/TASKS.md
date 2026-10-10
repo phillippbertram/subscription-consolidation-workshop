@@ -12,7 +12,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 |---|---|---|---|
 | P00 | Prepare the project for agents | — | complete |
 | P01 | Local HTTP skeleton | P00 | complete |
-| P02 | Backend Auth0 token verification | P01 | open |
+| P02 | Backend Auth0 token verification | P01 | complete |
 | P03 | Small AWS stack and user persistence | P01; P02 for a protected live request | open |
 | P04 | Mobile login through to the user's profile | P02, P03 | open |
 | P05 | Subscription and entitlement domain rules | P01, P02, P03 | open |
@@ -22,7 +22,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P09 | Reconciliation and expiration | P07, P08 | open |
 | P10 | CI/CD, operations, and final demo | P04, P06–P09 | open |
 
-**Next task:** P02: Auth0 token verification in the Hono BFF, still without automated tests.
+**Next task:** P03: small AWS stack and user persistence, still without automated tests. Local work and live deployment have separate acceptance criteria.
 
 ## P00 Prepare the project for agents
 
@@ -57,6 +57,10 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 **Acceptance:** Scenarios T01–T03 from the project plan pass when invoking the handler directly. Also check a missing expiration claim, tampered signature, disallowed algorithm, wrong audience, unknown key, rotation, and JWKS outage. Rejected requests execute no domain handler. Logs contain no token values. Use generated keys and a controlled JWKS for local checks.
 
 **Boundary:** No custom login/password management and no API Gateway authorizer. Auth0 login remains external; these local checks require no real credentials.
+
+**Evidence from October 10, 2026:** `pnpm check` passed (formatting, linting, typechecking, build). Manual interactive requests used generated RSA keys and a temporary HTTPS JWKS server with a process-scoped trusted certificate. A valid token returned 200 with verified identity; missing scope returned 403. Missing/malformed token, expired or missing `exp`, invalid signature, HS256, wrong issuer/audience, future `nbf`, blank subject, and unknown `kid` returned 401. Repeated valid requests reused the cache; publishing a second key after cooldown successfully verified a second identity. During a simulated JWKS outage, the warm cache still returned 200, a fresh app returned 503, and an immediate retry made no additional JWKS request. Public health returned 200 without fetching keys. A real local HTTP request ignored a forged query-string user ID, and the built Lambda handler returned 200 for a manually supplied HTTP API v2 event. Missing configuration, HTTP issuer, and missing issuer slash were rejected. No tokens or private signing keys were printed.
+
+**Limits:** No automated tests, test framework, or persistent fixture scripts were added. No Auth0 tenant login, AWS deployment, or database access was performed. User persistence remains P03; real mobile Auth0 login remains P04. Temporary verification servers were stopped and disposable TLS files removed.
 
 ## P03 Small AWS stack and user persistence
 

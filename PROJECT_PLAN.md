@@ -84,7 +84,7 @@ Real store purchases, app store publication, plan changes, proration, tax logic,
 ### Before the first work session
 
 - [ ] Choose an AWS development account, CLI access through SSO or a suitable local profile, and a region such as `eu-central-1`.
-- [ ] Create an Auth0 tenant, Native Application, and Custom API; prepare two test users.
+- [ ] Use an existing Auth0 tenant or create a development tenant; follow the [Auth0 setup guide](docs/AUTH0_SETUP.md) for the Custom API, Native Application, permissions, and two test users.
 - [ ] Create an additional Auth0 SPA application for the local test website in the same tenant. Both clients use the same API audience and user connection.
 - [ ] Prepare a Stripe test environment, product, and recurring test price.
 - [ ] Start Xcode/Simulator or Android Studio/Emulator and check the React Native development build.

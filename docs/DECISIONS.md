@@ -24,6 +24,12 @@ Domain logic remains independent of Hono. SQS and scheduled handlers need no HTT
 
 Sources: [Hono on AWS Lambda](https://hono.dev/docs/getting-started/aws-lambda), [Hono on Node.js](https://hono.dev/docs/getting-started/nodejs).
 
+## Backend authentication
+
+P02 verifies Auth0 access tokens directly in the shared Hono app, with no Gateway authorizer. `AUTH0_ISSUER` and `AUTH0_AUDIENCE` are required in both entry points. The issuer must be an HTTPS origin with its trailing slash; JWKS is derived from that origin and cannot be selected by a request. Tokens need a non-empty `kid`; scopes come from the verified `scope` claim.
+
+Each app instance caches JWKS for ten minutes, times out retrieval after five seconds, and limits fetch attempts to once every 30 seconds, including outages. Invalid credentials return 401, insufficient scopes return 403, and unavailable keys without a usable cache return 503. Health is public; user routes registered afterward require authentication by default. `/v1/me` returns issuer, subject, and scopes until P03 adds persistence.
+
 ## Repository: pnpm workspaces
 
 **Working baseline:** A private monorepo with `pnpm-workspace.yaml` and one shared `pnpm-lock.yaml`. Workspace patterns: `apps/*`, `services/*`, `packages/*`, and `infra`. Create packages only when needed; P01 starts with `services/bff`, and P03 adds `infra`.
@@ -40,7 +46,7 @@ These choices guide the tasks; they do not imply that the corresponding implemen
 |---|---|
 | Runtime | Local Node.js 24.19.0 through `.nvmrc` and `engines`; Lambda target runtime Node 24 |
 | Package management | pnpm 12.10.1; shared lockfile and exact direct dependency versions |
-| JWT | Established library; `jose` recommended, no custom cryptography |
+| JWT | `jose` 6.2.12; RS256 only, fixed issuer/Custom API audience, required `exp`/`sub`, five-second clock tolerance; no custom cryptography |
 | Tooling and verification | TypeScript 6.0.3, ESLint, and Prettier; no automated tests; TypeScript stays within the range supported by typescript-eslint. Add Zod only when needed |
 | Mobile | Expo development build, three small screens |
 | Persistence | Small DynamoDB demo table, conditional writes, and transactions |
