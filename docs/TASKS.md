@@ -8,21 +8,21 @@ Tasks use `Pxx` IDs. IDs `T01` through `T22` in the project plan identify manual
 
 Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partial`, state exactly which evidence is missing. A local check does not satisfy an explicitly required live acceptance criterion.
 
-| ID | Task | Dependencies | Status |
-|---|---|---|---|
-| P00 | Prepare the project for agents | — | complete |
-| P01 | Local HTTP skeleton | P00 | complete |
-| P02 | Backend Auth0 token verification | P01 | complete |
-| P03 | Small AWS stack and user persistence | P01; P02 for a protected live request | partial |
-| P04 | Mobile login through to the user's profile | P02, P03 | open |
-| P05 | Subscription and entitlement domain rules | P01, P02, P03 | open |
-| P06 | Stripe purchase and reliable processing | P02, P03, P05 | open |
-| P07 | Apple/Google mocks | P05, P06 | open |
-| P08 | Outbox publisher and EventBridge | P06 | open |
-| P09 | Reconciliation and expiration | P07, P08 | open |
-| P10 | CI/CD, operations, and final demo | P04, P06–P09 | open |
+| ID  | Task                                       | Dependencies                          | Status   |
+| --- | ------------------------------------------ | ------------------------------------- | -------- |
+| P00 | Prepare the project for agents             | —                                     | complete |
+| P01 | Local HTTP skeleton                        | P00                                   | complete |
+| P02 | Backend Auth0 token verification           | P01                                   | complete |
+| P03 | Small AWS stack and user persistence       | P01; P02 for a protected live request | partial  |
+| P04 | Mobile login through to the user's profile | P02, P03 local portion                | partial  |
+| P05 | Subscription and entitlement domain rules  | P01, P02, P03                         | open     |
+| P06 | Stripe purchase and reliable processing    | P02, P03, P05                         | open     |
+| P07 | Apple/Google mocks                         | P05, P06                              | open     |
+| P08 | Outbox publisher and EventBridge           | P06                                   | open     |
+| P09 | Reconciliation and expiration              | P07, P08                              | open     |
+| P10 | CI/CD, operations, and final demo          | P04, P06–P09                          | open     |
 
-**Next step:** P03 local implementation is finished. Live deployment and verification remain explicitly deferred; they require an authorized development account/profile, region, and real Auth0 user tokens. P04 can follow once its backend prerequisite is available.
+**Next step:** Finish P04's session restoration, logout, two-user profile, and remaining failure checks against the local backend. The user has confirmed successful real Auth0 login and profile display. P03's local portion is sufficient for that flow. AWS deployment and Gateway/Lambda verification remain separate and explicitly deferred.
 
 ## P00 Prepare the project for agents
 
@@ -88,13 +88,27 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 ## P04 Mobile login through to the user's profile
 
-**Outcome:** Login → Auth0 → AWS BFF → own profile is visible on a named mobile platform.
+**Outcome:** Login → Auth0 → local Hono BFF → own profile is visible on the iOS Simulator. Verification against the deployed AWS BFF follows separately.
 
 **Scope:** Small React Native app as an Expo development build. Auth0 login, SDK credential management, profile display, and logout. Document callback/logout URLs and non-secret configuration names. Choose the primary verification platform.
 
 **Acceptance:** Real Auth0 login on a simulator/emulator or device, profile retrieval, and logout work. User B receives their own profile. Network/authentication errors are displayed. Tokens appear in neither AsyncStorage nor logs. Record the platform and flow actually checked.
 
 **Boundary:** No store purchases, UI design system, or assumption that a second platform has also been verified.
+
+**Implementation from October 10, 2026:** Added `apps/mobile` with Expo 57.0.27, React Native 0.86.3, React 19.2.3, and Auth0 5.11.1. The iOS Simulator targets the local Hono BFF. The app provides Universal Login with PKCE, SDK credential storage/restoration, profile loading/reloading, logout, and safe error states. A dedicated `ApiClient` class encapsulates Axios, automatic Bearer headers, Zod response validation, cancellation, and a 15-second HTTP timeout. No refresh token is requested in this first flow. Native projects are generated and ignored; public configuration and manual steps are in the [mobile guide](../apps/mobile/README.md).
+
+**Local source evidence:** `pnpm check` passed, including TSX formatting/linting, all workspace typechecks, backend builds, and the mobile iOS JavaScript export. Expo dependency compatibility checking and iOS prebuild passed. Inspected the generated URL schemes and local-networking ATS configuration. No automated tests or test framework were added.
+
+**Outstanding:** Session restoration after an app restart, logout, two-user ownership, and remaining network/authentication failure scenarios must still be demonstrated in the simulator. P04 remains `partial`. AWS and Android verification are outside this local implementation request.
+
+**User-confirmed evidence from October 10, 2026:** The user confirmed that real Auth0 login succeeds and the app displays the profile with `userId` and `createdAt` in the iOS Simulator against the local backend. The previously observed **Callback URL mismatch** no longer blocks this flow. The user supplied the Client ID through ignored `apps/mobile/.env`; the agent made no Auth0 tenant changes. This confirmation covers login and profile display, not the remaining checks above.
+
+**Native and manual evidence:** CocoaPods installation and the Xcode Debug simulator build succeeded (zero errors, five dependency/build-script warnings). Installed and launched PremiumPass on the iPhone 17 Pro with iOS 26.5; the welcome screen and the safe sign-in failure state rendered. `pnpm install --frozen-lockfile` passed. Local BFF requests returned 200 for health and 401 without credentials; a manual request through `ApiClient` with a synthetic invalid token produced the intended safe sign-in error. The local initializer confirmed the `premiumpass-local` table is ready. Checked documentation links and diff whitespace. The initial sandboxed Metro attempt could not use filesystem watchers; the normal macOS Metro process started successfully. These checks do not yet prove real Auth0 login or authenticated profile persistence.
+
+**API client update from October 10, 2026:** Replaced fetch with Axios 1.20.0 and added Zod 4.6.5. The request interceptor obtains a fresh token through the injected Auth0 provider for each request; screens use `useApiClient` and never handle tokens. Response errors are normalized without retaining Axios headers or payloads. Generic request/get/post helpers validate their responses with supplied Zod schemas. `pnpm check` passed. Manual local requests confirmed valid schema parsing, safe 401 mapping, invalid-response rejection, credential lookup failure, cancellation, rejection of another origin, and a fresh credential lookup for each dispatched request. In the iOS Simulator, a full JavaScript reload restored the authenticated profile with the same ID and creation time; profile reload also succeeded. This does not replace cold app restart, successful logout, or two-user verification. No automated tests, fixtures, or Auth0 tenant changes were added.
+
+**Structure update from October 10, 2026:** Split the mobile app into composition/provider setup, feature-owned login/profile screens and hooks, shared presentation components, and the API layer. Profile loading uses explicit async states and cancels obsolete requests; identity changes reset the profile screen. The mobile guide explains the responsibilities and reading order. `pnpm check` passed after the refactor. A full JavaScript reload cleared Metro's stale imports after file moves, and the extracted login screen rendered in the iOS Simulator. Authenticated profile verification after this refactor remains outstanding because the current simulator session requires login. No navigation or UI library and no automated tests were added.
 
 ## P05 Subscription and entitlement domain rules
 

@@ -1,0 +1,27 @@
+{
+  "name": "@premiumpass/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "dev": "expo start --dev-client --localhost",
+    "ios": "expo run:ios",
+    "prebuild:ios": "expo prebuild --platform ios --no-install",
+    "typecheck": "tsc --noEmit",
+    "build": "expo export --platform ios"
+  },
+  "dependencies": {
+    "axios": "1.20.0",
+    "expo": "57.0.27",
+    "expo-dev-client": "57.0.19",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-auth0": "5.11.1",
+    "react-native-safe-area-context": "5.7.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.4",
+    "typescript": "6.0.3"
+  }
+}

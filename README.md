@@ -13,6 +13,7 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 | [Auth0 setup](docs/AUTH0_SETUP.md) | Existing tenant setup: API, permissions, clients, users, and local configuration |
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
 | [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity and profile records, fields, examples, and access patterns |
+| [Mobile app](apps/mobile/README.md) | Expo development build, Auth0 login, and iOS Simulator against the local BFF |
 
 The project directory is the source of truth. Earlier Library files are historical exports.
 
@@ -39,6 +40,8 @@ services/bff/
 The HTTP API uses a `$default` integration to forward requests to the BFF. Define BFF routes once in Hono; no per-endpoint CDK registration is needed. Unknown paths reach the same authentication middleware and return 401 without a valid token or 404 with one. Future explicit integrations, such as the Stripe webhook, can override the catch-all for their own route.
 
 ## Installation and local startup
+
+For the Expo app, follow the [mobile setup guide](apps/mobile/README.md). The commands below start the backend and its local database.
 
 Run all commands below from the repository root. The project pins **Node.js 24.19.0** (`.nvmrc`, `engines`) and **pnpm 12.10.1** (`packageManager`, `engines`). If nvm is installed, run `nvm install` followed by `nvm use` to activate the Node version. If pnpm is missing, run `npm install --global pnpm@12.10.1` once under that Node version.
 
@@ -130,12 +133,14 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 
 | Command | Effect |
 |---|---|
-| `pnpm format:check` | Run Prettier checks for TS, JS, JSON, and YAML across the repository |
+| `pnpm format:check` | Run Prettier checks for TS/TSX, JS, JSON, and YAML across the repository |
 | `pnpm format` | Format the same files, excluding generated files and the lockfile |
 | `pnpm lint` | Run ESLint, including type-aware TypeScript rules |
 | `pnpm typecheck` | Typecheck all workspace packages |
 | `pnpm build` | Bundle local and Lambda entry points with esbuild |
 | `pnpm start` | Start the built local server without watch mode |
+| `pnpm mobile:ios` | Build/install the native Expo app and start Metro for the iOS Simulator |
+| `pnpm mobile:dev` | Start Metro for the already installed mobile development app |
 | `pnpm db:up` | Start DynamoDB Local through Compose and automatically initialize its table |
 | `pnpm db:down` | Stop/remove local database containers while preserving data |
 | `pnpm db:logs` | Show the latest local database logs |
@@ -148,7 +153,7 @@ For deployment configuration and the one-time bootstrap step, see the [infrastru
 
 Check Markdown links and consistency when changing documentation. `git diff --check` also checks tracked changes for whitespace issues; inspect new files separately.
 
-The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` typechecks infrastructure; `pnpm synth` produces the deployable assembly.
+The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` also typechecks infrastructure and exports the mobile iOS JavaScript bundle to `apps/mobile/dist`; it does not build the native iOS app. `pnpm synth` produces the deployable AWS assembly.
 
 At the user's request, this learning project has no automated tests or test framework. Verify behavior through manual requests; typechecking, linting, and builds remain configured. The Lambda entry point opens no HTTP port and does not require `PORT`. The local portion of P03 is implemented; live AWS verification remains outstanding by request.
 

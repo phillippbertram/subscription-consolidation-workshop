@@ -8,6 +8,8 @@ engineStrict: true
 saveExact: true
 allowBuilds:
   esbuild: true
+  # This optional web dependency's postinstall only prints a sponsor message.
+  browser-tabs-lock: false
 minimumReleaseAgeExclude:
   - '@types/node@24.19.2'
   - prettier@3.9.10

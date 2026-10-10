@@ -1,0 +1,153 @@
+# PremiumPass Mobile
+
+An Expo development app for the iOS Simulator, using Auth0 Universal Login and the local Hono backend. Run commands from the repository root unless stated otherwise. Implementation and verification status live in [P04](../../docs/TASKS.md#p04-mobile-login-through-to-the-users-profile).
+
+## Prerequisites
+
+- The repository's pinned Node and pnpm versions, installed dependencies, Xcode with an available iOS Simulator, and CocoaPods.
+- Docker Desktop and the [local DynamoDB workflow](../../infra/README.md#local-dynamodb-and-manual-requests).
+- An Auth0 Native Application, the existing Custom API, and two synthetic users with `read:me`; follow the [Auth0 setup guide](../../docs/AUTH0_SETUP.md#5-configure-the-native-application-for-p04).
+
+This app uses `react-native-auth0`, so it requires a native development build. Expo Go cannot run it. Builds run locally through Xcode; no EAS account or AWS deployment is needed.
+
+## Configure the app and backend
+
+For initial setup only:
+
+```sh
+pnpm install --frozen-lockfile
+cp apps/mobile/.env.example apps/mobile/.env
+```
+
+Preserve an existing `.env`. Set these public values:
+
+| Variable                      | Value                                                                                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------- |
+| `EXPO_PUBLIC_AUTH0_DOMAIN`    | Tenant or custom domain, without `https://` or a trailing slash; must match the BFF's issuer host |
+| `EXPO_PUBLIC_AUTH0_CLIENT_ID` | Client ID of the **Native** application                                                           |
+| `EXPO_PUBLIC_AUTH0_AUDIENCE`  | Same Custom API identifier as the BFF's `AUTH0_AUDIENCE`                                          |
+| `EXPO_PUBLIC_API_URL`         | `http://127.0.0.1:3000` for the iOS Simulator and the default BFF port                            |
+
+Expo embeds these values in the app bundle. They are public configuration, not secret storage. Never add a client secret or token. Missing configuration or the sample domain/client ID displays a setup screen and prevents login.
+
+The API audience stays unchanged when the backend runs locally. It identifies the API in Auth0; `EXPO_PUBLIC_API_URL` determines where the app sends HTTP requests.
+
+In the existing `services/bff/.env`, keep your Auth0 values and set:
+
+```dotenv
+PORT=3000
+DYNAMODB_TABLE_NAME=premiumpass-local
+DYNAMODB_ENDPOINT=http://127.0.0.1:8000
+```
+
+Without `DYNAMODB_ENDPOINT`, the BFF uses the normal AWS credential chain rather than DynamoDB Local. Restart the BFF after changing its configuration.
+
+The configured app scheme is `premiumpass`, and the iOS bundle identifier is `com.example.premiumpass`. Register the following exact URL in both **Allowed Callback URLs** and **Allowed Logout URLs** for the Native application, replacing the domain:
+
+```text
+premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
+```
+
+The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. No tokens are stored in AsyncStorage, displayed, or logged by the app.
+
+If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback above using your configured domain. Changing the callback allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes.
+
+## Run on the iOS Simulator
+
+Start the local database and backend in one terminal:
+
+```sh
+pnpm db:up
+pnpm dev
+```
+
+Build, install, and launch the app in another terminal:
+
+```sh
+pnpm mobile:ios
+```
+
+This generates the iOS project, installs Pods, builds through Xcode, and starts Metro. To select a specific installed simulator, pass its name, for example:
+
+```sh
+pnpm mobile:ios --device "iPhone 17 Pro"
+```
+
+After the initial build, start Metro for the installed development app with:
+
+```sh
+pnpm mobile:dev
+```
+
+Press `i` in the Metro terminal to open the iOS app. Stop Metro or the BFF with `Ctrl+C`. `pnpm db:down` stops DynamoDB and preserves its volume.
+
+Reload the app after changing public JavaScript configuration. Rebuild with `pnpm mobile:ios` after changing the Auth0 domain, app scheme, bundle identifier, or native dependencies. The Auth0 domain is also embedded in native callback configuration. Generated `ios/` and `android/` directories are ignored; edit `app.config.ts` instead of generated files.
+
+The iOS Simulator can reach the Mac's loopback address. The BFF stays bound to `127.0.0.1`. App Transport Security permits local networking through `NSAllowsLocalNetworking`; HTTPS remains required for other API origins. A physical iPhone would need separate LAN/network configuration. Android native settings are prepared by the Auth0 plugin, but Android builds and login are outside this verification scope.
+
+## App structure
+
+| File                                     | Responsibility                                                               |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `app.config.ts`                          | Expo identity, Auth0 native plugin, and local iOS networking                 |
+| `src/App.tsx`                            | Composition root: validate configuration and mount safe-area/Auth0 providers |
+| `src/app/config.ts`                      | Validate the public configuration before enabling login                      |
+| `src/app/AppContent.tsx`                 | Select session restoration, login, or profile content from Auth0 state       |
+| `src/features/auth/LoginScreen.tsx`      | Render the signed-out screen                                                 |
+| `src/features/auth/use-auth-session.ts`  | Coordinate login/logout actions and their busy/error state                   |
+| `src/features/auth/auth-errors.ts`       | Map known SDK failures to safe messages                                      |
+| `src/features/profile/ProfileScreen.tsx` | Compose profile loading, errors, content, and actions                        |
+| `src/features/profile/ProfileCard.tsx`   | Present a validated profile through props                                    |
+| `src/features/profile/use-profile.ts`    | Load/reload the profile and cancel obsolete requests                         |
+| `src/api/api-client.ts`                  | Axios instance, interceptors, Zod response schemas, and safe API errors      |
+| `src/api/use-api-client.ts`              | Connect the client to the Auth0 Credentials Manager                          |
+| `src/components/`                        | Shared screen layout and error presentation                                  |
+| `src/theme.ts`                           | Small shared color and spacing constants                                     |
+
+### Patterns to explore
+
+Start with `App.tsx`, follow `AppContent.tsx` into each screen, and then read its hook. Features keep their screen, specialized components, and behavior together. Shared components contain presentation; the API layer owns HTTP and response validation. Component-specific styles stay beside the component, while repeated colors and spacing live in `theme.ts`.
+
+`useAuthSession` wraps the Auth0 SDK without copying credentials or user identity into another store. `AppContent` calls it once and passes action state to its children: custom hooks share logic, but separate calls do not share local state. Login and profile are mutually exclusive views selected by session state. A navigation library becomes useful when authenticated screens need stacks, tabs, history, or deep links.
+
+`useProfile` represents loading, success, and failure as a discriminated union, so rendering can narrow the available data by `status`. Effect cleanup cancels the request and ignores late results. The profile screen is keyed by the authenticated identity, resetting its local state when the user changes. Profile data is hidden while logout is pending; a failed logout allows it to load again.
+
+This small app keeps remote data in its feature hook. Add a query/cache library when multiple screens share server data or need caching and invalidation. A UI component library can be introduced independently of these boundaries.
+
+Sources: [React custom hooks](https://react.dev/learn/reusing-logic-with-custom-hooks), [React Navigation authentication flows](https://reactnavigation.org/docs/auth-flow/).
+
+### API client
+
+`ApiClient` owns a dedicated Axios instance with the configured API origin and a 15-second HTTP timeout. Its asynchronous request interceptor reads the current access token through an injected provider backed by Auth0's `getCredentials()`, then sets the Bearer header. Screens never read or pass tokens. No token is cached in the client or saved to Axios defaults; credentials stay in the SDK's secure storage. A failed credential lookup blocks the request, and a different API origin is rejected before reading credentials.
+
+The response interceptor converts transport and HTTP failures into `ApiError` with a safe message, a `code`, and an optional HTTP `status`. Raw Axios errors are not exposed because they contain request headers. Cancellation uses `AbortSignal`, including a check after asynchronous token retrieval. The HTTP timeout starts when Axios dispatches the network request; it does not limit the SDK credential lookup. There is no automatic retry or separate refresh-token flow in the client.
+
+Every request receives a Zod response schema. `request()` unwraps `response.data`, validates it, and returns the inferred result type. The profile schema requires a UUID `userId` and a UTC ISO datetime `createdAt`; invalid responses become `ApiError` with code `invalid_response`, without exposing their payload. These checks validate the API contract; authorization is still enforced by the backend.
+
+Inside a component under `Auth0Provider`:
+
+```ts
+const api = useApiClient(config.apiUrl);
+const profile = await api.getProfile();
+// For an effect that must cancel obsolete requests:
+const controller = new AbortController();
+const cancellableProfile = await api.getProfile({ signal: controller.signal });
+```
+
+For another endpoint, define its response schema and use `api.get(path, schema, options)` or `api.post(path, body, schema, options)`. `api.request(method, path, schema, options)` supports the remaining HTTP methods. Options support query parameters and cancellation; callers do not configure authentication headers. Use a schema such as `z.unknown()` only when intentionally accepting an unstructured response.
+
+Sources: [Axios instances](https://axios-http.com/docs/instance), [Axios interceptors](https://axios-http.com/docs/interceptors), [Zod parsing and inferred types](https://zod.dev/basics).
+
+## Manual verification
+
+1. Start the backend and database, then launch the native app.
+2. Sign in as demo user A. The app opens Universal Login and returns through its custom scheme. The profile should show the BFF's `userId` and `createdAt`.
+3. Reload the profile and restart the app while the token is valid. The ID and creation timestamp should remain unchanged.
+4. Stop the BFF, reload the profile, and confirm an actionable error. Restart it and retry. A stopped/misconfigured database should also produce an error rather than a fabricated profile.
+5. Sign out successfully and confirm the profile disappears. Cancelling or failing logout must show an error and must not claim that the session was cleared.
+6. Sign in as demo user B and confirm a different internal ID. Sign back in as A and confirm A's original ID.
+7. A user without `read:me` should receive a permission error. A rejected/expired session should offer sign-out/sign-in recovery.
+
+No automated tests or test framework are part of this project. `pnpm check` includes mobile typechecking, linting, formatting, and an iOS JavaScript export; the export does not prove a native build or successful login. `pnpm --filter @premiumpass/mobile exec expo install --check` checks Expo dependency compatibility. Native configuration can be regenerated separately using `pnpm --filter @premiumpass/mobile prebuild:ios`.
+
+Sources: [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo), [Auth0 SDK](https://github.com/auth0/react-native-auth0), [Expo monorepos](https://docs.expo.dev/guides/monorepos/).

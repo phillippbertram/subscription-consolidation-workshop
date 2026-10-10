@@ -76,11 +76,11 @@ The backend derives `https://<domain>/.well-known/jwks.json` from that issuer. N
 
 ## 5. Configure the Native application for P04
 
-Under **Applications → Applications → Create Application**, choose **Native** and name it `PremiumPass Mobile`. Record its **Domain** and **Client ID** for the future mobile configuration. Use Authorization Code with PKCE through the Auth0 SDK; no client secret is embedded in the app.
+Under **Applications → Applications → Create Application**, choose **Native** and name it `PremiumPass Mobile`. Set its **Domain** and **Client ID** in `apps/mobile/.env` as described in the [mobile guide](../apps/mobile/README.md). Use Authorization Code with PKCE through the Auth0 SDK; no client secret is embedded in the app.
 
-The following values are proposed examples, not existing mobile project settings:
+The mobile project uses these values in `apps/mobile/app.config.ts`:
 
-| Mobile setting | Example |
+| Mobile setting | Configured value |
 |---|---|
 | Explicit custom scheme | `premiumpass` |
 | iOS bundle identifier | `com.example.premiumpass` |
@@ -93,9 +93,9 @@ premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 premiumpass://your-tenant.eu.auth0.com/android/com.example.premiumpass/callback
 ```
 
-Save the application settings. In P04, match the Expo Auth0 plugin's `domain` and explicit `customScheme`, the platform identifiers, and the SDK login/logout options to these URLs. Rebuild the native development app after native configuration changes; Expo Go does not support this SDK. [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo) · [React Native SDK](https://github.com/auth0/react-native-auth0).
+Save the application settings. Match the Expo Auth0 plugin's `domain` and explicit `customScheme`, the platform identifiers, and the SDK login/logout options to these URLs. Rebuild the native development app after native configuration changes; Expo Go does not support this SDK. [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo) · [React Native SDK](https://github.com/auth0/react-native-auth0).
 
-The login request must explicitly use the Custom API audience and request `openid profile email read:me read:premium`. Send the resulting **access token** to the BFF, not the ID token. The callback returns to the mobile app; `http://127.0.0.1:3000/v1/me` is an API endpoint, not a login callback.
+The login request must explicitly use the Custom API audience and request `openid profile email read:me` for P04. Premium scopes follow when the corresponding endpoints exist. Send the resulting **access token** to the BFF, not the ID token. The callback returns to the mobile app; `http://127.0.0.1:3000/v1/me` is an API endpoint, not a login callback.
 
 ## 6. Enable the user connection and prepare users
 
@@ -152,7 +152,7 @@ ACCESS_TOKEN="$(pbpaste)"
 
 Use the **access token**, not the ID token or the CLI's tenant-management token. Keep it out of project files and logs. Clipboard copying is implemented by the [official CLI](https://github.com/auth0/auth0-cli/blob/main/internal/cli/test.go).
 
-Later, the Native client in P04 and SPA in P06 obtain user tokens through their SDKs. The current CLI flow does not require implementing those clients first.
+The Native client in P04 obtains user tokens through its SDK; the SPA follows in P06. The CLI flow remains useful for independent backend requests.
 
 ### Machine tokens do not provide a user profile
 

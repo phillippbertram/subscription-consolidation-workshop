@@ -10,11 +10,14 @@ export default defineConfig(
       '**/coverage/**',
       '**/cdk.out/**',
       '.agents/**',
+      '**/.expo/**',
+      'apps/mobile/ios/**',
+      'apps/mobile/android/**',
     ],
   },
   js.configs.recommended,
   {
-    files: ['**/*.ts'],
+    files: ['**/*.ts', '**/*.tsx'],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {
