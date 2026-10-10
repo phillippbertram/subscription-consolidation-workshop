@@ -1,37 +1,30 @@
 import type { PropsWithChildren } from 'react';
-import { ScrollView, StyleSheet, Text } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, spacing } from '../theme';
+import { Text } from './ui/text';
 
 type ScreenProps = PropsWithChildren<{ title: string; description: string }>;
 
 export function Screen({ title, description, children }: ScreenProps) {
   return (
-    <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.page}>
-        <Text style={styles.eyebrow}>PREMIUMPASS · LOCAL DEMO</Text>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
-        {children}
+    <SafeAreaView className="flex-1 bg-background">
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        <View className="flex-1 justify-center gap-6 p-7">
+          <Text className="text-xs font-bold tracking-widest text-primary">
+            PREMIUMPASS · LOCAL DEMO
+          </Text>
+          <Text
+            accessibilityRole="header"
+            className="text-4xl font-bold text-foreground"
+          >
+            {title}
+          </Text>
+          <Text className="text-lg leading-7 text-muted-foreground">
+            {description}
+          </Text>
+          {children}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
-  page: {
-    flexGrow: 1,
-    padding: spacing.page,
-    gap: spacing.large,
-    justifyContent: 'center',
-  },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.5,
-    color: colors.accent,
-  },
-  title: { fontSize: 34, fontWeight: '700', color: colors.heading },
-  description: { fontSize: 17, lineHeight: 25, color: colors.text },
-});

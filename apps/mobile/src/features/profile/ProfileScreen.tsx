@@ -1,4 +1,5 @@
-import { ActivityIndicator, Button } from 'react-native';
+import { Button, ButtonText } from '../../components/ui/button';
+import { Spinner } from '../../components/ui/spinner';
 import { Screen } from '../../components/Screen';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { ProfileCard } from './ProfileCard';
@@ -23,23 +24,35 @@ export function ProfileScreen({
     >
       {state.status === 'success' && <ProfileCard profile={state.profile} />}
       {state.status === 'loading' && (
-        <ActivityIndicator accessibilityLabel="Loading profile" />
+        <Spinner
+          className="text-primary"
+          accessibilityLabel="Loading profile"
+        />
       )}
       <ErrorMessage message={state.status === 'error' ? state.message : null} />
       <Button
-        title="Reload profile"
-        disabled={isSigningOut || state.status === 'loading'}
+        size="lg"
+        className="min-h-12 rounded-xl"
+        isDisabled={isSigningOut || state.status === 'loading'}
         onPress={reload}
-      />
+      >
+        <ButtonText>Reload profile</ButtonText>
+      </Button>
       <ErrorMessage message={authError} />
       <Button
-        title="Sign out"
-        disabled={isSigningOut}
+        size="lg"
+        variant="outline"
+        className="min-h-12 rounded-xl"
+        isDisabled={isSigningOut}
         onPress={() => {
           void onSignOut();
         }}
-      />
-      {isSigningOut && <ActivityIndicator accessibilityLabel="Signing out" />}
+      >
+        <ButtonText>Sign out</ButtonText>
+      </Button>
+      {isSigningOut && (
+        <Spinner className="text-primary" accessibilityLabel="Signing out" />
+      )}
     </Screen>
   );
 }

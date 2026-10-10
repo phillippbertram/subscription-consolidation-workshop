@@ -1,4 +1,4 @@
-import { ActivityIndicator, Button } from 'react-native';
+import { Button, ButtonText, ButtonSpinner } from '../../components/ui/button';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { Screen } from '../../components/Screen';
 
@@ -16,13 +16,18 @@ export function LoginScreen({ isBusy, error, onSignIn }: LoginScreenProps) {
     >
       <ErrorMessage message={error} />
       <Button
-        title="Sign in with Auth0"
-        disabled={isBusy}
+        size="lg"
+        className="min-h-12 rounded-xl"
+        isDisabled={isBusy}
         onPress={() => {
           void onSignIn();
         }}
-      />
-      {isBusy && <ActivityIndicator accessibilityLabel="Signing in" />}
+      >
+        {isBusy && (
+          <ButtonSpinner color="white" accessibilityLabel="Signing in" />
+        )}
+        <ButtonText>Sign in with Auth0</ButtonText>
+      </Button>
     </Screen>
   );
 }

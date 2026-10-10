@@ -1,4 +1,4 @@
-import { ActivityIndicator } from 'react-native';
+import { Spinner } from '../components/ui/spinner';
 import { Screen } from '../components/Screen';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { useAuthSession } from '../features/auth/use-auth-session';
@@ -14,7 +14,10 @@ export function AppContent({ config }: { config: MobileConfig }) {
         title="Restoring your session"
         description="Checking your saved sign-in credentials."
       >
-        <ActivityIndicator accessibilityLabel="Restoring session" />
+        <Spinner
+          className="text-primary"
+          accessibilityLabel="Restoring session"
+        />
       </Screen>
     );
   }

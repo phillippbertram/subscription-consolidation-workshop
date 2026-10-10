@@ -57,33 +57,33 @@ export class ApiClient {
       );
       this.logs.set(config, log);
       try {
-      // Never attach credentials to a different API origin.
-      const destination = new URL(this.http.getUri(config), origin);
-      if (
-        destination.origin !== origin ||
-        destination.username ||
-        destination.password
-      ) {
-        throw new ApiError(
-          'The request must target the configured API.',
-          'invalid_request',
-        );
-      }
-      if (config.signal?.aborted) throw new axios.CanceledError();
-      let token: string;
-      try {
-        token = await getAccessToken();
-        if (!token.trim()) throw new Error('No access token.');
-      } catch {
-        // Do not expose SDK errors, which may contain authentication details.
-        throw new ApiError(
-          'Unable to restore your session. Sign out and sign in again.',
-          'authentication_required',
-        );
-      }
-      if (config.signal?.aborted) throw new axios.CanceledError();
-      config.headers.set('Authorization', `Bearer ${token}`);
-      return config;
+        // Never attach credentials to a different API origin.
+        const destination = new URL(this.http.getUri(config), origin);
+        if (
+          destination.origin !== origin ||
+          destination.username ||
+          destination.password
+        ) {
+          throw new ApiError(
+            'The request must target the configured API.',
+            'invalid_request',
+          );
+        }
+        if (config.signal?.aborted) throw new axios.CanceledError();
+        let token: string;
+        try {
+          token = await getAccessToken();
+          if (!token.trim()) throw new Error('No access token.');
+        } catch {
+          // Do not expose SDK errors, which may contain authentication details.
+          throw new ApiError(
+            'Unable to restore your session. Sign out and sign in again.',
+            'authentication_required',
+          );
+        }
+        if (config.signal?.aborted) throw new axios.CanceledError();
+        config.headers.set('Authorization', `Bearer ${token}`);
+        return config;
       } catch (error) {
         const failure = normalizeError(error);
         log.error(failure);
@@ -93,11 +93,13 @@ export class ApiClient {
 
     this.http.interceptors.response.use(
       (response) => {
-        this.logs.get(response.config)?.response(
-          response.status,
-          response.data,
-          response.headers['x-request-id'],
-        );
+        this.logs
+          .get(response.config)
+          ?.response(
+            response.status,
+            response.data,
+            response.headers['x-request-id'],
+          );
         return response;
       },
       (error: unknown) => {

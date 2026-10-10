@@ -87,34 +87,63 @@ The iOS Simulator can reach the Mac's loopback address. The BFF stays bound to `
 
 ## App structure
 
-| File                                     | Responsibility                                                               |
-| ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `app.config.ts`                          | Expo identity, Auth0 native plugin, and local iOS networking                 |
-| `src/App.tsx`                            | Composition root: validate configuration and mount safe-area/Auth0 providers |
-| `src/app/config.ts`                      | Validate the public configuration before enabling login                      |
-| `src/app/AppContent.tsx`                 | Select session restoration, login, or profile content from Auth0 state       |
-| `src/features/auth/LoginScreen.tsx`      | Render the signed-out screen                                                 |
-| `src/features/auth/use-auth-session.ts`  | Coordinate login/logout actions and their busy/error state                   |
-| `src/features/auth/auth-errors.ts`       | Map known SDK failures to safe messages                                      |
-| `src/features/profile/ProfileScreen.tsx` | Compose profile loading, errors, content, and actions                        |
-| `src/features/profile/ProfileCard.tsx`   | Present a validated profile through props                                    |
-| `src/features/profile/use-profile.ts`    | Load/reload the profile and cancel obsolete requests                         |
-| `src/api/api-client.ts`                  | Axios instance, interceptors, Zod response schemas, and safe API errors      |
-| `src/api/use-api-client.ts`              | Connect the client to the Auth0 Credentials Manager                          |
-| `src/components/`                        | Shared screen layout and error presentation                                  |
-| `src/theme.ts`                           | Small shared color and spacing constants                                     |
+| File                                                | Responsibility                                                                               |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `app.config.ts`                                     | Expo identity, Auth0 native plugin, and local iOS networking                                 |
+| `src/App.tsx`                                       | Composition root: validate configuration and mount safe-area, Gluestack, and Auth0 providers |
+| `src/app/config.ts`                                 | Validate the public configuration before enabling login                                      |
+| `src/app/AppContent.tsx`                            | Select session restoration, login, or profile content from Auth0 state                       |
+| `src/features/auth/LoginScreen.tsx`                 | Render the signed-out screen                                                                 |
+| `src/features/auth/use-auth-session.ts`             | Coordinate login/logout actions and their busy/error state                                   |
+| `src/features/auth/auth-errors.ts`                  | Map known SDK failures to safe messages                                                      |
+| `src/features/profile/ProfileScreen.tsx`            | Compose profile loading, errors, content, and actions                                        |
+| `src/features/profile/ProfileCard.tsx`              | Present a validated profile through props                                                    |
+| `src/features/profile/use-profile.ts`               | Load/reload the profile and cancel obsolete requests                                         |
+| `src/api/api-client.ts`                             | Axios instance, interceptors, Zod response schemas, and safe API errors                      |
+| `src/api/use-api-client.ts`                         | Connect the client to the Auth0 Credentials Manager                                          |
+| `src/components/`                                   | Shared screen layout and error presentation                                                  |
+| `src/components/ui/`                                | Locally owned Gluestack components and theme provider                                        |
+| `tailwind.config.js`                                | Class scanning and semantic color names                                                      |
+| `metro.config.js`, `babel.config.js`, `globals.css` | NativeWind transformation and Tailwind input                                                 |
 
 ### Patterns to explore
 
-Start with `App.tsx`, follow `AppContent.tsx` into each screen, and then read its hook. Features keep their screen, specialized components, and behavior together. Shared components contain presentation; the API layer owns HTTP and response validation. Component-specific styles stay beside the component, while repeated colors and spacing live in `theme.ts`.
+Start with `App.tsx`, follow `AppContent.tsx` into each screen, and then read its hook. Features keep their screen, specialized components, and behavior together. Shared components contain presentation; the API layer owns HTTP and response validation. Component-specific styling uses NativeWind classes beside the JSX. Semantic colors live in the Gluestack provider configuration; Tailwind supplies the spacing scale.
 
 `useAuthSession` wraps the Auth0 SDK without copying credentials or user identity into another store. `AppContent` calls it once and passes action state to its children: custom hooks share logic, but separate calls do not share local state. Login and profile are mutually exclusive views selected by session state. A navigation library becomes useful when authenticated screens need stacks, tabs, history, or deep links.
 
 `useProfile` represents loading, success, and failure as a discriminated union, so rendering can narrow the available data by `status`. Effect cleanup cancels the request and ignores late results. The profile screen is keyed by the authenticated identity, resetting its local state when the user changes. Profile data is hidden while logout is pending; a failed logout allows it to load again.
 
-This small app keeps remote data in its feature hook. Add a query/cache library when multiple screens share server data or need caching and invalidation. A UI component library can be introduced independently of these boundaries.
+This small app keeps remote data in its feature hook. Add a query/cache library when multiple screens share server data or need caching and invalidation. Gluestack UI implements presentation independently of these boundaries.
 
 Sources: [React custom hooks](https://react.dev/learn/reusing-logic-with-custom-hooks), [React Navigation authentication flows](https://reactnavigation.org/docs/auth-flow/).
+
+### Gluestack UI and NativeWind
+
+The app uses Gluestack Core 5.0.15 and Utils 5.0.6 with NativeWind 4.2.7 and Tailwind CSS 3.4.19. Gluestack's CLI supports this NativeWind v4 path; versions are pinned rather than mixing in the NativeWind v5 release candidate. Reanimated, Worklets, and SVG use the versions expected by Expo SDK 57.
+
+`src/components/ui` contains selected and adapted upstream components: Button, ButtonText, ButtonSpinner, Text, Card, and Spinner. These files belong to the app and can be edited. Gluestack supplies component behavior; NativeWind translates `className` utilities into native styles. For example:
+
+```tsx
+<Button variant="outline" isDisabled={isBusy} onPress={reload}>
+  <ButtonText>Reload profile</ButtonText>
+</Button>
+```
+
+ButtonText inherits the button's variant through its style context. Use `isDisabled` for Gluestack buttons. Feature components compose these primitives and keep API/authentication logic in their hooks.
+
+`GluestackUIProvider` applies the current light theme. Edit semantic RGB tokens in `src/components/ui/gluestack-ui-provider/config.ts`; `tailwind.config.js` maps them to classes such as `bg-primary` and `text-muted-foreground`. The provider is intentionally limited to the current screens; overlay/toast providers can be added when those components are introduced. Dark mode and web rendering are not part of this implementation.
+
+After pulling this change, rebuild the native development app because new native dependencies were added:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm mobile:ios
+```
+
+Restart an already running Metro process after changing Babel or Metro configuration. If it retains stale transforms, use `pnpm mobile:dev --clear`. Changing ordinary component classes only needs Fast Refresh.
+
+Sources: [Gluestack installation](https://gluestack.io/ui/docs/home/getting-started/installation), [Gluestack CLI and NativeWind v4 option](https://gluestack.io/ui/docs/home/getting-started/cli), [upstream component templates](https://github.com/gluestack/gluestack-ui/tree/6572e8745011c3a89fed4263fcb4fcd1972af04e/src/components/ui).
 
 ### API client
 
@@ -122,12 +151,12 @@ Sources: [React custom hooks](https://react.dev/learn/reusing-logic-with-custom-
 
 The response interceptor converts transport and HTTP failures into `ApiError` with a safe message, a `code`, and an optional HTTP `status`. Raw Axios errors are not exposed because they contain request headers. Cancellation uses `AbortSignal`, including a check after asynchronous token retrieval. The HTTP timeout starts when Axios dispatches the network request; it does not limit the SDK credential lookup. There is no automatic retry or separate refresh-token flow in the client.
 
-Every request receives a Zod response schema. `request()` unwraps `response.data`, validates it, and returns the inferred result type. The profile schema requires a UUID `userId` and a UTC ISO datetime `createdAt`; invalid responses become `ApiError` with code `invalid_response`, without exposing their payload. These checks validate the API contract; authorization is still enforced by the backend.
+Every request receives a Zod response schema. `request()` unwraps `response.data`, validates it, and returns the inferred result type. The profile schema requires a UUID `userId` and a UTC ISO datetime `createdAt`; invalid responses become `ApiError` with code `invalid_response`. Development API logs still include the HTTP response body. These checks validate the API contract; authorization is still enforced by the backend.
 
 Inside a component under `Auth0Provider`:
 
 ```ts
-const api = useApiClient(config.apiUrl);
+const api = useApiClient();
 const profile = await api.getProfile();
 // For an effect that must cancel obsolete requests:
 const controller = new AbortController();
@@ -135,6 +164,14 @@ const cancellableProfile = await api.getProfile({ signal: controller.signal });
 ```
 
 For another endpoint, define its response schema and use `api.get(path, schema, options)` or `api.post(path, body, schema, options)`. `api.request(method, path, schema, options)` supports the remaining HTTP methods. Options support query parameters and cancellation; callers do not configure authentication headers. Use a schema such as `z.unknown()` only when intentionally accepting an unstructured response.
+
+`useApiClient()` reads the validated API URL from the app configuration itself. Screens and feature hooks do not pass it through props. The standalone `ApiClient` still accepts an origin and token provider explicitly.
+
+### Debug API traffic
+
+In development builds, `src/api/api-logger.ts` logs request and response events to the JavaScript console (React Native DevTools, opened with `j` in Metro). Each call has a matching `[API #n]` prefix, method, URL, query parameters, request body, status, elapsed milliseconds, and response body. Successful responses also include the backend's `X-Request-Id`. HTTP, network, credential, cancellation, and schema failures produce error events. A successful HTTP response can therefore be followed by an `invalid_response` error if it fails Zod validation.
+
+Synthetic request and response bodies are logged without redaction. Headers, credentials, and raw Axios/SDK error objects are not logged. Logging is disabled when React Native's `__DEV__` flag is false. Do not use real customer or payment payloads in this learning app.
 
 Sources: [Axios instances](https://axios-http.com/docs/instance), [Axios interceptors](https://axios-http.com/docs/interceptors), [Zod parsing and inferred types](https://zod.dev/basics).
 

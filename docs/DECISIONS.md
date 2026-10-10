@@ -47,6 +47,8 @@ At the user's request, the mobile `ApiClient` uses Axios with request/response i
 
 The mobile app groups screens, hooks, and specialized components by feature (`auth` and `profile`). `App.tsx` composes providers; `AppContent` selects content from SDK session state. Shared UI and the API client remain outside features. The current two mutually exclusive authentication views use conditional rendering; navigation and server-state caching libraries can be evaluated when additional screens need them. See the [mobile structure guide](../apps/mobile/README.md#app-structure).
 
+At the user's request, the mobile UI uses selected, locally owned Gluestack components with NativeWind v4 and Tailwind v3. The light theme uses semantic color tokens. The provider remains minimal until overlays or toasts are needed. `useApiClient()` reads the configured origin internally. Development-only API logging records method, URL, parameters, bodies, status, timing, and safe error details; credentials and headers are omitted.
+
 ## Repository: pnpm workspaces
 
 **Working baseline:** A private monorepo with `pnpm-workspace.yaml` and one shared `pnpm-lock.yaml`. Workspace patterns: `apps/*`, `services/*`, `packages/*`, and `infra`. Create packages only when needed; P01 starts with `services/bff`, and P03 adds `infra`.

@@ -3,7 +3,7 @@ let nextRequestId = 0;
 interface Failure {
   code: string;
   message: string;
-  status?: number;
+  status?: number | undefined;
 }
 
 export function startApiLog(
