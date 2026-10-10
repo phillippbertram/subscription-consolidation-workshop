@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { type AppEnv, authenticate, requireScopes } from './auth.js';
 import type { AuthConfig } from './config.js';
+import type { UserStore } from './users.js';
 
-export function createApp(authConfig: AuthConfig) {
+export function createApp(authConfig: AuthConfig, users: UserStore) {
   const app = new Hono<AppEnv>();
 
   app.use('*', async (c, next) => {
@@ -28,7 +29,21 @@ export function createApp(authConfig: AuthConfig) {
 
   // Register all user routes below this middleware; authentication is the default.
   app.use('*', authenticate(authConfig));
-  app.get('/v1/me', requireScopes('read:me'), (c) => c.json(c.get('auth')));
+  app.get('/v1/me', requireScopes('read:me'), async (c) => {
+    if (c.get('machineIdentity')) {
+      return c.json(
+        {
+          error: {
+            code: 'user_identity_required',
+            requestId: c.get('requestId'),
+          },
+        },
+        403,
+      );
+    }
+    const { issuer, subject } = c.get('auth');
+    return c.json(await users.getOrCreate({ issuer, subject }));
+  });
 
   return app;
 }

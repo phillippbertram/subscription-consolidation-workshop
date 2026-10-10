@@ -1,0 +1,24 @@
+{
+  "name": "@premiumpass/infra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit",
+    "synth": "cdk synth --no-lookups --quiet",
+    "cdk": "cdk",
+    "deploy": "tsx --env-file-if-exists=.env src/deploy.ts deploy",
+    "bootstrap": "tsx --env-file-if-exists=.env src/deploy.ts bootstrap"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.273.0",
+    "constructs": "10.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "aws-cdk": "2.1145.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
+  }
+}

@@ -13,6 +13,7 @@ export type AppEnv = {
   Variables: {
     auth: AuthIdentity;
     requestId: string;
+    machineIdentity: boolean;
   };
 };
 
@@ -101,6 +102,11 @@ export function authenticate(config: AuthConfig) {
         return unauthorized(c);
       }
 
+      c.set(
+        'machineIdentity',
+        payload.gty === 'client-credentials' ||
+          payload.sub.endsWith('@clients'),
+      );
       identity = {
         issuer: config.issuer,
         subject: payload.sub,

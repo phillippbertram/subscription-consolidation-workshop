@@ -13,7 +13,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P00 | Prepare the project for agents | — | complete |
 | P01 | Local HTTP skeleton | P00 | complete |
 | P02 | Backend Auth0 token verification | P01 | complete |
-| P03 | Small AWS stack and user persistence | P01; P02 for a protected live request | open |
+| P03 | Small AWS stack and user persistence | P01; P02 for a protected live request | partial |
 | P04 | Mobile login through to the user's profile | P02, P03 | open |
 | P05 | Subscription and entitlement domain rules | P01, P02, P03 | open |
 | P06 | Stripe purchase and reliable processing | P02, P03, P05 | open |
@@ -22,7 +22,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P09 | Reconciliation and expiration | P07, P08 | open |
 | P10 | CI/CD, operations, and final demo | P04, P06–P09 | open |
 
-**Next task:** P03: small AWS stack and user persistence, still without automated tests. Local work and live deployment have separate acceptance criteria.
+**Next step:** P03 local implementation is finished. Live deployment and verification remain explicitly deferred; they require an authorized development account/profile, region, and real Auth0 user tokens. P04 can follow once its backend prerequisite is available.
 
 ## P00 Prepare the project for agents
 
@@ -71,6 +71,18 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 **Local acceptance:** CDK synthesis, template inspection for resources/integration/IAM, and manual ownership mapping checks succeed. The template contains no secrets.
 
 **Live acceptance:** Deploy to the authorized development account, check health and a protected request; repeated calls return the same user ID. Document account, region, and verified stack. If access or deployment authorization is missing, finish the local portion and mark the task `partial`, identifying the outstanding live evidence.
+
+**Evidence from October 10, 2026 — local portion:** Added the `infra` workspace with CDK 2.273.0 and CLI 2.1145.0. `pnpm check` and `pnpm synth` passed under Node 24.19.0/pnpm 12.10.1. Inspected the generated HTTP API routes (`AuthorizationType: NONE`), payload 2.0 Lambda integration, Node 24 ESM asset, parameter references, DynamoDB keys/billing/removal policy, log retention, throttling/concurrency, and table/log-scoped IAM. No secrets are embedded in the template. The installed Auth0 skill assets are excluded from application lint/format checks; skill files were not modified.
+
+**Manual persistence evidence:** Used the official checksum-verified DynamoDB Local 3.3.1 archive with dummy credentials and an in-memory database. Repeated requests retained the same user ID and creation time. Twenty concurrent first requests produced one mapping and one profile. Different subjects and the same subject under another issuer produced different IDs; a fresh store instance recovered the persisted profile. A temporary local HTTPS JWKS server and generated RSA tokens exercised real HTTP ownership checks: forged query/header user IDs did not change ownership. Missing credentials returned 401; missing scope and machine tokens returned 403 without new database rows. A deliberately inconsistent mapping failed closed with a generic 500; a missing table also returned 500 while health stayed 200. Lambda rejected local endpoint configuration; the local entry rejected non-loopback/non-HTTP/path endpoints. No tokens or keys were logged.
+
+**Artifact evidence:** Imported the actual CDK `index.mjs` asset and invoked its handler with an HTTP API v2 event. Using process-local AWS SDK endpoint overrides and dummy credentials solely for this manual invocation, it returned the same persisted profile. The built local server also returned that profile and shut down cleanly. These local invocations do not prove API Gateway behavior or IAM enforcement in AWS. No automated tests or saved verification fixtures were added. Temporary HTTP/JWKS and DynamoDB servers were stopped; disposable TLS files were removed.
+
+**Outstanding live evidence:** No bootstrap, deployment, AWS API request, or real Auth0 login was performed. Account/profile/region selection, deployed health/protected requests, IAM behavior, and repeated requests for two actual demo users remain unverified. P03 stays `partial` because its live acceptance criteria are deliberately outside the current request. Commands and configuration are in [infra/README.md](../infra/README.md).
+
+**Routing update from October 10, 2026:** Replaced individual Gateway route declarations with the BFF's `$default` integration. Hono owns BFF paths and methods; future separate handlers can use explicit Gateway routes. `pnpm check` and `pnpm synth` passed. Inspected the generated template: exactly one `$default` route with `AuthorizationType: NONE`, one payload 2.0 Lambda proxy integration, and invoke permission restricted to this HTTP API. The separate `$default` stage retains its 10 requests/second and burst-20 throttling. Documentation links and `git diff --check` passed. No tests or deployment were performed; live acceptance remains outstanding.
+
+**Deployment script update from October 10, 2026:** Added `pnpm deploy:dev` and the separate `pnpm bootstrap:dev`, using ignored `infra/.env` configuration and a versioned example. Both verify the selected profile's account against `AWS_ACCOUNT_ID` before starting CDK. `--dry-run` validates configuration and prints commands without invoking AWS or CDK. `pnpm check` passed; manually previewed both modes with synthetic configuration and confirmed that an invalid account ID exits with an error. No automated tests were added. Real STS verification, bootstrap, and deployment were not executed; the live acceptance criteria remain outstanding.
 
 ## P04 Mobile login through to the user's profile
 

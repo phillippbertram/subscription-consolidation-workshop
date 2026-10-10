@@ -226,7 +226,7 @@ Trigger reconciliation and mock scenarios through local development scripts with
 
 ### Link accounts reliably
 
-Create an internal `userId` once from the validated `iss`/`sub` pair. Email addresses are not stable keys. Create the `stripeCustomerId` mapping only on the server and persist it before checkout.
+Create an internal `userId` once from the validated `iss`/`sub` pair. P03 uses a conditional DynamoDB transaction to create both the mapping and a minimal profile (`userId`, `createdAt`); concurrent first requests converge on the winning mapping. User profile routes reject machine identities. Email addresses are not stable keys. Create the `stripeCustomerId` mapping only on the server and persist it before checkout.
 
 The test website signs in with the same Auth0 account and connection as the app. Do not automatically merge two different Auth0 identities, even when their email addresses match.
 
@@ -583,7 +583,7 @@ pnpm supports this workspace structure, and `workspace:*` requires local package
 
 ### Reproducible infrastructure
 
-CDK creates the HTTP API, Lambda functions, table, queue/DLQ, custom bus, rules, schedules, log groups, and IAM roles. HTTP routes have no Gateway authorizer. Supply issuer and audience as non-secret backend configuration; the HTTP Lambda needs outbound HTTPS access to the configured Auth0 JWKS endpoint. Populate real secret values separately. Initially configure Auth0 applications and Stripe test products manually and document their non-secret IDs.
+CDK creates the HTTP API, Lambda functions, table, queue/DLQ, custom bus, rules, schedules, log groups, and IAM roles. The HTTP API uses a `$default` integration for the BFF; Hono owns its paths and methods. Add explicit Gateway routes only for separate integrations such as the Stripe webhook Lambda; these take precedence over the catch-all. HTTP routes have no Gateway authorizer. Supply issuer and audience as non-secret backend configuration; the HTTP Lambda needs outbound HTTPS access to the configured Auth0 JWKS endpoint. Populate real secret values separately. Initially configure Auth0 applications and Stripe test products manually and document their non-secret IDs.
 
 Bootstrap the selected account/region combination before the first deployment. Bootstrapping creates resources such as deployment artifact storage and is separate from deploying the application stack. [AWS CDK Bootstrapping](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html)
 

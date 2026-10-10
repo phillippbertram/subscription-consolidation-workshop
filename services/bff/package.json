@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false --env-file-if-exists=.env src/local.ts",
     "start": "node --env-file-if-exists=.env dist/local.js",
+    "db:init": "tsx scripts/init-local-db.ts",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist"
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1149.0",
+    "@aws-sdk/lib-dynamodb": "3.1149.0",
     "@hono/aws-lambda": "1.0.1",
     "@hono/node-server": "2.1.4",
     "hono": "4.13.13",

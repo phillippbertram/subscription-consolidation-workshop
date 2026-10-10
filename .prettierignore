@@ -8,3 +8,4 @@ cdk.out/
 work/
 .codex-log/
 pnpm-lock.yaml
+.agents/

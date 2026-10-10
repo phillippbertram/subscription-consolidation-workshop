@@ -1,0 +1,22 @@
+name: premiumpass-local
+
+services:
+  dynamodb:
+    image: amazon/dynamodb-local:3.3.1
+    # The named volume must be writable; no host directories are mounted.
+    user: '0:0'
+    working_dir: /home/dynamodblocal
+    command:
+      - '-jar'
+      - DynamoDBLocal.jar
+      - '-sharedDb'
+      - '-dbPath'
+      - ./data
+      - '-disableTelemetry'
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      - dynamodb-data:/home/dynamodblocal/data
+
+volumes:
+  dynamodb-data:

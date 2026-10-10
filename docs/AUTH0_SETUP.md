@@ -121,13 +121,46 @@ Auth0's allowed origins do not configure BFF CORS. Browser-to-API CORS must be a
 
 ## 8. Obtain a token and check the backend manually
 
-For the real user flow, obtain an access token through the Native client in P04 or SPA in P06 with the audience and scopes above. An existing compatible demo client can also provide one. Configuring an API alone does not create an interactive login client.
+### Get a user token now with the Auth0 CLI
 
-Optionally, before those clients exist, create `PremiumPass API Smoke` as a **Machine to Machine** application. Authorize it only for `PremiumPass API` with `read:me`. Set the API's **Client Access** policy to **Per-app authorization** and grant that M2M client access. Use Auth0's generated client-credentials request with its Client ID, secret, and the Custom API audience. Keep the secret and resulting token out of project files and logs. [Call an API using Client Credentials](https://auth0.com/docs/get-started/authentication-and-authorization-flow/client-credentials-flow/call-your-api-using-the-client-credentials-flow).
+The CLI can perform browser login before the mobile or web application code exists. Register `PremiumPass Mobile` as a **Native** application, or use a compatible demo SPA registration. Enable its user connection and user-delegated API access with `read:me`; with RBAC enabled, assign that permission to the demo user as described in section 3. Use this application's Client ID, not an M2M client ID.
 
-The current P02 verifier accepts a valid M2M token with `read:me`, but its subject identifies an application, not a person. This checks token verification only. It does not prove user login and must not be used as a demo user's identity for later persistence or checkout. No M2M application is required for normal mobile/web operation.
+Install the CLI on macOS and connect it to the intended tenant:
 
-Start the BFF with `pnpm dev`, set `ACCESS_TOKEN` temporarily in your local shell, and run:
+```sh
+brew install auth0
+auth0 login
+```
+
+This authenticates the CLI to manage the tenant. The following command performs a separate application login as your demo user:
+
+```sh
+auth0 test token YOUR_APPLICATION_CLIENT_ID \
+  --audience "https://api.premiumpass.example" \
+  --scopes "openid,profile,email,read:me"
+```
+
+Replace the audience with the exact `AUTH0_AUDIENCE` value. If the BFF uses a custom-domain issuer, add `--domain "login.example.com"` with that hostname. [CLI token command](https://auth0.github.io/auth0-cli/auth0_test_token.html).
+
+Follow the CLI prompts and sign in through the browser with a synthetic demo user. The CLI may request permission to temporarily add its local callback URL to the application and remove it afterward. This callback belongs to the CLI's local login flow, not the BFF. [Auth0 CLI login walkthrough](https://developer.auth0.com/resources/labs/tools/auth0-cli-basics).
+
+After the CLI confirms that it copied the access token to the clipboard, capture it in your macOS terminal:
+
+```sh
+ACCESS_TOKEN="$(pbpaste)"
+```
+
+Use the **access token**, not the ID token or the CLI's tenant-management token. Keep it out of project files and logs. Clipboard copying is implemented by the [official CLI](https://github.com/auth0/auth0-cli/blob/main/internal/cli/test.go).
+
+Later, the Native client in P04 and SPA in P06 obtain user tokens through their SDKs. The current CLI flow does not require implementing those clients first.
+
+### Machine tokens do not provide a user profile
+
+The verifier can authenticate a valid M2M token, but `/v1/me` rejects it with `403 user_identity_required`, even with `read:me`. Its subject identifies an application, not a person; no profile is created. A dashboard Client Credentials example therefore cannot supply a successful user-profile request. No M2M application is needed for the CLI user-login flow above.
+
+### Call the local backend
+
+Start DynamoDB Local and the BFF with `pnpm dev`. In the terminal containing `ACCESS_TOKEN`, run:
 
 ```sh
 curl -i http://127.0.0.1:3000/health
@@ -136,7 +169,7 @@ curl -i -H "Authorization: Bearer $ACCESS_TOKEN" http://127.0.0.1:3000/v1/me
 unset ACCESS_TOKEN
 ```
 
-Expect 200 for health, 401 without a token, and 200 with a valid token containing `read:me`. The last response currently contains `issuer`, `subject`, and `scopes`; persisted profile data follows in P03. These are manual requests, not an automated test suite.
+With DynamoDB running and its table created, expect 200 for health, 401 without a token, and 200 with a valid user token containing `read:me`. The last response contains the persisted `userId` and `createdAt`. Follow the [local database setup](../infra/README.md#local-dynamodb-and-manual-requests) first. These are manual requests, not an automated test suite.
 
 ## 9. Optional refresh tokens
 

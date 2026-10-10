@@ -15,6 +15,7 @@ As of October 10, 2026. This document distinguishes agreed project direction fro
 | D07 | Hono as the HTTP framework | Shared app definition, separate Node and Lambda entry points; selection delegated by the user |
 | D08 | No automated tests in the learning project | No test framework; use typechecking, linting, builds, and manual functional checks |
 | D09 | English throughout the project | Code, comments, messages, configuration examples, and documentation use English |
+| D10 | HTTP API `$default` integration for the BFF | Hono owns BFF routes; separate handlers can use explicit Gateway routes with higher priority |
 
 ## Framework: Hono
 
@@ -28,7 +29,13 @@ Sources: [Hono on AWS Lambda](https://hono.dev/docs/getting-started/aws-lambda),
 
 P02 verifies Auth0 access tokens directly in the shared Hono app, with no Gateway authorizer. `AUTH0_ISSUER` and `AUTH0_AUDIENCE` are required in both entry points. The issuer must be an HTTPS origin with its trailing slash; JWKS is derived from that origin and cannot be selected by a request. Tokens need a non-empty `kid`; scopes come from the verified `scope` claim.
 
-Each app instance caches JWKS for ten minutes, times out retrieval after five seconds, and limits fetch attempts to once every 30 seconds, including outages. Invalid credentials return 401, insufficient scopes return 403, and unavailable keys without a usable cache return 503. Health is public; user routes registered afterward require authentication by default. `/v1/me` returns issuer, subject, and scopes until P03 adds persistence.
+Each app instance caches JWKS for ten minutes, times out retrieval after five seconds, and limits fetch attempts to once every 30 seconds, including outages. Invalid credentials return 401, insufficient scopes return 403, and unavailable keys without a usable cache return 503. Health is public; user routes registered afterward require authentication by default. `/v1/me` now resolves the verified issuer/subject through DynamoDB and returns `userId` and `createdAt`. Machine identities cannot access this user route.
+
+## P03 infrastructure and user persistence
+
+The development stack is environment-agnostic and synthesizes without AWS lookups. Public Auth0 values are deployment parameters. It contains only HTTP API, BFF, DynamoDB, Lambda logs, and a scoped execution role; later tasks add asynchronous resources. The table uses `RETAIN`; logs use seven-day retention and are deleted with the stack.
+
+User storage remains inside the BFF until another service needs it. `UserStore` has no Hono or AWS dependency; `DynamoDbUserStore` implements it using consistent reads and a conditional transaction for mapping and profile creation. SHA-256 of JSON `[issuer, subject]` gives the mapping key; a random UUID gives the internal ID. There is no email-based linking or fallback user store. Local DynamoDB is explicitly configured with a loopback endpoint and dummy credentials. See the [infrastructure guide](../infra/README.md) for commands and IAM boundaries.
 
 ## Repository: pnpm workspaces
 

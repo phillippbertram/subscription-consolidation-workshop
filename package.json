@@ -15,7 +15,13 @@
     "format": "prettier --write \"**/*.{ts,js,mjs,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,js,mjs,json,yaml,yml}\"",
     "build": "pnpm -r build",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build",
+    "synth": "pnpm --filter @premiumpass/infra synth",
+    "deploy:dev": "pnpm --filter @premiumpass/infra run deploy",
+    "bootstrap:dev": "pnpm --filter @premiumpass/infra run bootstrap",
+    "db:up": "docker compose up -d dynamodb && pnpm --filter @premiumpass/bff run db:init",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs --tail=100 dynamodb"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
