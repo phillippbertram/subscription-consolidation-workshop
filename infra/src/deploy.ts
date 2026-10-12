@@ -41,6 +41,16 @@ function main() {
   if (mode === 'deploy') {
     const issuer = required('AUTH0_ISSUER');
     const audience = required('AUTH0_AUDIENCE');
+    const stripeSecretArn = required('STRIPE_SECRET_ARN');
+    if (
+      !stripeSecretArn.startsWith(
+        `arn:aws:secretsmanager:${region}:${account}:secret:`,
+      )
+    ) {
+      throw new Error(
+        'STRIPE_SECRET_ARN must reference a secret in the configured AWS account and region.',
+      );
+    }
     // Match the CloudFormation parameter constraints before invoking CDK.
     if (!/^https:\/\/[a-zA-Z0-9.-]+\/$/.test(issuer)) {
       throw new Error(
@@ -55,6 +65,8 @@ function main() {
       `Auth0Issuer=${issuer}`,
       '--parameters',
       `Auth0Audience=${audience}`,
+      '--parameters',
+      `StripeSecretArn=${stripeSecretArn}`,
       '--outputs-file',
       'cdk.out/deploy-outputs.json',
     );

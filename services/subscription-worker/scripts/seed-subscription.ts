@@ -1,17 +1,14 @@
-import {
-  DynamoDBClient,
-  TransactionCanceledException,
-} from '@aws-sdk/client-dynamodb';
-import {
-  DynamoDBDocumentClient,
-  TransactWriteCommand,
-} from '@aws-sdk/lib-dynamodb';
+import { randomUUID } from 'node:crypto';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { z } from 'zod';
+import { DynamoDbProcessingStore } from '../src/processing/dynamodb-processing.js';
+import { RevisionConflict } from '../src/processing/contracts.js';
 import {
   GRACE_MS,
   subscriptionSchema,
   type Subscription,
-} from '../src/domain/subscriptions.js';
+} from '@premiumpass/domain';
 
 const scenarios = [
   'free',
@@ -141,61 +138,71 @@ switch (scenario) {
 try {
   const apple = record('apple_mock', changes);
   const google = record('google_mock', { accessUntil: at(2 * hour) });
-  await documentClient.send(
-    new TransactWriteCommand({
-      TransactItems: [
-        {
-          ConditionCheck: {
-            TableName: tableName,
-            Key: { pk, sk: 'PROFILE' },
-            ConditionExpression: 'attribute_exists(pk) AND userId = :userId',
-            ExpressionAttributeValues: { ':userId': userId },
-          },
-        },
-        ...[apple, google].map((subscription) => {
-          const key = {
-            pk,
-            sk: `SUB#${subscription.provider}#${subscription.providerSubscriptionId}`,
-          };
-          const common = {
-            TableName: tableName,
-            ConditionExpression:
-              'attribute_not_exists(pk) OR demoScenario = :marker',
-            ExpressionAttributeValues: { ':marker': marker },
-          };
-          const keep =
-            scenario !== 'free' &&
-            (subscription.provider === 'apple_mock' || scenario === 'multiple');
-          return keep
-            ? {
-                Put: {
-                  ...common,
-                  Item: { ...key, ...subscription, demoScenario: marker },
-                },
-              }
-            : { Delete: { ...common, Key: key } };
-        }),
-      ],
-    }),
-  );
+  const store = new DynamoDbProcessingStore(documentClient, tableName);
+  for (let attempt = 0; ; attempt++) {
+    const aggregate = await store.load(userId!);
+    const records = [apple, google].map((subscription) => ({
+      ...subscription,
+      revision:
+        (aggregate.subscriptions.find(
+          (s) =>
+            s.provider === subscription.provider &&
+            s.providerSubscriptionId === subscription.providerSubscriptionId,
+        )?.revision ?? 0) + 1,
+    }));
+    const keep = (subscription: Subscription) =>
+      scenario !== 'free' &&
+      (subscription.provider === 'apple_mock' || scenario === 'multiple');
+    const subscriptions = aggregate.subscriptions.filter(
+      (s) =>
+        !records.some(
+          (record) =>
+            record.provider === s.provider &&
+            record.providerSubscriptionId === s.providerSubscriptionId,
+        ),
+    );
+    subscriptions.push(...records.filter(keep));
+    const writes = records.map((subscription) => {
+      const key = {
+        pk,
+        sk: `SUB#${subscription.provider}#${subscription.providerSubscriptionId}`,
+      };
+      const common = {
+        TableName: tableName,
+        ConditionExpression:
+          'attribute_not_exists(pk) OR demoScenario = :marker',
+        ExpressionAttributeValues: { ':marker': marker },
+      };
+      return keep(subscription)
+        ? {
+            Put: {
+              ...common,
+              Item: { ...key, ...subscription, demoScenario: marker },
+            },
+          }
+        : { Delete: { ...common, Key: key } };
+    });
+    try {
+      await store.commit(aggregate, subscriptions, writes, new Date(now), {
+        eventId: `local-demo-${randomUUID()}`,
+        correlationId: randomUUID(),
+      });
+      break;
+    } catch (error) {
+      if (!(error instanceof RevisionConflict) || attempt >= 2) throw error;
+    }
+  }
   console.info(
     `Applied ${scenario} to the two P05 demo records for ${userId}. Reload the app. Other subscriptions were preserved.`,
   );
   if (scenario === 'expiring')
     console.info(`Access expires at ${at(30_000)} without another event.`);
 } catch (error) {
-  const reasons =
-    error instanceof TransactionCanceledException
-      ? error.CancellationReasons
-      : undefined;
   console.error(
-    reasons?.[0]?.Code === 'ConditionalCheckFailed'
-      ? 'This user profile does not exist in DynamoDB Local. Point the BFF at the Compose database, reload the app, and use the internal user ID shown there.'
-      : reasons?.some((reason) => reason.Code === 'ConditionalCheckFailed')
-        ? 'A reserved demo key contains an unmarked record. No data was changed.'
-        : error instanceof Error
-          ? error.message
-          : 'Unable to seed the local scenario.',
+    error instanceof Error
+      ? error.message
+      : 'Unable to seed the local scenario.',
+    'Check that the local profile exists and reserved demo keys contain only marked demo records. Reload and retry if another writer is active.',
   );
   process.exitCode = 1;
 } finally {

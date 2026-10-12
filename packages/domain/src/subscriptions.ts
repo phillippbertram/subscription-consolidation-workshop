@@ -70,6 +70,8 @@ export function deriveEntitlements(
   subscriptions: readonly Subscription[],
   now: Date,
 ) {
+  // Recompute the union of valid grants instead of toggling one user-wide flag.
+  // A canceled subscription must not erase access from another valid provider.
   const evaluatedAt = now.toISOString();
   const grants: {
     provider: Provider;

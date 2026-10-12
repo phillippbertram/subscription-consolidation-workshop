@@ -1,35 +1,9 @@
-import pino from 'pino';
 import { createMiddleware } from 'hono/factory';
 import type { AppEnv } from './auth.js';
-
-const levels = { debug: 10, info: 20, warn: 30, error: 40, silent: 50 };
-export type LogLevel = keyof typeof levels;
-
-export function readLogLevel(
-  env: NodeJS.ProcessEnv,
-  fallback: LogLevel = 'info',
-): LogLevel {
-  const value = env.LOG_LEVEL ?? fallback;
-  if (!Object.hasOwn(levels, value)) {
-    throw new Error('LOG_LEVEL must be debug, info, warn, error, or silent.');
-  }
-  return value as LogLevel;
-}
-
-export function createLogger(level: LogLevel) {
-  return pino(
-    {
-      level,
-      base: { service: 'premiumpass-bff' },
-      timestamp: pino.stdTimeFunctions.isoTime,
-      formatters: { level: (label) => ({ level: label }) },
-    },
-    pino.destination({ dest: 1, sync: true }),
-  );
-}
+import { createLogger, type LogLevel } from '@premiumpass/logging';
 
 export function requestLogger(level: LogLevel) {
-  const logger = createLogger(level);
+  const logger = createLogger(level, 'premiumpass-bff');
   return createMiddleware<AppEnv>(async (c, next) => {
     const startedAt = performance.now();
     const request = {

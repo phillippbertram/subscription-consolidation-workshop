@@ -72,7 +72,7 @@ AUTH0_AUDIENCE=https://api.premiumpass.example
 
 Use the domain through which clients actually authenticate. With an existing custom domain, use its issuer consistently in the BFF and clients; tokens issued through the tenant domain and custom domain have different issuer values. The issuer includes `https://` and a trailing `/`; the client SDK's domain value is only the hostname. [Auth0 custom domains](https://auth0.com/docs/customize/custom-domains/configure-features-to-use-custom-domains).
 
-The backend derives `https://<domain>/.well-known/jwks.json` from that issuer. No client ID, client secret, Management API token, or callback URL belongs in the BFF configuration. Restart `pnpm dev` after changing `.env`.
+The backend derives `https://<domain>/.well-known/jwks.json` from that issuer. No client ID, client secret, Management API token, or callback URL belongs in the BFF configuration. Restart `pnpm dev:api` after changing `.env`.
 
 ## 5. Configure the Native application for P04
 
@@ -117,9 +117,9 @@ Create `PremiumPass Web` as a **Single Page Application**. It has its own Client
 
 The React SDK uses Authorization Code with PKCE. The web app requests `openid profile email read:me write:checkout` and the Custom API audience. Do not ship a client secret to the browser. [SPA dashboard configuration](https://auth0.com/docs/quickstart/spa/react) · [SPA SDK](https://auth0.com/docs/libraries/auth0-single-page-app-sdk).
 
-Checkout additionally requires a verified email on the Auth0 demo account. The backend obtains it from `/userinfo` with the already validated access token and compares the returned subject. The SPA already requests the required `openid` and `email` scopes; no custom claims or Management API credentials are needed. Complete the email verification flow and sign in again before checkout. See [verified email prefill](STRIPE_SETUP.md#verified-email-prefill).
+Checkout additionally requires a verified email on the Auth0 demo account. The backend obtains it from `/userinfo` with the already validated access token and compares the returned subject. The SPA already requests the required `openid` and `email` scopes; no custom claims or Management API credentials are needed. Complete the email verification flow and sign in again before checkout. See [verified email prefill](PAYMENTS.md#checkout-and-recovery).
 
-Auth0's allowed origins do not configure BFF CORS. The local BFF implements CORS for `WEB_ORIGIN` (default `http://localhost:5173`). Follow the [Stripe/web setup](STRIPE_SETUP.md) to configure both apps. Stripe return URLs also have a separate purpose from Auth0 callbacks.
+Auth0's allowed origins do not configure BFF CORS. The local BFF implements CORS for `WEB_ORIGIN` (default `http://localhost:5173`). Follow the [Stripe/web setup](PAYMENTS.md#local-startup) to configure both apps. Stripe return URLs also have a separate purpose from Auth0 callbacks.
 
 ## 8. Obtain a token and check the backend manually
 
@@ -162,7 +162,7 @@ The verifier can authenticate a valid M2M token, but `/v1/me` rejects it with `4
 
 ### Call the local backend
 
-Start DynamoDB Local and the BFF with `pnpm dev`. In the terminal containing `ACCESS_TOKEN`, run:
+Start DynamoDB Local with `pnpm local:up` and the BFF with `pnpm dev:api`. In the terminal containing `ACCESS_TOKEN`, run:
 
 ```sh
 curl -i http://127.0.0.1:3000/health

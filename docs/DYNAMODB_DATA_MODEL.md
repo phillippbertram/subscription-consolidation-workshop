@@ -1,6 +1,6 @@
 # DynamoDB data model
 
-See the [Stripe flow diagrams](STRIPE_FLOW.md) for checkout, DynamoDB relationships, subscription processing, and entitlement evaluation.
+See the [payments guide](PAYMENTS.md) for checkout, subscription processing, and access rules.
 
 This reference describes the records currently read by the BFF and written by the BFF or the local demo script. For implementation progress and verification evidence, see [P03 in the task plan](TASKS.md#p03-small-aws-stack-and-user-persistence). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
 
@@ -110,7 +110,7 @@ Existing profiles are read without updating their creation time. The profile flo
 
 ## Scope and source files
 
-The implemented model stores no email addresses, display names, tokens, materialized entitlements, event markers, outbox entries, or mock provider state. Those future domain records remain in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
+The implemented model stores no email addresses, display names, tokens, or separate mock provider state. Subscription processing records are documented below; future mock provider state remains in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
 
 | Source | Responsibility |
 |---|---|
@@ -165,9 +165,9 @@ All fields except the local marker are required. JSON example:
 
 Reads use `pk = USER#<resolved-userId>` and `begins_with(sk, 'SUB#')`, `ConsistentRead: true`, and pagination. Zod strips persistence-only fields from API responses. A malformed record or ownership/key mismatch fails closed with 500. Unknown product/status strings remain visible for diagnosis and grant nothing. There is no TTL: expiration is checked during API access even when the row is still present.
 
-The local CLI transaction checks that the profile exists, then puts/deletes only `demo-p05-apple_mock` and `demo-p05-google_mock`. Each write requires either an absent record or the exact demo marker. `free` removes those two records; other subscriptions are preserved. Demo revisions restart at 1 with each explicitly selected scenario. Real provider monotonic revisions and aggregate concurrency are P06 responsibilities.
+The local CLI transaction checks that the profile exists, then puts/deletes only `demo-p05-apple_mock` and `demo-p05-google_mock`. Each write requires either an absent record or the exact demo marker. `free` removes those two records; other subscriptions are preserved. Existing demo source revisions increase per scenario application; deleting and recreating a demo starts that source at 1. The CLI shares the processor aggregate CAS, writes a fresh entitlement snapshot, and emits a pending outbox event.
 
-See [subscription policy and scenarios](SUBSCRIPTIONS.md) for response examples and manual steps. There is no stored `ENTITLEMENTS` record, owner index, synchronization metadata beyond `verifiedAt`, or event/outbox record yet.
+See the [access policy](PAYMENTS.md#access-policy) and [manual checks](PAYMENTS.md#manual-checks) for endpoints and scenarios. The following processing records complement those subscription rows; API access is still recalculated from current time and `SUB` records.
 
 ## Stripe customer and checkout records
 
@@ -195,4 +195,45 @@ Synthetic completed customer mapping example:
 }
 ```
 
-All lookups are consistent point reads. Customer intent creation is conditional; forward/reverse mappings are one transaction. Attempt reservation atomically creates the request and compares/replaces the active pointer. Saving the session requires the original fingerprint and an absent or identical session ID. Only a Stripe-confirmed expired session permits a new attempt. These records never grant entitlements. See [checkout recovery](STRIPE_SETUP.md#retries-and-recovery) for ambiguity windows and manual recovery boundaries.
+All lookups are consistent point reads. Customer intent creation is conditional; forward/reverse mappings are one transaction. Attempt reservation atomically creates the request and compares/replaces the active pointer. Saving the session requires the original fingerprint and an absent or identical session ID. Only a Stripe-confirmed expired session permits a new attempt. These records never grant entitlements. See [checkout recovery](PAYMENTS.md#checkout-and-recovery) for ambiguity windows and manual recovery boundaries.
+
+
+## Subscription processing records
+
+The signed-webhook worker commits these items atomically. The customer's existing forward/reverse mapping and profile must agree. `U` is the internal user UUID, `S` the Stripe subscription ID, `E` the provider event ID, and `R` the next aggregate revision.
+
+| PK / SK | Fields beyond keys | Meaning |
+| --- | --- | --- |
+| `USER#U` / `SUB#stripe#S` | Subscription fields above | Normalized provider state; source `revision` increases only when domain fields change, while `verifiedAt` updates on successful refresh |
+| `USER#U` / `ENTITLEMENTS` | `userId`, positive integer `revision`, `tier`, `features`, `effectiveUntil`, `evaluatedAt`, `grants`, `warnings` | Materialized union of all providers at evaluation time; aggregate revision increases on every successful new event or demo write |
+| `PROVIDER#stripe#SUB#S` / `OWNER` | `userId`, `customerId` | Binding that cannot be reassigned to another user/customer by a processor write |
+| `EVENT#stripe#E` / `PROCESSED` | `userId`, `eventId`, `eventType`, `correlationId`, `processedAt`, `outcome`, `revision` | Completion marker; `outcome` is `changed` or `verified`, and `revision` identifies the committed aggregate |
+| `OUTBOX#U:R` / `EVENT` | `domainEventId`, `userId`, `revision`, `type`, `status`, `providerEventId`, `correlationId`, `createdAt`, `entitlements` | Pending `SubscriptionChanged` event with stable ID `U:R` and an entitlement payload; publication belongs to P08 |
+
+All timestamp fields use UTC ISO strings. Entitlement payloads contain the tier, features, grants and next boundary from the [access evaluation](PAYMENTS.md#access-policy), including provider/source revisions in grants. `effectiveUntil` is nullable. `status` is currently always `pending`; no publisher sets `sent` yet. The local scenario writer uses `local-demo-<UUID>` as its event reference; it emits an outbox record but no Stripe processed marker. No TTL is enabled for markers or pending outbox records.
+
+Synthetic materialized snapshot:
+
+```json
+{
+  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "sk": "ENTITLEMENTS",
+  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
+  "revision": 4,
+  "tier": "premium",
+  "features": ["score_history"],
+  "effectiveUntil": "2026-11-10T12:00:00.000Z",
+  "evaluatedAt": "2026-10-10T12:00:00.000Z",
+  "grants": [{
+    "provider": "stripe",
+    "providerSubscriptionId": "sub_SYNTHETIC",
+    "revision": 1,
+    "validUntil": "2026-11-10T12:00:00.000Z"
+  }],
+  "warnings": []
+}
+```
+
+An unchanged verification could produce aggregate revision 5 with the same grant source revision 1, a later evaluation time, and a new processed marker, but no outbox entry. A duplicate provider event produces no writes. The snapshot may become stale after a time boundary; API reads always recompute access instead of trusting its stored tier.
+
+The writer reads `ENTITLEMENTS` consistently before querying subscriptions and fetching authoritative provider state, then conditions the transaction on that exact revision (or absence for the first write). All writers must follow this order. A conflict requires rereading and recomputing; writes made directly in DynamoDB Admin bypass these guarantees. See [processing behavior](PAYMENTS.md#processing-and-retries).

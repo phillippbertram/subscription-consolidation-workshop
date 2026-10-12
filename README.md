@@ -8,73 +8,106 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 |---|---|
 | [AGENTS.md](AGENTS.md) | Working rules for coding agents |
 | [Project plan](PROJECT_PLAN.md) | Scope, architecture, weekend schedule, and manual verification scenarios |
+| [Architecture diagrams](docs/ARCHITECTURE.md) | Clients, AWS, external services, local development, and planned extensions |
 | [Decisions](docs/DECISIONS.md) | Agreed direction, open questions, and implementation proposals |
 | [Tasks](docs/TASKS.md) | Small work packages with dependencies, status, and acceptance criteria |
 | [Auth0 setup](docs/AUTH0_SETUP.md) | Existing tenant setup: API, permissions, clients, users, and local configuration |
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
 | [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity, profile, and subscription records, fields, examples, and access patterns |
-| [Subscriptions](docs/SUBSCRIPTIONS.md) | Access policy, endpoints, and local Free/Premium scenarios |
-| [Stripe flow diagrams](docs/STRIPE_FLOW.md) | Checkout sequence, DynamoDB relationships, retries, and planned subscription processing |
-| [Stripe setup](docs/STRIPE_SETUP.md) | Local test configuration, customer ownership, checkout, and recovery |
+| [Payments](docs/PAYMENTS.md) | Stripe setup, checkout, processing, access rules, and manual checks |
 | [Web app](apps/web/README.md) | React, Tailwind, shadcn/ui, and Auth0 SPA startup |
+| [Stripe webhook](services/stripe-webhook/README.md) | Signed event ingestion and queue delivery |
+| [Subscription worker](services/subscription-worker/README.md) | Provider verification and transactional processing |
+| [Billing contracts](packages/billing-contracts/README.md) | Shared event types and queue schema |
 | [Mobile app](apps/mobile/README.md) | Expo development build, Auth0 login, and iOS Simulator against the local BFF |
 
 The project directory is the source of truth. Earlier Library files are historical exports.
 
 ## Current implementation
 
-The pnpm workspace contains the Hono BFF in `services/bff`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
+The pnpm workspace has one package per executable service: `services/bff`, `services/stripe-webhook`, and `services/subscription-worker`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
 
 ```text
-services/bff/
-  src/
-    app.ts          Shared app factory; does not open a port
-    auth.ts         JWT verification, cached JWKS, and scope middleware
-    config.ts       Auth0 and local startup configuration validation
-    logging.ts      Structured HTTP logs and bounded debug body previews
-    users.ts        Framework-independent identity, profile, and store contract
-    dynamodb-users.ts Atomic identity mapping and profile persistence
-    domain/         Pure subscription mappings and access policy
-    subscriptions.ts Framework-independent subscription store contract
-    dynamodb-subscriptions.ts Validated, paginated subscription reads
-    persistence.ts  AWS SDK client composition
-    local.ts        Node HTTP server on 127.0.0.1
-    lambda.ts       Lambda handler for API Gateway HTTP API
-  .env.example      Versioned local configuration example
+services/
+  bff/                  Auth0 API, profiles, subscription reads, and checkout
+    src/local.ts        Local HTTP server on port 3000
+    src/lambda.ts       API Gateway $default handler
+    src/billing/        Checkout orchestration and customer ownership
+  stripe-webhook/       Signed Stripe ingestion and queue delivery
+    src/                Hono app, local server on port 3002, and Lambda entry
+    scripts/            Stripe listener
+  subscription-worker/  Queue consumer and subscription processing
+    src/                Local poller, SQS Lambda entry, and runtime configuration
+    src/processing/     Provider reads, processor, and atomic writes
+    scripts/            Local subscription scenarios
+packages/
+  billing-contracts/    Shared event allowlist and validated queue job
+  domain/               Pure subscription rules, schemas, and store contract
+  persistence/          DynamoDB configuration, client factory, subscription reads
+  logging/              Shared Pino setup; HTTP previews stay in the BFF
+apps/
+  web/                  React checkout demo on port 5173
+  mobile/               Expo app; started separately
+infra/                  CDK and local queue definitions
 ```
 
-`infra` contains the CDK app for the HTTP API, BFF, DynamoDB, and logs; see the [infrastructure guide](infra/README.md). Additional apps, workers, and shared packages are added only when needed. The target structure is in the [project plan](PROJECT_PLAN.md#14-repository-and-cicd). pnpm scripts coordinate the workspace.
+`infra` contains the CDK app for the HTTP API, BFF, DynamoDB, webhook/worker Lambdas, SQS/DLQ, and logs; see the [infrastructure guide](infra/README.md). Additional apps, workers, and shared packages are added only when needed. The target structure is in the [project plan](PROJECT_PLAN.md#14-repository-and-cicd). pnpm scripts coordinate the workspace.
 
-The HTTP API uses a `$default` integration to forward requests to the BFF. Define BFF routes once in Hono; no per-endpoint CDK registration is needed. Unknown paths reach the same authentication middleware and return 401 without a valid token or 404 with one. Future explicit integrations, such as the Stripe webhook, can override the catch-all for their own route.
+The HTTP API uses a `$default` integration to forward requests to the BFF. Define BFF routes once in Hono; no per-endpoint CDK registration is needed. Unknown paths reach the same authentication middleware and return 401 without a valid token or 404 with one. The explicit `POST /v1/webhooks/stripe` integration overrides the catch-all and verifies Stripe signatures in its own handler.
 
 ## Installation and local startup
 
-For the Expo app, follow the [mobile setup guide](apps/mobile/README.md). The commands below start the backend and its local database.
+Run commands from the repository root. The project pins **Node.js 24.19.0** (`.nvmrc`, `engines`) and **pnpm 12.10.1** (`packageManager`, `engines`). With nvm, run `nvm install` and `nvm use`. If needed, install pnpm once under that Node version with `npm install --global pnpm@12.10.1`.
 
-Run all commands below from the repository root. The project pins **Node.js 24.19.0** (`.nvmrc`, `engines`) and **pnpm 12.10.1** (`packageManager`, `engines`). If nvm is installed, run `nvm install` followed by `nvm use` to activate the Node version. If pnpm is missing, run `npm install --global pnpm@12.10.1` once under that Node version.
+For initial setup only (preserve existing `.env` files):
 
 ```sh
 pnpm install --frozen-lockfile
 cp services/bff/.env.example services/bff/.env
-pnpm db:up
+cp services/stripe-webhook/.env.example services/stripe-webhook/.env
+cp services/subscription-worker/.env.example services/subscription-worker/.env
+cp apps/web/.env.example apps/web/.env
+```
+
+Configure each service independently using [payment setup](docs/PAYMENTS.md#local-startup). BFF and worker must use the same database, Stripe test environment, and price; webhook and worker must share the queue URL. Each service loads only its own `.env`. To migrate an existing `services/billing/.env`, copy queue URL/signing secret to the webhook and queue URL/database/key/price to the worker. Preserve existing values and the original file; no runtime fallback reads the old file.
+
+Start Docker Desktop, then run:
+
+```sh
 pnpm dev
 ```
 
-Copy the example only during initial setup; preserve an existing `.env` and add the Auth0 and DynamoDB fields shown below. Start Docker Desktop before `pnpm db:up`; that command starts DynamoDB Local and its browser GUI, then automatically creates the table. Open [DynamoDB Admin](http://127.0.0.1:8001) and select `premiumpass-local` to inspect the records. Data survives `pnpm db:down` and subsequent starts. See the [local database instructions](infra/README.md#local-dynamodb-and-manual-requests). Replace the placeholder issuer and audience to use real Auth0 tokens. `pnpm dev` starts the server with file watching through `tsx watch`. In a second terminal:
+This first runs `local:up` (DynamoDB Local, DynamoDB Admin, ElasticMQ, and idempotent table initialization), then starts four processes with labeled logs: **api**, **webhook**, **worker**, and **web**. BFF, webhook, and worker use `tsx watch`; Vite handles website updates. Shared package source edits are picked up by the backend watchers. Restart after changing `.env` files. Ports are 3000, 3002, and 5173; stop older individual processes before starting the group. Configuration errors remain visible in the corresponding watcher; fix them and restart. If a supervised command exits, the other commands are stopped too.
+
+`Ctrl+C` stops the supervised processes; remaining children are forcibly stopped after 15 seconds. Docker stays running so queue messages are retained. `pnpm local:down` stops Docker separately; DynamoDB records survive in their volume, but in-memory ElasticMQ messages are lost. Open [DynamoDB Admin](http://127.0.0.1:8001) to inspect `premiumpass-local`.
+
+Stripe CLI and Mobile are intentionally separate:
+
+```sh
+pnpm stripe:listen  # Separate terminal; requires stripe login and signing-secret setup
+pnpm mobile:ios     # Separate terminal; see the mobile setup guide
+```
+
+For API-only work without webhook/worker configuration:
+
+```sh
+pnpm local:up
+pnpm dev:api
+```
+
+The BFF requires `PORT`, Auth0 issuer/audience, and DynamoDB configuration. `PORT` accepts 0–65535; 0 chooses a free port. `pnpm dev:api` and `pnpm start` read `services/bff/.env`; Webhook and worker read their respective service `.env` files. Existing shell variables take precedence. Missing/invalid values produce explanatory errors. A port conflict is reported by the server; a watcher then waits for a change or `Ctrl+C`.
+
+Placeholder Auth0 settings can serve `/health` but cannot validate real tokens. Local DynamoDB uses dummy credentials; omitting its endpoint selects the AWS credential chain. The local webhook requires ElasticMQ; the local worker additionally requires DynamoDB Local. Local `.env` files are ignored; never put secrets in documentation or logs.
 
 ```sh
 curl --fail http://127.0.0.1:3000/health
 ```
 
-Expected response: `{"status":"ok"}`. Stop with `Ctrl+C`.
-
-The local server requires `PORT`, an integer from 0 to 65535. The example uses 3000; 0 lets the operating system choose a free port, which appears in the startup log. `pnpm dev` and `pnpm start` read `services/bff/.env`; existing environment variables take precedence. To run without a file, supply `PORT`, `AUTH0_ISSUER`, `AUTH0_AUDIENCE`, `DYNAMODB_TABLE_NAME`, and the local `DYNAMODB_ENDPOINT` as environment variables. Missing or invalid values produce an explanatory error before the server starts. A port already in use produces a server error; in watch mode, the watcher then waits for a change or `Ctrl+C`.
-
-Startup requires public Auth0 and table configuration, but no Auth0 client secret. With a local DynamoDB endpoint, the SDK uses dummy credentials; AWS operation uses its normal credential chain. The placeholder configuration can start the server and serve `/health`; it cannot validate real tokens. Local `.env` files are ignored; `.env.example` is versioned. Do not put tokens or secrets in documentation or logs.
+Expected response: `{"status":"ok"}`. See the [mobile setup guide](apps/mobile/README.md) for the separate Expo development build.
 
 ## Local checkout website
 
-Follow [Stripe setup](docs/STRIPE_SETUP.md) to configure your own test key, monthly price, and Auth0 SPA. Run `pnpm web:dev` alongside the BFF and DynamoDB, then open http://localhost:5173. The React app uses Tailwind v4 and shadcn/ui. Checkout creates a customer and session; activation requires P06 step 2.
+Follow [payment setup](docs/PAYMENTS.md#local-startup) to configure your own test key, monthly price, Auth0 SPA, and Stripe listener. `pnpm dev` includes the React/Tailwind/shadcn website at http://localhost:5173. Checkout creates a customer and session. The separately started `pnpm stripe:listen` forwards events to the included webhook and worker. Use `pnpm web:dev` only when starting the website individually.
 
 ## Backend authentication
 
@@ -105,7 +138,7 @@ Signing keys come only from `<AUTH0_ISSUER>.well-known/jwks.json`; token-supplie
 }
 ```
 
-The store hashes the JSON-serialized verified `[issuer, subject]` pair and atomically creates an identity mapping plus a UUID-based profile. Conditional writes and consistent reads make concurrent first requests converge on one profile; conflicts receive bounded retries with jitter. Client-supplied user IDs do not determine the identity. No email, display name, or token is persisted. Machine identities (`gty: client-credentials` or an Auth0 `@clients` subject) cannot create user profiles. Scopes do not grant Premium access; entitlement checks follow later.
+The store hashes the JSON-serialized verified `[issuer, subject]` pair and atomically creates an identity mapping plus a UUID-based profile. Conditional writes and consistent reads make concurrent first requests converge on one profile; conflicts receive bounded retries with jitter. Client-supplied user IDs do not determine the identity. No email, display name, or token is persisted. Machine identities (`gty: client-credentials` or an Auth0 `@clients` subject) cannot create user profiles. Scopes alone do not grant Premium access; the backend also evaluates subscription entitlements.
 
 | Result | Meaning |
 |---|---|
@@ -137,7 +170,7 @@ Implementation references: [jose remote JWKS](https://github.com/panva/jose/blob
 
 ## Debugging BFF requests
 
-`pnpm dev` uses Pino for structured JSON logs to stdout. A child logger binds request metadata; timestamps use the ISO `time` field. The synchronous destination also works in the Lambda bundle without a background transport. See the [Pino API](https://github.com/pinojs/pino/blob/main/docs/api.md). Each request produces an `http.request` event when it arrives and an `http.response` event after the handler finishes. Both contain a timestamp, level, service name, method, path, and `requestId`. The response event adds HTTP status and `durationMs`; 4xx responses use `warn`, and 5xx responses use `error`. The duration measures handler processing before response-preview logging, not transfer time to the client.
+The BFF uses Pino for structured JSON logs to stdout. Grouped `pnpm dev` adds process labels; `pnpm dev:api` retains the raw JSON output. A child logger binds request metadata; timestamps use the ISO `time` field. The synchronous destination also works in the Lambda bundle without a background transport. See the [Pino API](https://github.com/pinojs/pino/blob/main/docs/api.md). Each request produces an `http.request` event when it arrives and an `http.response` event after the handler finishes. Both contain a timestamp, level, service name, method, path, and `requestId`. The response event adds HTTP status and `durationMs`; 4xx responses use `warn`, and 5xx responses use `error`. The duration measures handler processing before response-preview logging, not transfer time to the client.
 
 The same ID is returned in `X-Request-Id` and error bodies. Match it with `serverRequestId` in the mobile API logger to follow a call across the app and BFF.
 
@@ -172,23 +205,30 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 | `pnpm lint` | Run ESLint, including type-aware TypeScript rules |
 | `pnpm typecheck` | Typecheck all workspace packages |
 | `pnpm build` | Bundle local and Lambda entry points with esbuild |
+| `pnpm dev` | Start Docker/table initialization, then API, webhook, worker, and website with labeled logs |
+| `pnpm dev:api` | Start only the BFF with file watching |
 | `pnpm start` | Start the built local server without watch mode |
 | `pnpm web:dev` | Start the React checkout website on localhost:5173 |
 | `pnpm mobile:ios` | Build/install the native Expo app and start Metro for the iOS Simulator |
 | `pnpm mobile:dev` | Start Metro for the already installed mobile development app |
-| `pnpm db:up` | Start DynamoDB Local through Compose and automatically initialize its table |
-| `pnpm db:down` | Stop/remove local database containers while preserving data |
-| `pnpm db:logs` | Show the latest local database logs |
+| `pnpm local:up` | Start DynamoDB Local, its GUI, and ElasticMQ; automatically initialize the table |
+| `pnpm local:down` | Stop/remove all Compose containers; database volume survives, in-memory queue messages do not |
+| `pnpm dev:webhook` | Start the signature-only webhook on loopback port 3002 |
+| `pnpm dev:worker` | Consume local subscription jobs and commit entitlements |
+| `pnpm local:logs` | Show the latest logs for all Compose services; append `dynamodb`, `dynamodb-admin`, or `elasticmq` to select one |
+| `pnpm stripe:listen` | Forward supported Stripe test events to the local webhook; requires Stripe CLI login |
 | `pnpm synth` | Synthesize the CDK stack locally, including its Lambda asset; no deployment |
 | `pnpm deploy:dev --dry-run` | Validate `infra/.env` and preview deployment commands without AWS requests |
 | `pnpm bootstrap:dev` | Check the configured AWS account, then bootstrap its selected region |
 | `pnpm deploy:dev` | Check the configured AWS account, then deploy `PremiumPassDev` |
 
+The `local:*` commands replace the former `db:*`, `billing:up`, and `billing:logs` commands. `pnpm dev` groups the app processes; Stripe CLI and Mobile remain separate. Individual start commands remain available. For listener login and signing-secret setup, see [Stripe processing](docs/PAYMENTS.md#local-startup).
+
 For deployment configuration and the one-time bootstrap step, see the [infrastructure guide](infra/README.md#development-deployment-scripts). Deployment scripts read `infra/.env`; they do not load the BFF configuration file.
 
 Check Markdown links and consistency when changing documentation. `git diff --check` also checks tracked changes for whitespace issues; inspect new files separately.
 
-The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` also typechecks infrastructure and exports the mobile iOS JavaScript bundle to `apps/mobile/dist`; it does not build the native iOS app. `pnpm synth` produces the deployable AWS assembly.
+The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. Webhook and worker each build `dist/local.js` and `dist/lambda.js` in their own service directory. Use `pnpm -C services/stripe-webhook start` or `pnpm -C services/subscription-worker start` to run a built service. Shared packages export TypeScript source for tsx and esbuild/CDK to consume, so development needs no separate library build watcher. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` also typechecks infrastructure and exports the mobile iOS JavaScript bundle to `apps/mobile/dist`; it does not build the native iOS app. `pnpm synth` produces the deployable AWS assembly.
 
 At the user's request, this learning project has no automated tests or test framework. Verify behavior through manual requests; typechecking, linting, and builds remain configured. The Lambda entry point opens no HTTP port and does not require `PORT`. The local portion of P03 is implemented; live AWS verification remains outstanding by request.
 
@@ -222,6 +262,6 @@ pnpm demo:subscription <internal-user-id> expiring
 pnpm demo:subscription <internal-user-id> free
 ```
 
-Reload the dashboard after each change. `expiring` grants 30 seconds of access; no subsequent event is needed for the API to deny access. The command only targets the Compose database and two explicitly marked demo records. It makes no purchase and cannot target AWS. See [subscription rules and manual scenarios](docs/SUBSCRIPTIONS.md) and the [DynamoDB model](docs/DYNAMODB_DATA_MODEL.md#subscriptions).
+Reload the dashboard after each change. `expiring` grants 30 seconds of access; no subsequent event is needed for the API to deny access. The command only targets the Compose database and two explicitly marked demo records. It makes no purchase and cannot target AWS. See [subscription rules and manual scenarios](docs/PAYMENTS.md#access-policy) and the [DynamoDB model](docs/DYNAMODB_DATA_MODEL.md#subscriptions).
 
 The app now requests `read:premium` as well as `read:me`. Ensure the API permission, user role, and application grant allow it, then **sign out and sign in again**. A valid scope alone does not grant Premium content. See the [Auth0 permission setup](docs/AUTH0_SETUP.md#3-configure-user-permissions-and-application-access).

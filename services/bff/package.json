@@ -3,12 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false --env-file-if-exists=.env src/local.ts",
+    "dev": "tsx watch --clear-screen=false --include \"../../packages/*/src/**/*.ts\" --env-file-if-exists=.env src/local.ts",
     "start": "node --env-file-if-exists=.env dist/local.js",
     "db:init": "tsx scripts/init-local-db.ts",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "demo:subscription": "tsx scripts/seed-subscription.ts"
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1149.0",
@@ -17,11 +16,14 @@
     "@hono/node-server": "2.1.4",
     "hono": "4.13.13",
     "jose": "6.2.12",
-    "pino": "10.4.0",
     "stripe": "23.0.0",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@premiumpass/domain": "workspace:*",
+    "@premiumpass/persistence": "workspace:*",
+    "@premiumpass/logging": "workspace:*"
   },
   "devDependencies": {
+    "@types/aws-lambda": "8.10.159",
     "@types/node": "24.19.2",
     "esbuild": "0.28.2",
     "tsx": "4.23.15",

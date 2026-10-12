@@ -3,11 +3,8 @@ import {
   QueryCommand,
   type QueryCommandInput,
 } from '@aws-sdk/lib-dynamodb';
-import {
-  subscriptionSchema,
-  type Subscription,
-} from './domain/subscriptions.js';
-import type { SubscriptionStore } from './subscriptions.js';
+import { subscriptionSchema, type Subscription } from '@premiumpass/domain';
+import type { SubscriptionStore } from '@premiumpass/domain';
 
 export class DynamoDbSubscriptionStore implements SubscriptionStore {
   constructor(

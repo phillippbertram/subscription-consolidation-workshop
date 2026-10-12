@@ -117,31 +117,11 @@ The SQS processor, reconciliation, and outbox remain independent of the HTTP fra
 
 ## 4 Architecture and responsibilities
 
-```mermaid
-flowchart TD
-    App[React Native App] --> Auth[Auth0 Universal Login]
-    Web[Test website] --> Auth
-    App --> API[API Gateway HTTP API]
-    Web --> API
-    API --> BFF[Mobile BFF Lambda with JWT verification]
-    BFF --> DB[(DynamoDB)]
-    BFF --> Stripe[Stripe Billing test mode]
-    Stripe --> Hook[Webhook Lambda with signature verification]
-    Hook --> Queue[SQS work queue]
-    Mock[Development script and provider mocks] --> Queue
-    Timer[Schedule every 5 minutes] --> Recon[Reconciliation Lambda]
-    Recon --> Queue
-    Queue --> Worker[Subscription Processor]
-    Queue --> DLQ[Processing DLQ after retries]
-    Worker --> Provider[Stripe API or mock state]
-    Worker --> DB
-    DB --> Publisher[Outbox Publisher every minute]
-    Publisher --> Bus[EventBridge Custom Bus]
-    Bus --> Observer[Event Log Consumer]
-    Observer --> Logs[CloudWatch]
-```
+See the [architecture diagrams](docs/ARCHITECTURE.md) for the AWS resource boundary, external Auth0/Stripe services, client applications, and a separate local-development view. The diagrams distinguish CDK-defined resources from future work and make the local-only checkout wiring explicit.
 
-**Flow:** The app and test website sign in through Auth0 and send its access token through API Gateway to the BFF. The BFF verifies the token and required scopes before returning user data or creating checkout sessions. Webhooks and reconciliation submit work to SQS. The processor reads current provider state and stores subscriptions, entitlements, and pending domain events together. The publisher reads the outbox; EventBridge distributes its events to an observable consumer.
+**Target flow:** The app and test website sign in through Auth0 and send access tokens through API Gateway to the BFF. The BFF verifies tokens and scopes. Stripe webhooks reach a separate signature-verifying Lambda through an explicit Gateway route, then enter SQS. The processor reads current provider state and stores subscriptions, entitlements, completion markers, and pending domain events atomically. Planned reconciliation also submits work to SQS; the planned publisher reads the outbox and sends domain events to EventBridge.
+
+The table below describes the complete target, including P07-P09 components that are not yet implemented. Implementation evidence remains in [TASKS.md](docs/TASKS.md).
 
 | Component | Responsibility |
 |---|---|
@@ -153,7 +133,7 @@ flowchart TD
 | Outbox Publisher | Send unacknowledged domain events to EventBridge |
 | Event Log Consumer | Make changes visible in CloudWatch with stable event IDs |
 
-Subscription Service and Entitlement Service are **logically separate modules in the same processor**. Their changes can therefore share a DynamoDB transaction. An additional asynchronous entitlement projection would be a later extension. EventBridge distributes domain changes in this demo; Premium endpoint access does not depend on how quickly the event log consumer runs.
+Subscription Service and Entitlement Service are **logically separate modules in the same processor**. Their changes can therefore share a DynamoDB transaction. An additional asynchronous entitlement projection would be a later extension. The planned EventBridge path distributes domain changes; Premium endpoint access does not depend on how quickly the event log consumer runs.
 
 ## 5 React Native and Auth0
 
@@ -301,7 +281,7 @@ Stripe demo mapping: `incomplete` → `pending`, `incomplete_expired` → `expir
 
 A user's features are the union of all currently valid grants. If the Apple mock ends while Stripe remains valid, Premium stays active. A single provider event must therefore never blindly set `isPremium=false` for the whole user.
 
-The P05 read model derives access directly from stored subscriptions. Its grants expose source revisions; the persisted `ENTITLEMENTS` aggregate and aggregate revision belong to the transactional processor in P06. See [implemented rules and local scenarios](docs/SUBSCRIPTIONS.md).
+The read model derives access directly from stored subscriptions and exposes source revisions. The P06 processor also persists an `ENTITLEMENTS` snapshot with a separate aggregate revision; it never replaces read-time expiry checks. See [implemented rules and local scenarios](docs/PAYMENTS.md#access-policy).
 
 Implement the calculation as the pure function `deriveEntitlements(subscriptions, now)`. Pass time as a parameter so expiration boundaries can be checked without waiting. Unknown products or unrecognized provider states grant no new access; keep these cases visible for investigation.
 
@@ -315,19 +295,24 @@ Implement the calculation as the pure function `deriveEntitlements(subscriptions
 4. Detect an event that has already been processed.
 5. Find due synchronizations and pending outbox entries.
 
-### Proposed demo table
+### Demo table and planned extensions
 
 | PK | SK | Contents |
 |---|---|---|
 | `IDENTITY#<identityHash>` | `MAP` | `iss`, `sub`, internal `userId` |
-| `USER#<userId>` | `PROFILE` | Minimal profile, Stripe customer mapping |
+| `USER#<userId>` | `PROFILE` | Minimal profile |
+| `USER#<userId>` | `CUSTOMER#stripe` | Customer creation intent and forward Stripe mapping |
+| `USER#<userId>` | `CHECKOUT#ACTIVE` | Current checkout request reference |
 | `USER#<userId>` | `SUB#<provider>#<id>` | Normalized subscription |
 | `USER#<userId>` | `ENTITLEMENTS` | Grants, effective features, aggregate revision |
-| `PROVIDER#<provider>#<externalId>` | `OWNER` | Unique ownership mapping, object type |
+| `PROVIDER#stripe#CUSTOMER#<id>` | `OWNER` | Reverse customer owner |
+| `PROVIDER#stripe#SUB#<id>` | `OWNER` | Subscription owner/customer binding |
 | `EVENT#<provider>#<eventId>` | `PROCESSED` | Timestamp, result, optional retention boundary |
 | `CHECKOUT#<userId>#<requestId>` | `REQUEST` | Request hash, Stripe key, session ID, processing status |
 | `OUTBOX#<domainEventId>` | `EVENT` | Payload, `pending`/`sent`, creation time |
-| `MOCK#<provider>#<id>` | `STATE` | Separate simulated provider state |
+| `MOCK#<provider>#<id>` | `STATE` | Planned P07 separate simulated provider state |
+
+See the [implemented processing guide](docs/PAYMENTS.md#processing-and-retries) for the local queue/worker, invoice verification limits, and transaction fields. Publishing pending outbox entries and scheduled reconciliation remain separate tasks.
 
 Compute the identity hash from an unambiguous serialization of `iss` and `sub`. Always namespace provider IDs by provider and object type.
 
@@ -363,7 +348,7 @@ TTL is only for eventual cleanup of completed technical records. DynamoDB does n
 
 Use a stable idempotency key for each purchase attempt. Reusing a key with different request contents returns local `409`. Restrict concurrent attempts by one user with a conditional record for the active purchase attempt. After a timeout, recover the associated session instead of immediately creating another subscription. Stripe's limited idempotency key retention does not replace a durable local purchase mapping. [Stripe Checkout Session API](https://docs.stripe.com/api/checkout/sessions/create) · [Stripe Idempotency](https://docs.stripe.com/api/idempotent_requests)
 
-The first implementation slice runs checkout locally; see [Stripe setup](docs/STRIPE_SETUP.md) for configuration, request/recovery rules, and the React website. Webhook processing and cloud wiring follow separately.
+The first implementation slice runs checkout locally; see [Stripe setup](docs/PAYMENTS.md#local-startup) for configuration, request/recovery rules, and the React website. Webhook processing and cloud wiring follow separately.
 
 ### Process webhooks
 
@@ -433,11 +418,11 @@ Later real adapters require Apple transaction validation and Server Notification
 
 Use a Standard Queue. Deliveries may be duplicated or reordered; the processor enforces domain correctness. A FIFO queue alone would solve neither delayed provider webhooks nor all external race conditions.
 
-**Initial demo configuration:** Processor timeout 30 seconds, batch size one, no batching window, visibility timeout at least 180 seconds, `maxReceiveCount=5`, source retention four days, and DLQ retention 14 days. Verify these values under actual runtime conditions. AWS recommends at least six times the Lambda timeout plus any batching window. [AWS SQS Event Source](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html)
+**Initial demo configuration:** Processor timeout 60 seconds, batch size one, no batching window, visibility timeout 360 seconds, `maxReceiveCount=5`, source retention four days, and DLQ retention 14 days. Verify these values under actual runtime conditions. AWS recommends at least six times the Lambda timeout plus any batching window. [AWS SQS Event Source](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html)
 
-Provider calls have their own short timeouts; use bounded retries with backoff/jitter for `429` and transient failures. Then fail the job. Do not run long waiting loops inside a Lambda.
+Provider calls have a three-second request timeout and no immediate SDK retries in the worker; transient failures and `429` return to SQS. Aggregate conflicts get up to three complete read/recompute attempts with jitter. This keeps provider retries separate from concurrency retries and avoids long waiting loops inside a Lambda.
 
-If batch processing is added later, enable `ReportBatchItemFailures` and report only failed SQS message IDs. Otherwise, successful messages in the same batch may be processed again. Attach the DLQ through the **source SQS queue's** redrive policy. [AWS SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html)
+`ReportBatchItemFailures` is enabled even with batch size one; report only failed SQS message IDs if batches grow later. Otherwise, successful messages in the same batch may be processed again. Attach the DLQ through the **source SQS queue's** redrive policy. [AWS SQS Error Handling](https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-errorhandling.html)
 
 ### Idempotency and ordering
 
@@ -456,7 +441,7 @@ Example:
 ```json
 {
   "source": "premiumpass.subscriptions",
-  "detail-type": "EntitlementsChanged",
+  "detail-type": "SubscriptionChanged",
   "detail": {
     "schemaVersion": 1,
     "domainEventId": "demo-user-a:7",
@@ -550,19 +535,17 @@ A private **pnpm workspace monorepo** keeps the app, backend, and infrastructure
 schufa-lab/
   apps/
     mobile/                  React Native, Expo development build, Auth0
-    checkout-web/            Small Stripe test website
+    web/                     React Stripe test website
   services/
     bff/                     Hono app, local entry, and Lambda entry
-    stripe-webhook/          Separate HTTP handler with raw-body signature verification
-    workers/                 Separate Lambda entries for processor,
-                             reconciliation, outbox publisher, and event log
+    stripe-webhook/          Signed HTTP ingestion; local and Lambda entries
+    subscription-worker/     Queue consumer, provider adapters and transactions
   packages/
+    billing-contracts/       Shared billing event types and queue job schema
     domain/                  Subscription model and entitlement rules
-    contracts/               Shared API and event schemas
-    providers/               Stripe and Apple/Google mocks, when sharing is needed
-    persistence/             DynamoDB access and transactions, when sharing is needed
+    persistence/             Shared DynamoDB config, client, and subscription reads
+    logging/                 Shared Pino setup
   infra/                     CDK app and stack
-  scripts/                   Seed, mock scenarios, and reconciliation
   docs/                      Decisions, tasks, and demo record
   .github/workflows/         Added later with CI/CD
   package.json               Private root, toolchain pins, shared scripts
@@ -577,9 +560,9 @@ schufa-lab/
 **Package boundaries:**
 
 - Each workspace package gets its own `package.json`, `private: true`, a name such as `@premiumpass/bff`, and its own scripts. Use `workspace:*` for internal dependencies and explicit package exports for imports, not relative paths into another package's `src` directory.
-- `domain` contains business rules without Hono, AWS, or React dependencies. `contracts` contains transferable DTOs and schemas; the mobile app imports neither backend adapters nor secret configuration.
+- `domain` contains business rules and subscription schemas without Hono, AWS, or React dependencies. `billing-contracts` holds the queue schema shared by webhook and worker; add other contracts packages only for actual shared messages. The mobile app imports neither backend adapters nor secret configuration.
 - Authentication middleware initially stays in the BFF. Provider and persistence code starts in its service and is extracted into a package only when actual sharing is needed. No empty speculative packages or cyclic dependencies.
-- A workspace package need not correspond to one Lambda function. CDK bundles each required entry separately; `workers` can provide multiple functions. Infrastructure must not import application entry points that start servers.
+- Each independently operated service has its own workspace package, manifest, configuration and build. Local and Lambda adapters for the same service stay together. Add outbox/reconciliation service packages when their tasks are implemented. Shared libraries are separate packages only where used by multiple consumers. Infrastructure must not import application entry points that start servers.
 - Do not create test packages or test frameworks. Node and Expo may use different TypeScript configurations.
 - Root scripts coordinate typechecking, linting, formatting checks, and builds through pnpm. Turbo/Nx or a custom build system are not planned for this demo. Document executable commands in the README only after introducing them.
 

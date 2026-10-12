@@ -8,9 +8,10 @@ import type { CheckoutService } from './billing/checkout-service.js';
 import { type AppEnv, authenticate, requireScopes } from './auth.js';
 import type { AuthConfig } from './config.js';
 import type { UserStore } from './users.js';
-import type { SubscriptionStore } from './subscriptions.js';
-import { deriveEntitlements } from './domain/subscriptions.js';
-import { requestLogger, type LogLevel } from './logging.js';
+import type { SubscriptionStore } from '@premiumpass/domain';
+import { deriveEntitlements } from '@premiumpass/domain';
+import { requestLogger } from './logging.js';
+import type { LogLevel } from '@premiumpass/logging';
 
 export function createApp(
   authConfig: AuthConfig,

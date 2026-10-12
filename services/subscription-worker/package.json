@@ -1,0 +1,32 @@
+{
+  "name": "@premiumpass/subscription-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --include \"../../packages/*/src/**/*.ts\" --env-file-if-exists=.env src/local.ts",
+    "start": "node --env-file-if-exists=.env dist/local.js",
+    "demo:subscription": "tsx scripts/seed-subscription.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1149.0",
+    "@aws-sdk/client-secrets-manager": "3.1149.0",
+    "@aws-sdk/client-sqs": "3.1149.0",
+    "@aws-sdk/lib-dynamodb": "3.1149.0",
+    "pino": "10.4.0",
+    "stripe": "23.0.0",
+    "zod": "4.6.5",
+    "@premiumpass/domain": "workspace:*",
+    "@premiumpass/persistence": "workspace:*",
+    "@premiumpass/logging": "workspace:*",
+    "@premiumpass/billing-contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "8.10.159",
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
+  }
+}

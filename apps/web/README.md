@@ -1,6 +1,6 @@
 # PremiumPass Web
 
-A small React + TypeScript SPA built with Vite, Tailwind CSS v4, and locally owned shadcn/ui components. It signs in with Auth0 and opens hosted Stripe test checkout through the local BFF. Follow the [Stripe and Auth0 setup](../../docs/STRIPE_SETUP.md) first.
+A small React + TypeScript SPA built with Vite, Tailwind CSS v4, and locally owned shadcn/ui components. It signs in with Auth0 and opens hosted Stripe test checkout through the local BFF. Follow the [Stripe and Auth0 setup](../../docs/PAYMENTS.md#local-startup) first.
 
 ```sh
 # From the repository root; copy only if no local file exists yet.
@@ -8,7 +8,7 @@ cp apps/web/.env.example apps/web/.env
 pnpm web:dev
 ```
 
-Enter the public SPA values yourself. The server starts at `http://localhost:5173` and fails if that port is occupied. `pnpm dev` and `pnpm db:up` start the separate API and database. Restart Vite after environment changes. Missing web configuration renders setup instructions without starting an authentication flow. Never add a Stripe secret to this app.
+Enter the public SPA values yourself. The server starts at `http://localhost:5173` and fails if that port is occupied. `pnpm dev:api` and `pnpm local:up` start the separate API and database. Root `pnpm dev` starts the website together with BFF, webhook, worker, and Docker; use either that group or the individual commands, not both. Restart Vite after environment changes. Missing web configuration renders setup instructions without starting an authentication flow. Never add a Stripe secret to this app.
 
 ## Structure
 

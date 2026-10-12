@@ -1,6 +1,6 @@
 # Decisions
 
-As of October 10, 2026. This document distinguishes agreed project direction from implementation proposals. Detailed flows are in the [project plan](../PROJECT_PLAN.md); implementation status is in the [task plan](TASKS.md).
+As of October 12, 2026. This document distinguishes agreed project direction from implementation proposals. Detailed flows are in the [project plan](../PROJECT_PLAN.md); implementation status is in the [task plan](TASKS.md).
 
 ## Agreed direction
 
@@ -16,6 +16,7 @@ As of October 10, 2026. This document distinguishes agreed project direction fro
 | D08 | No automated tests in the learning project      | No test framework; use typechecking, linting, builds, and manual functional checks            |
 | D09 | English throughout the project                  | Code, comments, messages, configuration examples, and documentation use English               |
 | D10 | HTTP API `$default` integration for the BFF     | Hono owns BFF routes; separate handlers can use explicit Gateway routes with higher priority  |
+| D11 | One workspace package per executable service | Independent manifests, configuration and builds; local/Lambda adapters stay together |
 
 ## Framework: Hono
 
@@ -55,6 +56,8 @@ At the user's request, the mobile UI uses selected, locally owned Gluestack comp
 
 Internal packages use names such as `@premiumpass/<name>`, set `private: true`, and reference local dependencies with `workspace:*`. Root scripts coordinate package scripts; no Turbo or Nx initially. `packageManager` pins pnpm 12.10.1. Package boundaries and the target structure are in [section 14 of the project plan](../PROJECT_PLAN.md#14-repository-and-cicd).
 
+The user selected one workspace package per independently operated service: BFF, Stripe webhook and subscription worker. Local and Lambda entry points remain in the same service package. `@premiumpass/billing-contracts` shares only event types and queue validation; provider adapters and processing transactions belong to the worker. Root `pnpm dev` initializes Compose/table resources, then uses `concurrently` to supervise API, webhook, worker, and website. Stripe CLI and Mobile stay separate. Each service has its own ignored `.env`; existing shell variables take precedence. Shared packages export TypeScript source for tsx and esbuild/CDK bundling; they need no generated output for development. No Turbo or Nx is needed.
+
 Source: [pnpm Workspaces](https://pnpm.io/workspaces).
 
 ## Implementation baseline
@@ -91,7 +94,7 @@ Record only configuration names and non-secret decisions here. Secret values do 
 
 The BFF uses Pino with JSON stdout, per-request child loggers, and synchronous output suitable for the current Lambda adapter. Existing bounded debug previews and log-level controls remain in place. No background logging transport is needed.
 
-Subscription access rules live in the pure `services/bff/src/domain` module, with time supplied by the caller. A separate workspace package is unnecessary until another service consumes the module. Zod validates persisted subscriptions at the adapter boundary. Unknown products/statuses remain visible and grant no access.
+Subscription access rules live in `@premiumpass/domain`, with time supplied by the caller. BFF and subscription worker share this package. Zod validates persisted subscriptions at the adapter boundary. Unknown products/statuses remain visible and grant no access.
 
 P05 computes entitlements on reads of the user's subscriptions. It exposes each grant's source revision, without inventing a materialized aggregate revision. The transactional aggregate, event markers, outbox, and provider writers are part of P06. The local scenario command is a deliberately separate educational writer, fixed to DynamoDB Local.
 
@@ -99,8 +102,19 @@ P05 computes entitlements on reads of the user's subscriptions. It exposes each 
 
 The user selected React, Tailwind CSS, and shadcn/ui for the website. `apps/web` uses Vite, the Auth0 React SDK, and a small set of locally owned shadcn components. Web Tailwind v4 is separate from mobile's NativeWind/Tailwind v3. The API hook reads its origin and injects current Auth0 credentials.
 
-Step 1 enables checkout in the local BFF only. Customer creation and checkout attempts have durable request identifiers, forward/reverse ownership checks, and a conditional per-user purchase lock. Browser redirects never write subscriptions or entitlements. Fixed expiry and bounded recovery windows deliberately stop ambiguous retries rather than risk duplicate purchases. Cloud secret/IAM wiring, lifecycle processing, and recovery automation remain later work. See [Stripe setup](STRIPE_SETUP.md).
+Step 1 enables checkout in the local BFF only. Customer creation and checkout attempts have durable request identifiers, forward/reverse ownership checks, and a conditional per-user purchase lock. Browser redirects never write subscriptions or entitlements. Fixed expiry and bounded recovery windows deliberately stop ambiguous retries rather than risk duplicate purchases. Cloud checkout secret/IAM wiring and recovery automation remain later work; step 2 adds the separate lifecycle worker below. See [Stripe setup](PAYMENTS.md#local-startup).
 
 The web Auth0 SDK uses its built-in local-storage cache to retain valid sessions across reloads and Stripe redirects. Refresh tokens remain disabled; expired tokens may require interactive login if silent renewal is blocked. Persistent tokens are exposed to same-origin JavaScript, an explicit local-demo tradeoff. No custom token persistence or authentication flag is added.
 
 Checkout resolves verified email server-side through Auth0 UserInfo after access-token validation, including a subject match. It synchronizes the email onto the owned Stripe customer before session creation/reuse, including customers created before this feature. Email is contact data only, remains outside DynamoDB, and does not influence identity or entitlement ownership. Missing verification blocks checkout with an explicit error. Customer creation parameters stay stable for idempotent recovery; email synchronization is a separate repeatable update.
+
+
+## P06 processing runtime
+
+The signed webhook and SQS worker live in `services/stripe-webhook` and `services/subscription-worker`, each with its own manifest, configuration, build and local/Lambda entries. The BFF retains Auth0, profiles, entitlement reads, and checkout. Queue contracts and logging are shared; domain/persistence are dependencies of the BFF and worker only. No service imports another service. The webhook requires neither database settings nor Stripe API credentials; the worker requires no signing secret. The HTTP API keeps its `$default` BFF integration and has one explicit signature-only webhook route. No API Gateway authorizer is added.
+
+Local processing uses ElasticMQ 1.6.16 in Compose, not AWS queues. Its messages are in-memory; this is a learning substitute, not evidence of AWS durability. AWS uses a Standard queue, batch size one, worker timeout 60 seconds, visibility 360 seconds, five receives, and a 14-day DLQ.
+
+A webhook triggers a current provider read. Stored forward/reverse customer ownership, Stripe metadata, and relevant paid invoice periods must agree. A revision-guarded DynamoDB transaction persists subscription, entitlement snapshot, ownership, processed marker, and pending outbox. The P05 demo writer now shares the aggregate transaction/CAS. Access still checks expiration on reads. EventBridge publishing and scheduled reconciliation remain P08/P09.
+
+The Lambda handlers still reference the same existing Secrets Manager JSON secret by ARN, validate only their required fields, and cache those fields for five minutes; no secret creation or deployment is part of this step. Checkout itself remains local-only. Billing/logging payload restrictions also apply to webhook and worker logs. See [processing setup and limits](PAYMENTS.md#processing-and-retries).

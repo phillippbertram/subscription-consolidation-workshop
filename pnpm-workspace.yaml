@@ -29,3 +29,6 @@ minimumReleaseAgeExclude:
   - '@aws-sdk/nested-clients@3.997.47'
   - '@aws-sdk/signature-v4-multi-region@3.996.48'
   - '@aws-sdk/token-providers@3.1149.0'
+  - '@aws-sdk/client-secrets-manager@3.1149.0'
+  - '@aws-sdk/client-sqs@3.1149.0'
+  - '@aws-sdk/middleware-sdk-sqs@3.972.44'

@@ -57,9 +57,11 @@ If Auth0 displays **Callback URL mismatch**, open the application whose Client I
 Start the local database and backend in one terminal:
 
 ```sh
-pnpm db:up
-pnpm dev
+pnpm local:up
+pnpm dev:api
 ```
+
+For the full checkout workflow, use root `pnpm dev` instead of the two commands above; it includes Docker, BFF, Billing, and the website. Do not start a second BFF on the same port.
 
 Build, install, and launch the app in another terminal:
 
@@ -79,7 +81,7 @@ After the initial build, start Metro for the installed development app with:
 pnpm mobile:dev
 ```
 
-Press `i` in the Metro terminal to open the iOS app. Stop Metro or the BFF with `Ctrl+C`. `pnpm db:down` stops DynamoDB and preserves its volume.
+Press `i` in the Metro terminal to open the iOS app. Stop Metro or the BFF with `Ctrl+C`. `pnpm local:down` stops all Compose services and preserves the DynamoDB volume; in-memory ElasticMQ messages are lost.
 
 Reload the app after changing public JavaScript configuration. Rebuild with `pnpm mobile:ios` after changing the Auth0 domain, app scheme, bundle identifier, or native dependencies. The Auth0 domain is also embedded in native callback configuration. Generated `ios/` and `android/` directories are ignored; edit `app.config.ts` instead of generated files.
 
@@ -196,7 +198,7 @@ The profile screen composes `ProfileCard` and the feature-owned `subscriptions/P
 
 `ApiClient.getEntitlements()` and `getScoreHistory()` validate responses with Zod. History is requested explicitly so you can observe both a successful Premium response and a Free user's `403 premium_required`. A missing `read:premium` scope instead produces a permissions error. Sign out and sign in after configuring the new scope.
 
-Follow the [P05 scenario guide](../../docs/SUBSCRIPTIONS.md#local-manual-walkthrough) to switch local data between Free, Premium, grace, and expiration. All scores are synthetic. Real purchases and store adapters follow in later tasks.
+Follow the [P05 scenario guide](../../docs/PAYMENTS.md#manual-checks) to switch local data between Free, Premium, grace, and expiration. All scores are synthetic. Real purchases and store adapters follow in later tasks.
 
 
 ## Auth0 session inspector

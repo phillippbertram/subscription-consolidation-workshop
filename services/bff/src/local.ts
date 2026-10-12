@@ -1,19 +1,16 @@
+import { readDatabaseConfig } from '@premiumpass/persistence';
 import { CheckoutService } from './billing/checkout-service.js';
 import { StripeBillingProvider } from './billing/stripe-provider.js';
 import { readStripeConfig, readWebOrigin } from './billing/config.js';
 import { serve } from '@hono/node-server';
 import { createApp } from './app.js';
-import {
-  readAuthConfig,
-  readDatabaseConfig,
-  readLocalConfig,
-} from './config.js';
+import { readAuthConfig, readLocalConfig } from './config.js';
 import { createPersistence } from './persistence.js';
-import { createLogger, readLogLevel } from './logging.js';
+import { createLogger, readLogLevel } from '@premiumpass/logging';
 
 const config = readLocalConfig(process.env);
 const logLevel = readLogLevel(process.env, 'debug');
-const log = createLogger(logLevel);
+const log = createLogger(logLevel, 'premiumpass-bff');
 const stores = createPersistence(readDatabaseConfig(process.env, true));
 const stripe = readStripeConfig(process.env);
 const app = createApp(
