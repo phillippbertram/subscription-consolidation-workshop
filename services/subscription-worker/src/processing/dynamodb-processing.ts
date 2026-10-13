@@ -18,11 +18,13 @@ import {
 type Write = NonNullable<TransactWriteCommandInput['TransactItems']>[number];
 
 export class DynamoDbProcessingStore {
+  /** Use an existing document client and table; resource creation is external. */
   constructor(
     private readonly client: DynamoDBDocumentClient,
     private readonly tableName: string,
   ) {}
 
+  /** Read one committed item by key; return undefined only for absence. */
   private async get(pk: string, sk: string) {
     return (
       await this.client.send(
@@ -35,10 +37,12 @@ export class DynamoDbProcessingStore {
     ).Item;
   }
 
+  /** Check the durable event marker without reserving or completing the event. */
   async isProcessed(eventId: string) {
     return Boolean(await this.get(`EVENT#stripe#${eventId}`, 'PROCESSED'));
   }
 
+  /** Resolve the existing customer owner; absent or inconsistent mappings throw. */
   async owner(customerId: string) {
     // Resolve ownership from checkout-created mappings, not event metadata.
     // Both directions must agree before we select a user partition.
@@ -63,6 +67,10 @@ export class DynamoDbProcessingStore {
     return record.userId as string;
   }
 
+  /**
+   * Load the user's revision and all provider subscriptions for a guarded write.
+   * Missing aggregate state starts at revision zero; malformed state throws.
+   */
   async load(userId: string): Promise<Aggregate> {
     // Revision first: a write during the subsequent query invalidates our commit.
     // Consistent reads alone do not make multiple reads a transaction; the later
@@ -80,6 +88,12 @@ export class DynamoDbProcessingStore {
     return { userId, revision, subscriptions };
   }
 
+  /**
+   * Replace one Stripe subscription while preserving every other provider grant.
+   * Recheck ownership and atomically save access, owner binding and completion;
+   * changed controls whether the same transaction also creates an outbox event.
+   * Propagate failures so the processor can check completion or retry.
+   */
   async commitStripe(
     aggregate: Aggregate,
     subscription: Subscription,
@@ -185,7 +199,13 @@ export class DynamoDbProcessingStore {
     );
   }
 
-  // The local mock writer shares this aggregate CAS and atomic snapshot path.
+  /**
+   * Shared transaction path for Stripe processing and local subscription scenarios.
+   * Atomically apply the caller's writes, recompute access at now and advance the
+   * aggregate revision; optional event metadata adds a pending outbox entry.
+   * Require an existing profile and the loaded revision. Concurrency conflicts
+   * throw RevisionConflict; other transaction failures expose only a safe code.
+   */
   async commit(
     aggregate: Aggregate,
     subscriptions: Subscription[],

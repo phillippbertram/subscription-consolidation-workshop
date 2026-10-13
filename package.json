@@ -10,9 +10,11 @@
   "scripts": {
     "dev": "pnpm local:up && concurrently --kill-others --kill-timeout 15000 --names api,webhook,worker,web \"pnpm dev:api\" \"pnpm dev:webhook\" \"pnpm dev:worker\" \"pnpm web:dev\"",
     "dev:api": "pnpm -C services/bff dev",
+    "dev:api:lan": "HOST=0.0.0.0 pnpm dev:api",
     "start": "pnpm -C services/bff start",
     "web:dev": "pnpm -C apps/web dev",
     "mobile:dev": "pnpm -C apps/mobile dev",
+    "mobile:dev:lan": "pnpm -C apps/mobile dev:lan",
     "mobile:ios": "pnpm -C apps/mobile ios",
     "local:up": "docker compose up -d && pnpm -C services/bff db:init",
     "local:down": "docker compose down",

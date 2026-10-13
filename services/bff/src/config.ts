@@ -11,11 +11,19 @@ export function readLocalConfig(env: NodeJS.ProcessEnv) {
     throw new Error('PORT must be an integer between 0 and 65535.');
   }
 
-  return { port: Number(rawPort), hostname: '127.0.0.1' };
+  const hostname = env.HOST ?? '127.0.0.1';
+  if (hostname !== '127.0.0.1' && hostname !== '0.0.0.0') {
+    throw new Error('HOST must be 127.0.0.1 (default) or 0.0.0.0 (LAN).');
+  }
+
+  return { port: Number(rawPort), hostname };
 }
 
+/** Startup-validated values that fix which access tokens the BFF accepts. */
 export interface AuthConfig {
+  /** Exact HTTPS issuer with a trailing slash; also fixes the JWKS location. */
   issuer: string;
+  /** Auth0 Custom API identifier used for audience validation. */
   audience: string;
 }
 

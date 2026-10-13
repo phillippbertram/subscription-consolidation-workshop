@@ -1,6 +1,6 @@
 # PremiumPass Web
 
-A small React + TypeScript SPA built with Vite, Tailwind CSS v4, and locally owned shadcn/ui components. It signs in with Auth0 and opens hosted Stripe test checkout through the local BFF. Follow the [Stripe and Auth0 setup](../../docs/PAYMENTS.md#local-startup) first.
+A small React + TypeScript SPA built with Vite, Tailwind CSS v4, and locally owned shadcn/ui components. It signs in with Auth0, displays profile/subscription/access information, and opens hosted Stripe test checkout through the local BFF. Follow the [Stripe and Auth0 setup](../../docs/PAYMENTS.md#local-startup) first.
 
 ```sh
 # From the repository root; copy only if no local file exists yet.
@@ -17,7 +17,11 @@ Enter the public SPA values yourself. The server starts at `http://localhost:517
 | `src/main.tsx`                   | React root, validated configuration, Auth0 provider                     |
 | `src/App.tsx`                    | Session state and login/logout actions                                  |
 | `src/hooks/use-api-client.ts`    | Memoized client; reads API origin and obtains tokens from Auth0         |
-| `src/hooks/use-checkout.ts`      | Profile loading, pending state, per-user attempt UUID, checkout retries |
+| `src/hooks/use-checkout.ts`      | Pending state, per-user attempt UUID, checkout retries |
+| `src/hooks/use-account.ts` | Profile, subscription, and entitlement loading; refresh, cancellation, and expiry rechecks |
+| `src/api-models.ts` | Zod schemas and inferred types for backend responses |
+| `src/components/account-details.tsx` | Auth0 session profile and internal account details |
+| `src/components/subscription-status.tsx` | Backend access tier, subscription records, loading/error/empty states |
 | `src/api-client.ts`              | Bearer requests, timeout, Zod response validation, safe API errors      |
 | `src/components/demo-layout.tsx` | Responsive account/plan page and return/setup messages                  |
 | `src/components/ui/`             | shadcn components copied into the repository and maintained locally     |
@@ -47,3 +51,23 @@ Refresh tokens remain disabled. A valid cached access token can be reused; after
 Persistent browser storage is readable by JavaScript on this origin, so an XSS vulnerability could expose cached tokens. This is a deliberate tradeoff for the local demo, not a production security recommendation. Use the SDK cache rather than manually storing tokens or inventing a logged-in flag. See [Auth0 storage options](https://auth0.com/docs/libraries/auth0-single-page-app-sdk#change-storage-options).
 
 Manual check: sign in, note the internal user ID, reload twice, and verify the same profile. Then sign out and reload again; the app should remain signed out. Do not print cached credentials while checking.
+
+
+## Profile and subscription status
+
+The account card shows name, email, verification state, and subject from the existing Auth0 session, plus the internal user ID and creation time returned by `GET /v1/me`. Missing optional Auth0 claims are omitted. Tokens are never displayed.
+
+`GET /v1/me/subscriptions` supplies each provider's records: normalized state, original provider status, product, verified access/grace boundaries, scheduled cancellation, last verification, and subscription ID. `GET /v1/me/entitlements` supplies the authoritative Free/Premium tier. An active-looking subscription or a Stripe success redirect alone does not grant Premium. All three endpoints use the existing `read:me` scope; no new Auth0 permission is needed for this display.
+
+Account data loads after login and page restoration, on manual **Refresh account**, when the window regains focus or becomes visible, and at the backend's next entitlement boundary. Refreshing replaces the old snapshot with a loading state; failures show an explicit unavailable state instead of Free or stale Premium. **Next access recheck** is the earliest grant boundary, not necessarily the end of all access when several providers grant Premium. A new Auth0 identity remounts the account/checkout state, cancels account requests, and ignores results from the previous session.
+
+The three reads are independent snapshots and can briefly straddle a worker update; refresh again if processing is still in flight. After returning from Stripe, wait for the webhook/worker and use **Refresh account**. There is no background checkout polling or browser-side entitlement calculation.
+
+Manual walkthrough:
+
+1. Sign in and compare the internal user ID with the mobile dashboard; reload and check that the same profile returns.
+2. With no grants, verify **Free access** and the empty subscription message.
+3. Complete an explicitly initiated Stripe test purchase, wait for processing, and refresh. Check Premium access, Stripe status, and the verified period against the mobile app.
+4. After cancellation or another lifecycle update is processed, refresh and inspect both subscription state and backend access. Scheduled cancellation can coexist with access until its verified boundary.
+5. If a read fails, verify the unavailable message and retry. Sign out to hide account data; signing in as a different demo user must not show the previous user's records.
+6. Check the cards on a narrow viewport, including long subscription IDs and refresh controls.

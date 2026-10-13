@@ -1,6 +1,6 @@
 # PremiumPass Mobile
 
-An Expo development app for the iOS Simulator, using Auth0 Universal Login and the local Hono backend. Run commands from the repository root unless stated otherwise. Implementation and verification status live in [P04](../../docs/TASKS.md#p04-mobile-login-through-to-the-users-profile).
+An Expo development app for the iOS Simulator and a physical iPhone, using Auth0 Universal Login and the local Hono backend. Run commands from the repository root unless stated otherwise. Implementation and verification status live in [P04](../../docs/TASKS.md#p04-mobile-login-through-to-the-users-profile).
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ DYNAMODB_ENDPOINT=http://127.0.0.1:8000
 
 Without `DYNAMODB_ENDPOINT`, the BFF uses the normal AWS credential chain rather than DynamoDB Local. Restart the BFF after changing its configuration.
 
-The configured app scheme is `premiumpass`, and the iOS bundle identifier is `com.example.premiumpass`. Register the following exact URL in both **Allowed Callback URLs** and **Allowed Logout URLs** for the Native application, replacing the domain:
+The configured app scheme is `premiumpass`, and the default iOS bundle identifier is `com.example.premiumpass`. If signing uses another identifier, set `IOS_BUNDLE_IDENTIFIER` in `apps/mobile/.env` to that exact value so prebuild preserves it. Register the following exact URL in both **Allowed Callback URLs** and **Allowed Logout URLs** for the Native application, replacing the domain and bundle identifier (lowercase in the callback path):
 
 ```text
 premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
@@ -50,7 +50,7 @@ premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 
 The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. Tokens remain in SDK-managed secure storage. The dashboard can temporarily display access and ID tokens for inspection; they are never written to AsyncStorage or logs.
 
-If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback above using your configured domain. Changing the callback allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes.
+If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback using the configured domain and the installed app's bundle identifier. The SDK lowercases the bundle identifier in the URL. A bundle identifier changed only in Xcode can differ from the Expo default; persist it through `IOS_BUNDLE_IDENTIFIER` before running prebuild. Keep existing callback/logout URLs for other installed simulator or device builds. Changing the allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes. The Mac's LAN address does not belong in this callback.
 
 ## Run on the iOS Simulator
 
@@ -85,7 +85,51 @@ Press `i` in the Metro terminal to open the iOS app. Stop Metro or the BFF with 
 
 Reload the app after changing public JavaScript configuration. Rebuild with `pnpm mobile:ios` after changing the Auth0 domain, app scheme, bundle identifier, or native dependencies. The Auth0 domain is also embedded in native callback configuration. Generated `ios/` and `android/` directories are ignored; edit `app.config.ts` instead of generated files.
 
-The iOS Simulator can reach the Mac's loopback address. The BFF stays bound to `127.0.0.1`. App Transport Security permits local networking through `NSAllowsLocalNetworking`; HTTPS remains required for other API origins. A physical iPhone would need separate LAN/network configuration. Android native settings are prepared by the Auth0 plugin, but Android builds and login are outside this verification scope.
+The iOS Simulator can reach the Mac's loopback address. The BFF defaults to `127.0.0.1`. Android native settings are prepared by the Auth0 plugin, but Android builds and login are outside this verification scope.
+
+## Run on a physical iPhone
+
+Connect the iPhone to the Mac, trust the computer, and enable iOS Developer Mode. Use the same trusted Wi-Fi network and the existing Xcode signing team. HTTP is intended only for this local development flow.
+
+1. Start the local database and a LAN-accessible BFF:
+
+   ```sh
+   pnpm local:up
+   pnpm dev:api:lan
+   ```
+
+   Stop an older BFF process first. For the full stack, use `HOST=0.0.0.0 pnpm dev` instead. LAN mode also accepts simulator requests to `127.0.0.1`; DynamoDB and queue configuration remain unchanged.
+
+2. In the mobile terminal, set the Mac's LAN address for this session. `scutil --get LocalHostName` prints the hostname to which you append `.local`. Alternatively, use the private IPv4 address from macOS Wi-Fi settings, such as `192.168.178.42`:
+
+   ```sh
+   export EXPO_PUBLIC_API_URL=http://your-mac.local:3000
+   ```
+
+   Replace `your-mac` and use the BFF's configured port. Shell values override `apps/mobile/.env`; no Auth0 values need changing. Open that address with `/health` in iPhone Safari and expect `{"status":"ok"}` before testing the app. `localhost` and `127.0.0.1` on the iPhone refer to the phone itself.
+
+3. Apply the native network settings once, then install the app. The script explicitly passes `--no-clean` because this Expo CLI recreates native folders by default. It applies changes to the existing project and retains signing settings:
+
+   ```sh
+   pnpm -C apps/mobile prebuild:ios
+   pnpm mobile:ios --device
+   ```
+
+   Select the physical iPhone and allow **Local Network** access when prompted. This builds through Xcode and starts Metro. Stop a previously running localhost-only Metro first.
+
+4. For later JavaScript changes, start only Metro in the same terminal with the API URL override:
+
+   ```sh
+   pnpm mobile:dev:lan
+   ```
+
+   Open PremiumPass and select the server or scan Metro's QR code. A new terminal needs the same `export` again. You can instead set `EXPO_PUBLIC_API_URL` in the ignored `.env`; a reachable Mac LAN address works for both iPhone and simulator while the BFF runs in LAN mode. Reload the app after changing this value.
+
+To return to the unchanged simulator defaults, run `unset EXPO_PUBLIC_API_URL` when using the shell override, then use `pnpm dev:api` and `pnpm mobile:ios` (or `pnpm mobile:dev`). The example `.env` continues to use loopback.
+
+The app permits HTTP for loopback, private IPv4 ranges (`10/8`, `172.16/12`, `192.168/16`), and `.local` names. Other API origins require HTTPS. iOS configuration includes a local-network usage description, `NSAllowsLocalNetworking`, and the IP/CIDR exceptions supported by iOS 17+. See [Apple's ATS exceptions](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains). Changes to these native settings require prebuild and a native rebuild; API address changes within these ranges only require a reload.
+
+If Safari cannot reach `/health`, check that the BFF is in LAN mode, both devices share the network, the macOS firewall permits the server, and the Wi-Fi does not isolate clients. If Safari succeeds but the app cannot connect, allow PremiumPass under **Settings → Privacy & Security → Local Network** and confirm the app was rebuilt. Metro uses port 8081 by default; it and the BFF on port 3000 must both be reachable. An Expo Metro tunnel alone does not expose the local backend.
 
 ## App structure
 

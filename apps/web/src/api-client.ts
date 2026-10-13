@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  profileSchema,
+  subscriptionsSchema,
+  entitlementsSchema,
+} from './api-models';
 
 const messages: Record<string, string> = {
   unauthorized: 'Your session is no longer valid. Sign out and sign in again.',
@@ -17,7 +22,7 @@ const messages: Record<string, string> = {
   checkout_in_progress:
     'Another checkout attempt is still open. Resume it in its original browser tab or wait until Stripe reports it expired.',
   checkout_already_completed:
-    'This checkout is already complete. Premium activation follows in P06 step 2.',
+    'This checkout is already complete. Subscription processing runs asynchronously; refresh your account status.',
   subscription_already_exists:
     'This Stripe customer already has a subscription. A second purchase is blocked.',
   checkout_expired: 'This checkout has expired. You can start a new attempt.',
@@ -51,7 +56,9 @@ export class ApiClient {
     const token = await this.getToken();
     const response = await fetch(`${this.origin}${path}`, {
       ...options,
-      signal: AbortSignal.timeout(30_000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
       headers: {
         ...options.headers,
         Authorization: `Bearer ${token}`,
@@ -69,10 +76,21 @@ export class ApiClient {
     }
     return schema.parse(body);
   }
-  getProfile() {
+  getProfile(signal?: AbortSignal) {
+    return this.request('/v1/me', profileSchema, signal ? { signal } : {});
+  }
+  getSubscriptions(signal?: AbortSignal) {
     return this.request(
-      '/v1/me',
-      z.object({ userId: z.uuid(), createdAt: z.iso.datetime() }),
+      '/v1/me/subscriptions',
+      subscriptionsSchema,
+      signal ? { signal } : {},
+    );
+  }
+  getEntitlements(signal?: AbortSignal) {
+    return this.request(
+      '/v1/me/entitlements',
+      entitlementsSchema,
+      signal ? { signal } : {},
     );
   }
   checkout(requestId: string) {

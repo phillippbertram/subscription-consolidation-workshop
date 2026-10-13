@@ -4,9 +4,9 @@
 
 **Goal:** Build a React Native demo app with Auth0 and an AWS backend that translates subscriptions from multiple purchase channels into central, server-verified entitlements.
 
-**Scope:** About 16 hours of implementation across Saturday and Sunday, assuming prepared accounts and a working development environment. Allow additional setup time if starting React Native or CDK from scratch. Keep the app small; focus on backend architecture and understandable failure handling.
+**Scope:** The original baseline was about 16 hours across a weekend with prepared accounts. The October 13 scope change brings real Apple sandbox integration forward; allow additional Apple setup and device verification time rather than treating it as covered by that estimate. Keep the app small; focus on backend architecture and understandable failure handling.
 
-**As of:** October 10, 2026. This document is a blueprint; its checklists describe outcomes to implement and verify. See the [README](README.md) for setup and executable commands, [AGENTS.md](AGENTS.md) for agent rules, [docs/DECISIONS.md](docs/DECISIONS.md) for decision status, and [docs/TASKS.md](docs/TASKS.md) for actionable tasks. Code and documentation use English throughout.
+**As of:** October 13, 2026. This document is a blueprint; its checklists describe outcomes to implement and verify. See the [README](README.md) for setup and executable commands, [AGENTS.md](AGENTS.md) for agent rules, [docs/DECISIONS.md](docs/DECISIONS.md) for decision status, and [docs/TASKS.md](docs/TASKS.md) for actionable tasks. Code and documentation use English throughout.
 
 PremiumPass is a fictional learning application with synthetic score data. It prepares you for work on mobile BFFs, AWS Serverless, and subscription systems. It does not represent any known internal SCHUFA architecture or real credit-scoring logic.
 
@@ -21,7 +21,7 @@ PremiumPass is a fictional learning application with synthetic score data. It pr
 7. [Subscriptions and entitlements](#7-subscriptions-and-entitlements)
 8. [DynamoDB and concurrency](#8-dynamodb-and-concurrency)
 9. [Stripe Billing in test mode](#9-stripe-billing-in-test-mode)
-10. [Apple and Google provider mocks](#10-apple-and-google-provider-mocks)
+10. [Apple sandbox and Google mocks](#10-apple-sandbox-and-google-mocks)
 11. [Events and reliable processing](#11-events-and-reliable-processing)
 12. [Reconciliation](#12-reconciliation)
 13. [Security and operations](#13-security-and-operations)
@@ -51,7 +51,7 @@ By Sunday, you can log into the app, see the Free state, complete a Stripe test 
 - AWS HTTP API as the HTTP entry point, Auth0 token verification directly in TypeScript Lambdas, and DynamoDB.
 - Stripe Billing with hosted checkout, webhook, and test subscription.
 - SQS with DLQ, idempotent processing, and concurrent update handling.
-- Central subscription and entitlement logic for Stripe and Apple/Google mocks.
+- Central subscription and entitlement logic for Stripe test subscriptions, real Apple sandbox purchases, and Google mocks.
 - EventBridge with an observable consumer and a small outbox for pending events.
 - Scheduled and manually triggered reconciliation.
 - CDK, manual functional checks, GitHub Actions, and a reproducible final demo.
@@ -60,9 +60,9 @@ By Sunday, you can log into the app, see the Free state, complete a Stripe test 
 
 One AWS account, one region, one development stage, one Premium product, and two test users are enough. Build the app for one primary verification platform, such as the iOS simulator. An additional Android run is an extension; record it as verified only if it actually happened.
 
-Real store purchases, app store publication, plan changes, proration, tax logic, refund processing, account merging, and production-grade high availability remain follow-up topics. Apple and Google use deterministic adapter mocks; these do not prove real store integration.
+Production store purchases, app store publication, plan changes, proration, tax logic, refund workflows, account merging, and production-grade high availability remain follow-up topics. Real Apple sandbox integration is now in scope and precedes the remaining Stripe lifecycle exercises. Google retains deterministic adapter mocks; these do not prove real Google integration.
 
-**Purchase path:** Stripe checkout starts on a separate small test website. The mobile app displays status and entitlements. Before publication, review the product, distribution region, storefront, and applicable payment rules separately. Using an external browser does not automatically make a purchase path compliant. See the [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) and [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738).
+**Purchase paths:** Stripe checkout starts on a separate small test website. The Apple sandbox path adds native purchase and restore to the mobile app, with backend verification before entitlement changes. Before publication, review the product, distribution region, storefront, and applicable payment rules separately. Using an external browser does not automatically make a purchase path compliant. See the [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/#in-app-purchase) and [Google Play Payments Policy](https://support.google.com/googleplay/android-developer/answer/9858738).
 
 ## 2 Learning objectives
 
@@ -75,7 +75,7 @@ Real store purchases, app store publication, plan changes, proration, tax logic,
 | Stripe Billing | Purchase a test subscription and process its lifecycle | Why checkout success and Premium activation are separate |
 | SQS and DLQ | Trigger duplicates, retries, and a permanent failure | Why at-least-once delivery requires idempotent consumers |
 | EventBridge | Route and observe domain changes | The difference between a work queue and an event bus |
-| Provider abstraction | Send Apple/Google fixtures through the same pipeline | What normalization simplifies and where provider differences remain |
+| Provider abstraction | Process Apple sandbox state and Google fixtures through shared domain rules | What normalization simplifies and where provider differences remain |
 | Reconciliation | Repair a missed webhook without redelivery | How provider state restores system consistency |
 | CI/CD and operations | Perform a verified development deployment through OIDC | The difference between a successful local check and a verified live flow |
 
@@ -127,8 +127,9 @@ The table below describes the complete target, including P07-P09 components that
 |---|---|
 | BFF Lambda | Verify Auth0 access tokens and scopes, validate input, resolve account ownership, return read models, initiate checkout |
 | Webhook Lambda | Verify the Stripe signature, enqueue supported events in SQS, then acknowledge |
+| Apple notification ingress | Verify App Store Server Notifications V2 and enqueue synchronization; local HTTPS tunnel first |
 | Subscription Processor | Read provider state, normalize it, derive entitlements, persist atomically |
-| Provider adapter | Encapsulate differences between Stripe, Apple mock, and Google mock |
+| Provider adapter | Encapsulate differences between Stripe, Apple sandbox, and Google mock |
 | Reconciliation Lambda | Find due accounts/subscriptions and request synchronization |
 | Outbox Publisher | Send unacknowledged domain events to EventBridge |
 | Event Log Consumer | Make changes visible in CloudWatch with stable event IDs |
@@ -143,7 +144,7 @@ Subscription Service and Entitlement Service are **logically separate modules in
 |---|---|
 | Login | Open Universal Login, display cancellation/errors, support logout |
 | Dashboard | Display profile, synthetic score, Free/Premium status, and refresh button |
-| Premium | Display features and subscription status, load protected history, explain synchronization in progress |
+| Premium | Display features and subscription status, purchase/restore Apple sandbox access, load protected history, explain synchronization in progress |
 
 Reload `/v1/me/entitlements` when the app gains focus and on manual refresh. Display a waiting state while a purchase is being processed. Optionally poll every two seconds for up to 30 seconds; afterward, keep the refresh button available. An offline cached display is not evidence of a valid backend entitlement.
 
@@ -199,6 +200,8 @@ JWT and scope checks in this table run entirely in the backend.
 | `GET /v1/premium/score-history` | JWT, `read:premium`, entitlement | Synthetic history or `403` |
 | `POST /v1/billing/stripe/checkout-session` | JWT, `write:checkout` | Hosted test checkout URL |
 | `POST /v1/webhooks/stripe` | Stripe signature | `2xx` after successful queue acceptance |
+| Apple purchase/restore synchronization (path and scope to select in P07) | JWT, explicit scope, verified Apple ownership | Synchronize verified sandbox state for the authenticated user |
+| Apple notification ingress (path to select in P07) | Apple signed payload, expected app and environment | `2xx` after successful queue acceptance |
 
 Trigger reconciliation and mock scenarios through local development scripts with AWS IAM permissions. No public admin endpoint is needed.
 
@@ -238,7 +241,7 @@ A **subscription** describes the contract observed at the provider. An **entitle
 ### Normalized model
 
 ```typescript
-type Provider = 'stripe' | 'apple_mock' | 'google_mock';
+type Provider = 'stripe' | 'apple' | 'google_mock'; // Target model; Apple implementation is P07
 
 type SubscriptionState =
   | 'pending' | 'trialing' | 'active' | 'past_due'
@@ -269,17 +272,17 @@ interface Subscription {
 | `trialing` | Until the confirmed trial end; trials are initially disabled in checkout |
 | `active` | Until `accessUntil`, unless a confirmed block applies |
 | `active` and `cancelAtPeriodEnd=true` | Premium continues until the confirmed expiration boundary |
-| `past_due` | Previously granted access remains valid; 24 hours of grace after it ends, provided access existed before |
+| `past_due` | Previously granted access plus bounded provider-specific grace as defined below |
 | `paused`, `canceled`, `expired`, `revoked` | This subscription grants no access |
 | Provider technically unavailable | Keep the last verified state; do not invent an additional access period |
 
-The demo sets a **24-hour** grace period only after a previously verified access period. Retries must not reset its start. A purchase that failed initially does not gain Premium access through grace. This is a product decision, not a general Stripe/Apple/Google rule.
+For Stripe and synthetic scenarios, the demo sets a **24-hour** grace period only after a previously verified access period. Retries must not reset its start. A purchase that failed initially does not gain Premium access through grace. For real Apple subscriptions, derive grace eligibility and its boundary from verified Apple subscription/renewal state; do not invent a 24-hour Apple extension. These are provider-specific inputs to the central access rules.
 
 Stripe demo mapping: `incomplete` → `pending`, `incomplete_expired` → `expired`, `unpaid` → blocked, normalized here as `expired`. Also retain the original status. `cancel_at_period_end=true` is a property of a still-running subscription; it does not immediately mean `canceled`. The core scope does not automatically equate refunds with revocation. A real refund policy remains a follow-up topic. [Stripe Subscription Lifecycle](https://docs.stripe.com/billing/subscriptions/overview)
 
 ### Multiple purchase channels
 
-A user's features are the union of all currently valid grants. If the Apple mock ends while Stripe remains valid, Premium stays active. A single provider event must therefore never blindly set `isPremium=false` for the whole user.
+A user's features are the union of all currently valid grants. If the Apple subscription ends while Stripe remains valid, Premium stays active. A single provider event must therefore never blindly set `isPremium=false` for the whole user.
 
 The read model derives access directly from stored subscriptions and exposes source revisions. The P06 processor also persists an `ENTITLEMENTS` snapshot with a separate aggregate revision; it never replaces read-time expiry checks. See [implemented rules and local scenarios](docs/PAYMENTS.md#access-policy).
 
@@ -310,7 +313,7 @@ Implement the calculation as the pure function `deriveEntitlements(subscriptions
 | `EVENT#<provider>#<eventId>` | `PROCESSED` | Timestamp, result, optional retention boundary |
 | `CHECKOUT#<userId>#<requestId>` | `REQUEST` | Request hash, Stripe key, session ID, processing status |
 | `OUTBOX#<domainEventId>` | `EVENT` | Payload, `pending`/`sent`, creation time |
-| `MOCK#<provider>#<id>` | `STATE` | Planned P07 separate simulated provider state |
+| `MOCK#<provider>#<id>` | `STATE` | Planned P07 separate Google mock state |
 
 See the [implemented processing guide](docs/PAYMENTS.md#processing-and-retries) for the local queue/worker, invoice verification limits, and transaction fields. Publishing pending outbox entries and scheduled reconciliation remain separate tasks.
 
@@ -375,7 +378,7 @@ Use IDs and period fields from the pinned Stripe API/SDK version. Do not copy ol
 2. Cancel at period end in the Stripe test dashboard; Premium must remain active until that boundary.
 3. Use a separate API-created test clock scenario for renewal or a failed recurring payment. The clock is a Stripe testing feature, not a change to the entire AWS system clock. Choose supported flows using [Stripe Test Clocks](https://docs.stripe.com/billing/testing/test-clocks).
 
-## 10 Apple and Google provider mocks
+## 10 Apple sandbox and Google mocks
 
 ### Shared contract
 
@@ -391,9 +394,27 @@ interface PurchaseVerifier {
 
 `ProviderSnapshot` contains the owner reference, product, original status, access boundaries, and provider metadata. `VerifiedPurchase` associates a verified purchase reference with the expected user. Stripe uses checkout, so do not artificially force store purchase verification into every adapter.
 
-Implementations: `StripeBillingProvider`, `AppleMockBillingProvider`, `GoogleMockBillingProvider`. Mocks read state from their own fixture records, separate from the local subscription read model. This separation lets reconciliation actually repair a deliberately stale local state.
+Target implementations: `StripeBillingProvider`, `AppleBillingProvider`, `GoogleMockBillingProvider`. These names describe the planned boundaries, not existing adapters. Apple reads verified sandbox state from Apple; the Google mock reads its own fixture records, separate from the local subscription read model. This separation lets reconciliation repair a deliberately stale local state.
 
-### Deterministic scenarios
+### Apple sandbox with a local backend
+
+Use a signed iPhone development build with a native StoreKit integration, an App Store Connect auto-renewable subscription mapped to `premium_monthly`, and a Sandbox Apple Account. A development-signed app can use Apple's sandbox without first uploading a binary to App Store Connect. StoreKit simulation in Xcode remains optional and is not evidence of real Apple server integration.
+
+The BFF, queue, subscription worker, and DynamoDB remain local. The app reaches the BFF over the local network; purchase traffic goes directly to Apple. A public HTTPS tunnel such as ngrok forwards App Store Server Notifications V2 to a dedicated local notification ingress. Configure that URL as the sandbox notification destination; no AWS deployment is required for this flow.
+
+Planned processing boundaries:
+
+- The authenticated backend supplies a stable UUID `appAccountToken` mapped to the internal user. Verify this association and bind `originalTransactionId` immutably to its owner. Scope provider references, duplicate markers, and bindings by Apple environment as well as provider; never reassign a restored purchase to the current user merely because the client submits it.
+- An authenticated purchase/restore endpoint triggers server synchronization. Verify Apple's signed transaction and renewal data, bundle ID, environment, allowed product, ownership, expiration, and revocation; refresh current state through the App Store Server API. A successful purchase sheet alone grants no access. Finish the StoreKit transaction after durable processing, with safe restart/retry recovery.
+- The notification ingress verifies the signed payload using Apple's certificate chain and expected app/environment. It requires no Auth0 token and acknowledges accepted work only after successful queue acceptance. Client synchronization and notifications converge on the same Apple processor.
+- Extend the currently Stripe-specific processing/store contracts only as needed. Keep provider reads and mapping separate from the shared domain rules and revision-guarded transaction. Atomically persist subscription, aggregate entitlement, owner binding, completion marker, and pending outbox. Outbox publication remains P08; scheduled repair remains P09.
+- Keep App Store Server API signing keys in ignored backend configuration. The proposed verifier/API client is Apple's official Node library. Native IAP library selection remains an implementation decision; verify compatibility with the pinned Expo/React Native versions before installation.
+
+Manual acceptance covers purchase, restore/restart, renewal, cancellation and expiration, duplicate/delayed notifications, wrong-owner rejection, and preserving a concurrent Stripe grant. Use a separate Free synthetic user when needed so an existing Stripe entitlement cannot hide Apple activation failures. Record the actual sandbox account setup and device verification without secrets in P07.
+
+Sources: [Apple sandbox testing](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox), [Server Notifications setup](https://developer.apple.com/documentation/appstoreservernotifications/enabling-app-store-server-notifications), [Apple server library](https://github.com/apple/app-store-server-library-node), [Expo IAP](https://docs.expo.dev/guides/in-app-purchases/).
+
+### Google mock scenarios
 
 | Fixture | Expected state |
 |---|---|
@@ -408,9 +429,9 @@ Implementations: `StripeBillingProvider`, `AppleMockBillingProvider`, `GoogleMoc
 
 A development script updates mock state and optionally emits a synchronization job. `emitEvent=false` creates the reconciliation scenario. Reuse the same event ID for duplicates; send an older notification after a newer one to simulate delayed delivery. The processor still reads current mock state.
 
-Retain Apple/Google-specific IDs, environment, and statuses as provider data. Mocks simulate domain scenarios; they implement neither real JWS/certificate verification nor Google Pub/Sub authentication.
+Retain provider-specific IDs, environment, and statuses as provider data. Apple requires real JWS/certificate verification. Google mocks simulate domain scenarios and do not implement Google Pub/Sub authentication.
 
-Later real adapters require Apple transaction validation and Server Notifications, plus Google purchase validation, acknowledgement, and Real-time Developer Notifications. Local StoreKit checks and Apple's sandbox are different stages; Google requires appropriate Play configuration and test accounts. [Apple Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) · [Google Billing Tests](https://developer.android.com/google/play/billing/test)
+A later real Google adapter requires purchase validation, acknowledgement, and Real-time Developer Notifications. Local StoreKit checks and Apple's sandbox are different stages; only real sandbox evidence satisfies the Apple milestone. Google requires appropriate Play configuration and test accounts. [Apple Testing](https://developer.apple.com/documentation/storekit/testing-at-all-stages-of-development-with-xcode-and-the-sandbox) · [Google Billing Tests](https://developer.android.com/google/play/billing/test)
 
 ## 11 Events and reliable processing
 
@@ -469,7 +490,7 @@ Reconciliation resynchronizes local state with the provider. It uses the same no
 
 1. Read known customer mappings and due subscription records with pagination.
 2. For each known Stripe customer, discover relevant subscriptions, including ended states. This also finds subscriptions whose initial webhook never arrived.
-3. Read the mocks' separate state storage.
+3. Refresh known Apple sandbox subscriptions from Apple and read the Google mock's separate state storage.
 4. Enqueue synchronization jobs with deterministic IDs based on provider, reference, and run ID. Duplicates within one run are harmless; the next run uses new IDs.
 5. Repair local discrepancies through the shared processor and label the reason `reconciliation`.
 6. Record `lastReconciledAt`, failures, and discrepancies found. During provider outages, do not interpret a missing response object as an ended subscription.
@@ -480,7 +501,7 @@ Regardless of provider changes, the processor must reevaluate due expiration bou
 
 ### Concrete experiment
 
-Activate the Apple mock. Then change it to `expired` and deliberately suppress the event. The stored subscription initially remains stale. Trigger reconciliation manually and show that it corrects the subscription record and entitlement. Trigger the same run again: no additional domain effect.
+Activate the Google mock. Then change it to `expired` and deliberately suppress the event. The stored subscription initially remains stale. Trigger reconciliation manually and show that it corrects the subscription record and entitlement. Trigger the same run again: no additional domain effect.
 
 **Measurable demo target:** Repair a missed update within seven minutes under healthy dependencies: five minutes until the next run plus processing buffer. This is a project acceptance target, not an AWS guarantee.
 
@@ -659,9 +680,11 @@ Manual scenarios may use a shared injectable clock. Time travel with mock data i
 
 ### Sunday: failures and reproducible operation
 
+The original time boxes below are a historical scheduling baseline. The current sequence starts with P07 Apple sandbox setup, implementation, and device verification; see [TASKS.md](docs/TASKS.md). Apple setup is not assumed to fit the former one-hour mock exercise.
+
 | Time | Work | Visible result |
 |---|---|---|
-| 09:00–10:00 | Apple/Google adapters, separate mock states, scenario script | Both mocks use the same processor and rules |
+| 09:00–10:00 | Google adapter, separate mock state, scenario script | Google mock uses the shared domain rules after Apple integration |
 | 10:00–11:15 | Finish idempotency and concurrency handling; retries/DLQ | Duplicates, conflicts, and permanent failures handled predictably |
 | 11:15–12:15 | Outbox publisher, EventBridge, event log consumer | Domain change appears in the consumer log with a stable ID |
 | 12:15–13:00 | Reconciliation schedule, customer discovery, expiration checks | Missed mock event repaired automatically |
@@ -689,7 +712,8 @@ Signature verification, ownership mapping, entitlement checks, idempotency, and 
 - [ ] Login, logout, and status refresh work on the documented mobile platform.
 - [ ] User A's Stripe test purchase activates Premium within the demo target of 30 seconds after a processable webhook under healthy dependencies.
 - [ ] User B gains neither another user's data nor Premium access by manipulating IDs.
-- [ ] Apple and Google mocks use the same central subscription/entitlement logic.
+- [ ] A real Apple sandbox purchase and restore use server verification and the central subscription/entitlement logic; Google mocks use the same rules.
+- [ ] Apple Sandbox Notifications V2 reach the local worker through HTTPS, with renewal, expiration, ownership, and duplicate handling verified on the recorded setup.
 - [ ] Cancellation at period end, expiration, payment failure, and multiple providers follow the defined policy.
 - [ ] Ten deliveries of one event produce only one domain effect.
 - [ ] Concurrent updates lose no valid entitlement; conflicts are retried.
@@ -725,7 +749,7 @@ Record three decisions in brief notes: server-side entitlements instead of a cli
 
 | Topic | Next hands-on exercise |
 |---|---|
-| Real Apple integration | Compare StoreKit testing stages, make a sandbox purchase, validate signed transactions and Server Notifications |
+| Apple beyond the sandbox milestone | Prepare production configuration, App Review, and additional subscription features only in a separately scoped follow-up |
 | Real Google integration | Connect a Play test account, purchase token, server-side validation, acknowledgement, and RTDN |
 | Scaling | Replace scans with due-time indexes; measure provider rate limits and bounded concurrency |
 | Event system | Publish the outbox through DynamoDB Streams; explore recovery and longer outages |

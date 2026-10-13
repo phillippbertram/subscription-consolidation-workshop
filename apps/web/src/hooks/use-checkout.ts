@@ -1,39 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAuth0 } from '@auth0/auth0-react';
 import { WebApiError } from '../api-client';
 import { useApiClient } from './use-api-client';
 
-export function useCheckout() {
-  const { isAuthenticated } = useAuth0();
+export function useCheckout(userId: string | undefined) {
   const api = useApiClient();
-  const [userId, setUserId] = useState<string>();
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
   const [expired, setExpired] = useState(false);
   const inFlight = useRef(false);
 
+  const active = useRef(true);
   useEffect(() => {
-    let active = true;
-    setUserId(undefined);
-    if (isAuthenticated) {
-      void api
-        .getProfile()
-        .then((profile) => {
-          if (active) setUserId(profile.userId);
-        })
-        .catch((error: unknown) => {
-          if (active)
-            setMessage(
-              error instanceof WebApiError
-                ? error.message
-                : 'Unable to load your profile. Check the backend and sign in again.',
-            );
-        });
-    }
+    active.current = true;
     return () => {
-      active = false;
+      active.current = false;
     };
-  }, [api, isAuthenticated]);
+  }, []);
 
   const storageKey = userId ? `premiumpass:checkout:${userId}` : undefined;
   async function checkout() {
@@ -48,8 +30,9 @@ export function useCheckout() {
         sessionStorage.getItem(storageKey) ?? crypto.randomUUID();
       sessionStorage.setItem(storageKey, requestId);
       const session = await api.checkout(requestId);
-      window.location.assign(session.url);
+      if (active.current) window.location.assign(session.url);
     } catch (error) {
+      if (!active.current) return;
       setMessage(
         error instanceof WebApiError
           ? error.message
@@ -60,7 +43,7 @@ export function useCheckout() {
       );
     } finally {
       inFlight.current = false;
-      setPending(false);
+      if (active.current) setPending(false);
     }
   }
   function newAttempt() {
@@ -69,5 +52,5 @@ export function useCheckout() {
     setExpired(false);
     setMessage('Ready for a new attempt. Continue to checkout when ready.');
   }
-  return { userId, message, pending, expired, checkout, newAttempt };
+  return { message, pending, expired, checkout, newAttempt };
 }

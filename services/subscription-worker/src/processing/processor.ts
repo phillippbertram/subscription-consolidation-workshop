@@ -11,12 +11,19 @@ import { normalizeSubscription, sameDomainState } from './normalize.js';
 // Orchestrates a provider refresh without depending on Hono or SQS APIs.
 // Transports decide when to acknowledge; state updates return only after commit.
 export class SubscriptionProcessor {
+  /** Inject storage, provider reads and a clock sampled for each refresh attempt. */
   constructor(
     private readonly store: ProcessingStore,
     private readonly source: SubscriptionSource,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
+  /**
+   * Refresh current provider state and commit verified access for a queued event.
+   * Return early for completed events or references without a subscription.
+   * Revision conflicts repeat local/provider reads within a bounded retry budget;
+   * unresolved failures throw so the transport can retry instead of acknowledging.
+   */
   async process(job: StripeJob) {
     for (let attempt = 0; attempt < 3; attempt++) {
       // Fast path for repeated delivery. The transaction also guards the marker:

@@ -1,5 +1,10 @@
+/** Validated database settings shared by the BFF and subscription worker. */
 export interface DatabaseConfig {
   tableName: string;
+  /**
+   * Explicit loopback HTTP origin for local runs, using dummy credentials.
+   * Omit to use AWS endpoint resolution and the normal credential chain.
+   */
   endpoint?: string;
 }
 

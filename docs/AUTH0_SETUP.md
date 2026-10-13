@@ -83,7 +83,7 @@ The mobile project uses these values in `apps/mobile/app.config.ts`:
 | Mobile setting | Configured value |
 |---|---|
 | Explicit custom scheme | `premiumpass` |
-| iOS bundle identifier | `com.example.premiumpass` |
+| iOS bundle identifier | `IOS_BUNDLE_IDENTIFIER` from `apps/mobile/.env`, default `com.example.premiumpass` |
 | Android package name | `com.example.premiumpass` |
 
 With those values, put both URLs below in **Allowed Callback URLs** and **Allowed Logout URLs**, replacing the domain:
@@ -92,6 +92,8 @@ With those values, put both URLs below in **Allowed Callback URLs** and **Allowe
 premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 premiumpass://your-tenant.eu.auth0.com/android/com.example.premiumpass/callback
 ```
+
+If Xcode signing uses another iOS bundle identifier, set `IOS_BUNDLE_IDENTIFIER` to that value before prebuild and replace the iOS callback path's identifier with its lowercase form. Preserve existing allowlist entries for older simulator/device builds. The callback does not change when the BFF moves from loopback to LAN.
 
 Save the application settings. Match the Expo Auth0 plugin's `domain` and explicit `customScheme`, the platform identifiers, and the SDK login/logout options to these URLs. Rebuild the native development app after native configuration changes; Expo Go does not support this SDK. [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo) · [React Native SDK](https://github.com/auth0/react-native-auth0).
 

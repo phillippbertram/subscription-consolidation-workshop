@@ -1,6 +1,6 @@
 # Decisions
 
-As of October 12, 2026. This document distinguishes agreed project direction from implementation proposals. Detailed flows are in the [project plan](../PROJECT_PLAN.md); implementation status is in the [task plan](TASKS.md).
+As of October 13, 2026. This document distinguishes agreed project direction from implementation proposals. Detailed flows are in the [project plan](../PROJECT_PLAN.md); implementation status is in the [task plan](TASKS.md).
 
 ## Agreed direction
 
@@ -9,7 +9,7 @@ As of October 12, 2026. This document distinguishes agreed project direction fro
 | D01 | React Native and Auth0                          | Real mobile login; the SDK requires a native development build                                |
 | D02 | Authentication directly in the backend          | API Gateway without a JWT/Lambda authorizer; central token and scope checks in the BFF        |
 | D03 | AWS Serverless with TypeScript and CDK          | HTTP API, Lambda, DynamoDB, SQS/DLQ, and EventBridge form the target architecture             |
-| D04 | Stripe test mode; Apple/Google initially mocked | No live billing or real store integration within the weekend scope                            |
+| D04 | Stripe test mode; real Apple sandbox next; Google mocked | Apple sandbox replaces the planned Apple mock; no production payments or store publication |
 | D05 | Central subscriptions and entitlements          | Access depends on server-side permissions computed across providers                           |
 | D06 | Small hands-on project                          | Implement incrementally; do not build an additional platform or admin interface               |
 | D07 | Hono as the HTTP framework                      | Shared app definition, separate Node and Lambda entry points; selection delegated by the user |
@@ -17,6 +17,16 @@ As of October 12, 2026. This document distinguishes agreed project direction fro
 | D09 | English throughout the project                  | Code, comments, messages, configuration examples, and documentation use English               |
 | D10 | HTTP API `$default` integration for the BFF     | Hono owns BFF routes; separate handlers can use explicit Gateway routes with higher priority  |
 | D11 | One workspace package per executable service | Independent manifests, configuration and builds; local/Lambda adapters stay together |
+
+## Apple sandbox priority
+
+**Decided on October 13, 2026:** Prioritize real Apple sandbox purchases against the local backend before the remaining Stripe lifecycle exercises. Replace the Apple mock milestone with purchase, restore, server verification, and App Store Server Notifications V2. Google remains mocked. AWS deployment, production purchases, and App Store publication are not prerequisites for this local milestone. Implementation and verification status live only in [P07](TASKS.md#p07-apple-sandbox-and-google-mocks).
+
+**Recommended implementation:** Direct StoreKit integration through an Expo-compatible native IAP library, with Apple's App Store Server Library in the backend. Evaluate the native library against the pinned Expo/React Native versions before choosing and pinning it; `expo-iap` is a candidate. RevenueCat is an alternative, not a confirmed dependency. Use a development build on an iPhone, a sandbox auto-renewable subscription, and an HTTPS tunnel such as ngrok for Apple's notification endpoint. App-to-BFF traffic can remain on the local network.
+
+**Setup still to establish:** Developer Program membership and agreement, matching bundle ID/App Store Connect app, subscription group/product ID, sandbox tester, signing/device setup, and a server API In-App Purchase key. Keep the private key backend-only. No external setup or sandbox purchase is implied by this planning decision.
+
+Sources: [Apple sandbox testing](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox), [server notifications](https://developer.apple.com/documentation/appstoreservernotifications/enabling-app-store-server-notifications), [Expo IAP options](https://docs.expo.dev/guides/in-app-purchases/), [Apple server library](https://github.com/apple/app-store-server-library-node).
 
 ## Framework: Hono
 
@@ -41,6 +51,8 @@ User storage remains inside the BFF until another service needs it. `UserStore` 
 ## P04 local mobile development
 
 The Expo app lives in `apps/mobile` and targets the iOS Simulator first. It calls the local Hono BFF through `EXPO_PUBLIC_API_URL` while using the real Auth0 Native Application and Custom API audience. AWS deployment is not required for this local flow; deployed Gateway/Lambda verification remains separate.
+
+Physical iPhone development also uses the local BFF. LAN access is explicit (`pnpm dev:api:lan`, or `HOST=0.0.0.0 pnpm dev`); loopback remains the default. The mobile API origin may use a private IPv4 address or `.local` hostname over HTTP, with scoped iOS ATS exceptions; other hosts require HTTPS. `pnpm mobile:dev:lan` exposes Metro to the device. An optional local `IOS_BUNDLE_IDENTIFIER` preserves the identifier chosen for signing, and its lowercase form determines the Auth0 callback path. The prebuild script explicitly uses `--no-clean` to retain native project settings. See the [iPhone workflow](../apps/mobile/README.md#run-on-a-physical-iphone).
 
 The initial dependency set is Expo 57.0.27, React Native 0.86.3, React 19.2.3, and `react-native-auth0` 5.11.1, with an Expo development client. Native projects are generated from `app.config.ts` and ignored. The Auth0 SDK owns secure credential storage; the first flow requests no refresh token, so expired credentials require another login.
 

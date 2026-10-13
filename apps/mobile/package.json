@@ -5,8 +5,9 @@
   "main": "index.ts",
   "scripts": {
     "dev": "expo start --dev-client --localhost",
+    "dev:lan": "expo start --dev-client --lan",
     "ios": "expo run:ios",
-    "prebuild:ios": "expo prebuild --platform ios --no-install",
+    "prebuild:ios": "expo prebuild --platform ios --no-install --no-clean",
     "typecheck": "tsc --noEmit",
     "build": "expo export --platform ios"
   },

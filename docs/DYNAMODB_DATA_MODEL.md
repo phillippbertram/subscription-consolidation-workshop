@@ -2,7 +2,7 @@
 
 See the [payments guide](PAYMENTS.md) for checkout, subscription processing, and access rules.
 
-This reference describes the records currently read by the BFF and written by the BFF or the local demo script. For implementation progress and verification evidence, see [P03 in the task plan](TASKS.md#p03-small-aws-stack-and-user-persistence). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
+This reference describes the records accessed by the BFF, subscription worker and local demo script. Implementation progress and verification evidence are tracked in [P03](TASKS.md#p03-small-aws-stack-and-user-persistence) and [P06](TASKS.md#p06-stripe-purchase-and-reliable-processing). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
 
 ## Table structure
 
@@ -10,12 +10,53 @@ The application uses one table with a composite primary key:
 
 | Attribute | DynamoDB type | Role |
 |---|---|---|
-| `pk` | String (`S`) | Partition key; identifies an identity or internal user |
+| `pk` | String (`S`) | Partition key; namespaces identities, users, provider references, checkout attempts, events and outbox entries |
 | `sk` | String (`S`) | Sort key; identifies the record type within that partition |
 
 Only these two attributes are defined in the table schema. The application supplies the other attributes when writing items. Identity and profile fields below are strings. Subscription fields additionally use numbers, booleans, and nulls as documented below.
 
-The local initializer creates `premiumpass-local`; the CDK stack uses a generated table name and passes it to the BFF as `DYNAMODB_TABLE_NAME`. Both configure on-demand billing (`PAY_PER_REQUEST`). There are no secondary indexes or TTL attributes configured. The CDK table uses `RETAIN`; local Compose storage uses a persistent named volume. See the [infrastructure guide](../infra/README.md#local-dynamodb-and-manual-requests) for startup and manual requests.
+The local initializer creates `premiumpass-local`; the CDK stack uses a generated table name and passes it to the BFF and worker as `DYNAMODB_TABLE_NAME`. Both configure on-demand billing (`PAY_PER_REQUEST`). There are no secondary indexes or TTL attributes configured. The CDK table uses `RETAIN`; local Compose storage uses a persistent named volume. See the [infrastructure guide](../infra/README.md#local-dynamodb-and-manual-requests) for startup and manual requests.
+
+## Access patterns
+
+Implemented application access only; table initialization and manual DynamoDB Admin operations are excluded. All `GetItem` and `Query` reads use `ConsistentRead: true`; queries load every page. No application flow uses a table scan or secondary index.
+
+Key shorthand: `H` = identity hash, `U` = internal user UUID, `C` = Stripe customer ID, `Q` = checkout request UUID, `E` = Stripe event ID.
+
+### Reads
+
+| Purpose                                                   | Caller                | Operation | `pk` / `sk`                              |
+| --------------------------------------------------------- | --------------------- | --------- | ---------------------------------------- |
+| Resolve verified identity to internal user                | BFF                   | `GetItem` | `IDENTITY#H` / `MAP`                     |
+| Load the mapped profile                                   | BFF                   | `GetItem` | `USER#U` / `PROFILE`                     |
+| Find customer creation intent or verify forward ownership | BFF, worker           | `GetItem` | `USER#U` / `CUSTOMER#stripe`             |
+| Resolve or verify the customer's internal owner           | BFF, worker           | `GetItem` | `PROVIDER#stripe#CUSTOMER#C` / `OWNER`   |
+| Resume a checkout attempt                                 | BFF                   | `GetItem` | `CHECKOUT#U#Q` / `REQUEST`               |
+| Find the user's active purchase attempt                   | BFF                   | `GetItem` | `USER#U` / `CHECKOUT#ACTIVE`             |
+| Load all provider subscriptions                           | BFF, worker, demo CLI | `Query`   | `pk = USER#U`, `begins_with(sk, 'SUB#')` |
+| Load the aggregate revision before processing             | Worker, demo CLI      | `GetItem` | `USER#U` / `ENTITLEMENTS`                |
+| Detect a completed Stripe event                           | Worker                | `GetItem` | `EVENT#stripe#E` / `PROCESSED`           |
+
+- The BFF derives access from `SUB#` records and the current time; it does not read the stored `ENTITLEMENTS` tier for authorization.
+- Writers read the aggregate revision **before** subscriptions and provider state. The subsequent transaction rejects concurrent changes; separate consistent reads are not an atomic snapshot.
+
+### Writes
+
+| Purpose                                           | Caller   | Operation and affected records                                                                                                             | Required condition                                                                                                                           |
+| ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create identity and profile together              | BFF      | `TransactWriteItems`: `IDENTITY#H` / `MAP` + `USER#U` / `PROFILE`                                                                          | Both items absent; concurrent losers reread                                                                                                  |
+| Reserve customer creation                         | BFF      | `PutItem`: `USER#U` / `CUSTOMER#stripe`                                                                                                    | Item absent; preserve the winning creation request ID                                                                                        |
+| Bind the Stripe customer to its user              | BFF      | `TransactWriteItems`: forward customer mapping + `PROVIDER#stripe#CUSTOMER#C` / `OWNER`                                                    | Same creation request; forward customer absent or identical; reverse owner absent or identical                                               |
+| Reserve a checkout attempt and active pointer     | BFF      | `TransactWriteItems`: `CHECKOUT#U#Q` / `REQUEST` + `USER#U` / `CHECKOUT#ACTIVE`                                                            | New attempt absent; pointer absent or still equal to the previously read request                                                             |
+| Attach the resulting checkout session             | BFF      | `PutItem`: `CHECKOUT#U#Q` / `REQUEST`                                                                                                      | Same fingerprint; session ID absent or identical                                                                                             |
+| Commit verified Stripe state and event completion | Worker   | `TransactWriteItems`: [subscription, entitlement snapshot, owner, completion marker and optional outbox](#subscription-processing-records) | Loaded revision unchanged, profile and customer ownership match, subscription owner absent or identical, completion marker/new outbox absent |
+| Apply or clear local subscription scenarios       | Demo CLI | `TransactWriteItems`: two reserved demo `SUB#` rows + `ENTITLEMENTS` + `OUTBOX`                                                            | Local table only; existing profile, unchanged aggregate revision, new outbox absent; demo rows absent or marked `p05-local-demo`             |
+
+The worker adds an outbox entry only for a domain change. The demo CLI always writes one and deletes only its reserved demo rows when the selected scenario requires it. All transaction items commit or fail together. Subscription-owner bindings are protected by write conditions; there is no separate application read for those records yet.
+
+**Not implemented:** Finding/publishing pending outbox entries ([P08](TASKS.md#p08-outbox-publisher-and-eventbridge)) and scheduled reconciliation/expiration ([P09](TASKS.md#p09-reconciliation-and-expiration)). No scan, index or update pattern for these tasks is implemented yet.
+
+Sources: [user store](../services/bff/src/dynamodb-users.ts), [checkout store](../services/bff/src/billing/dynamodb-billing.ts), [subscription reads](../packages/persistence/src/subscriptions.ts), [processing store](../services/subscription-worker/src/processing/dynamodb-processing.ts), [demo CLI](../services/subscription-worker/scripts/seed-subscription.ts).
 
 ## Identity mapping
 

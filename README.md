@@ -1,6 +1,6 @@
 # PremiumPass
 
-A hands-on learning project: a React Native app with Auth0 and an AWS backend that translates Stripe test subscriptions and Apple/Google mocks into central entitlements. All data is synthetic. Code and documentation use English.
+A hands-on learning project: a React Native app with Auth0 and an AWS backend that translates subscriptions into central entitlements. The target providers are Stripe test mode, real Apple sandbox purchases, and Google mocks. All data is synthetic. Code and documentation use English. See the [task plan](docs/TASKS.md) for implementation status and the next Apple sandbox milestone.
 
 ## Navigation
 
@@ -95,7 +95,7 @@ pnpm local:up
 pnpm dev:api
 ```
 
-The BFF requires `PORT`, Auth0 issuer/audience, and DynamoDB configuration. `PORT` accepts 0–65535; 0 chooses a free port. `pnpm dev:api` and `pnpm start` read `services/bff/.env`; Webhook and worker read their respective service `.env` files. Existing shell variables take precedence. Missing/invalid values produce explanatory errors. A port conflict is reported by the server; a watcher then waits for a change or `Ctrl+C`.
+The BFF requires `PORT`, Auth0 issuer/audience, and DynamoDB configuration. `PORT` accepts 0–65535; 0 chooses a free port. `HOST` defaults to `127.0.0.1`; `pnpm dev:api:lan` selects `0.0.0.0` for a physical iPhone on the same trusted network. For the grouped stack, use `HOST=0.0.0.0 pnpm dev`. Follow the [iPhone workflow](apps/mobile/README.md#run-on-a-physical-iphone) for the mobile API URL and Metro. `pnpm dev:api` and `pnpm start` read `services/bff/.env`; Webhook and worker read their respective service `.env` files. Existing shell variables take precedence. Missing/invalid values produce explanatory errors. A port conflict is reported by the server; a watcher then waits for a change or `Ctrl+C`.
 
 Placeholder Auth0 settings can serve `/health` but cannot validate real tokens. Local DynamoDB uses dummy credentials; omitting its endpoint selects the AWS credential chain. The local webhook requires ElasticMQ; the local worker additionally requires DynamoDB Local. Local `.env` files are ignored; never put secrets in documentation or logs.
 
@@ -120,6 +120,7 @@ Both entry points validate these settings once at startup:
 | `AUTH0_ISSUER` | Exact tenant or custom-domain issuer, for example `https://your-tenant.eu.auth0.com/`; HTTPS origin with a trailing slash, no additional path/query/credentials |
 | `AUTH0_AUDIENCE` | Auth0 Custom API identifier, for example `https://api.premiumpass.example`; never the Native/SPA client ID |
 | `PORT` | Local server only; not required by Lambda |
+| `HOST` | Local server only: `127.0.0.1` by default, or `0.0.0.0` for LAN access |
 | `DYNAMODB_TABLE_NAME` | Required table name; `premiumpass-local` in the local example |
 | `DYNAMODB_ENDPOINT` | Optional loopback HTTP origin, e.g. `http://127.0.0.1:8000`; local entry only, rejected by Lambda |
 
@@ -207,10 +208,12 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 | `pnpm build` | Bundle local and Lambda entry points with esbuild |
 | `pnpm dev` | Start Docker/table initialization, then API, webhook, worker, and website with labeled logs |
 | `pnpm dev:api` | Start only the BFF with file watching |
+| `pnpm dev:api:lan` | Start the BFF on all IPv4 interfaces for local iPhone development |
 | `pnpm start` | Start the built local server without watch mode |
 | `pnpm web:dev` | Start the React checkout website on localhost:5173 |
 | `pnpm mobile:ios` | Build/install the native Expo app and start Metro for the iOS Simulator |
 | `pnpm mobile:dev` | Start Metro for the already installed mobile development app |
+| `pnpm mobile:dev:lan` | Start Metro over LAN for an installed iPhone development app |
 | `pnpm local:up` | Start DynamoDB Local, its GUI, and ElasticMQ; automatically initialize the table |
 | `pnpm local:down` | Stop/remove all Compose containers; database volume survives, in-memory queue messages do not |
 | `pnpm dev:webhook` | Start the signature-only webhook on loopback port 3002 |

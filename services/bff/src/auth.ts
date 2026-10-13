@@ -3,9 +3,15 @@ import { createMiddleware } from 'hono/factory';
 import { createRemoteJWKSet, customFetch, errors, jwtVerify } from 'jose';
 import type { AuthConfig } from './config.js';
 
+/**
+ * Claims exposed after access-token signature, issuer, audience and time checks.
+ * This can still identify a machine; user routes reject machine identities
+ * separately before resolving a profile.
+ */
 export interface AuthIdentity {
   issuer: string;
   subject: string;
+  /** Verified API permissions; Premium also requires a current entitlement. */
   scopes: string[];
 }
 

@@ -20,9 +20,17 @@ export function readMobileConfig() {
   }
 
   const url = new URL(apiUrl);
+  const [first, second] = url.hostname.split('.').map(Number);
+  const privateIpv4 =
+    /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname) &&
+    (first === 10 ||
+      (first === 172 && second !== undefined && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168));
   const localHttp =
     url.protocol === 'http:' &&
-    ['127.0.0.1', 'localhost', '10.0.2.2'].includes(url.hostname);
+    (['127.0.0.1', 'localhost', '10.0.2.2'].includes(url.hostname) ||
+      privateIpv4 ||
+      url.hostname.endsWith('.local'));
   if (
     (!localHttp && url.protocol !== 'https:') ||
     url.username ||
@@ -32,7 +40,7 @@ export function readMobileConfig() {
     url.pathname !== '/'
   ) {
     throw new Error(
-      'API URL must be an HTTPS origin or a local simulator HTTP origin.',
+      'API URL must be an HTTPS origin or a local HTTP origin (loopback, private IPv4, or .local hostname).',
     );
   }
 

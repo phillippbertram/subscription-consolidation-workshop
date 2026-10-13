@@ -9,12 +9,17 @@ import {
 
 export class StripeBillingProvider implements BillingProvider {
   private readonly stripe: Stripe;
+  /** Configure bounded SDK requests; no provider request runs during construction. */
   constructor(secretKey: string) {
     this.stripe = new Stripe(secretKey, {
       maxNetworkRetries: 1,
       timeout: 10_000,
     });
   }
+  /**
+   * Run a provider operation, preserving application errors while replacing
+   * other failures with a safe 503 error that contains no Stripe payload.
+   */
   private async call<T>(operation: () => Promise<T>): Promise<T> {
     try {
       return await operation();
@@ -96,6 +101,11 @@ export class StripeBillingProvider implements BillingProvider {
       return false;
     });
   }
+  /**
+   * Validate test mode, subscription checkout fields and any hosted URL before
+   * mapping the provider response. The service must still match its ownership
+   * references to the saved attempt and check whether checkout can be resumed.
+   */
   private session(result: Stripe.Checkout.Session): CheckoutSession {
     if (
       result.livemode ||

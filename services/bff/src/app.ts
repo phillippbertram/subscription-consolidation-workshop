@@ -13,6 +13,8 @@ import { deriveEntitlements } from '@premiumpass/domain';
 import { requestLogger } from './logging.js';
 import type { LogLevel } from '@premiumpass/logging';
 
+// Composition boundary: Hono owns HTTP parsing and responses; injected stores
+// and services work with domain values and can also be used outside HTTP.
 export function createApp(
   authConfig: AuthConfig,
   stores: { users: UserStore; subscriptions: SubscriptionStore },
@@ -31,6 +33,8 @@ export function createApp(
   });
   app.use('*', requestLogger(logLevel));
 
+  // Browsers send OPTIONS preflights without a Bearer token. Handle those
+  // before authentication; CORS does not authorize the actual API request.
   if (options.webOrigin) {
     app.use(
       '/v1/*',
@@ -63,6 +67,8 @@ export function createApp(
   // Register all user routes below this middleware; authentication is the default.
   app.use('*', authenticate(authConfig));
   app.use('*', async (c, next) => {
+    // A valid client-credentials token identifies an application, not a person
+    // whose purchases and profile these /me routes are allowed to manage.
     if (c.get('machineIdentity')) {
       return c.json(
         {
@@ -80,6 +86,8 @@ export function createApp(
     return c.json(await stores.users.getOrCreate(c.get('auth')));
   });
   app.get('/v1/me/subscriptions', requireScopes('read:me'), async (c) => {
+    // Ownership starts with the verified issuer/subject. A client-supplied userId
+    // must never select another user's partition.
     const user = await stores.users.getOrCreate(c.get('auth'));
     return c.json({
       subscriptions: await stores.subscriptions.listForUser(user.userId),
@@ -88,6 +96,8 @@ export function createApp(
   app.get('/v1/me/entitlements', requireScopes('read:me'), async (c) => {
     const user = await stores.users.getOrCreate(c.get('auth'));
     const subscriptions = await stores.subscriptions.listForUser(user.userId);
+    // Sample time after the read: a persisted Premium snapshot may have expired
+    // without a webhook. Enforce that boundary again on every API request.
     return c.json(deriveEntitlements(subscriptions, now()));
   });
   app.get(
@@ -97,6 +107,8 @@ export function createApp(
       const user = await stores.users.getOrCreate(c.get('auth'));
       const subscriptions = await stores.subscriptions.listForUser(user.userId);
       const entitlements = deriveEntitlements(subscriptions, now());
+      // Scope permits calling the API; an entitlement proves current product
+      // access. A valid JWT with read:premium alone is not a paid subscription.
       if (!entitlements.features.includes('score_history')) {
         return c.json(
           {
@@ -146,7 +158,15 @@ export function createApp(
         );
       if (!options.checkout)
         throw new CheckoutError('checkout_unavailable', 503);
+      // The web client's useCheckout hook creates a UUID per purchase attempt,
+      // stores it per user in sessionStorage, and reuses it for retries.
+      // ApiClient.checkout (apps/web/src/api-client.ts) sends it in this header.
+      // It is separate from the server-generated X-Request-Id for each HTTP call.
+      // The backend derives Stripe's idempotency key from this attempt UUID:
+      // https://docs.stripe.com/api/idempotent_requests
       const key = z.uuid().safeParse(c.req.header('Idempotency-Key'));
+      // Only the plan is client input. Strict parsing rejects fields such as
+      // userId, customerId, email, or price that the server must determine.
       const body = z
         .object({ planId: z.string().min(1).max(64) })
         .strict()
@@ -161,6 +181,8 @@ export function createApp(
       )
         throw new CheckoutError('invalid_checkout_request', 400);
       const identity = c.get('auth');
+      // The validated token establishes identity; UserInfo separately supplies
+      // a verified billing email for that same subject.
       const verifiedEmail = await getVerifiedCheckoutEmail(
         authConfig,
         identity,

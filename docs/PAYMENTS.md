@@ -2,35 +2,39 @@
 
 **A payment becomes Premium only after backend verification.** Checkout redirects, client badges and scopes alone never grant access. Use synthetic accounts and Stripe test mode only.
 
-[Local setup](#local-startup) · [Checkout](#checkout-and-recovery) · [Processing](#processing-and-retries) · [Access](#access-policy) · [Manual checks](#manual-checks) · [AWS webhook](#register-the-cloud-webhook)
+[Flow](#payment-flow) · [Local setup](#local-startup) · [Checkout](#checkout-and-recovery) · [Processing](#processing-and-retries) · [Access](#access-policy) · [Manual checks](#manual-checks) · [AWS webhook](#register-the-cloud-webhook)
 
 ## Payment flow
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant Web as Website
+    participant Client as Web / Mobile
     participant BFF
     participant Stripe
-    participant Billing as Webhook / queue / worker
+    participant Processing as Webhook / queue / worker
     participant DB as DynamoDB
-    User->>Web: Sign in with Auth0
-    Web->>BFF: Start checkout with token, plan and attempt UUID
-    BFF->>BFF: Verify identity, scopes and email
+    Client->>BFF: Start checkout from authenticated website
     BFF->>DB: Reserve owned customer and purchase attempt
     BFF->>Stripe: Create or reuse hosted Checkout
     Stripe-->>BFF: Session and checkout URL
-    BFF-->>Web: Open hosted Checkout
-    User->>Stripe: Complete test payment
-    Stripe-->>Web: Redirect back without granting access
-    Stripe->>Billing: Signed webhook
-    Billing-->>Stripe: 200 after queue acceptance
-    Billing->>Stripe: Worker reads current subscription and invoices
-    Billing->>DB: Atomically commit verified access and event records
-    Web->>BFF: Refresh subscriptions and entitlements
-    BFF->>DB: Read subscriptions and evaluate access at current time
-    BFF-->>Web: Free or Premium for the same user in Mobile
+    BFF-->>Client: Checkout URL
+    Client->>Stripe: Complete test payment
+    par Browser return
+        Stripe-->>Client: Redirect to website
+    and Asynchronous processing
+        Stripe->>Processing: Signed webhook
+        Processing-->>Stripe: HTTP 200 after queue acceptance
+        Processing->>Stripe: Read current subscription and invoices
+        Stripe-->>Processing: Ownership, status and paid periods
+        Processing->>DB: Atomically commit state and event records
+    end
+    Client->>BFF: Refresh access in Web or Mobile
+    BFF->>DB: Read this user's subscriptions
+    BFF->>BFF: Evaluate access at current time
+    BFF-->>Client: Premium if a valid grant exists
 ```
+
+Client refreshes run independently of the worker: a refresh before its commit can still return Free. The failure paths are split into [checkout recovery](#checkout-and-recovery), [webhook delivery](#webhook-delivery) and [worker retries](#worker-retries).
 
 **Ownership:** Auth0 issuer/subject → internal user UUID → Stripe customer → subscription. Email is contact data, never an ownership key. See [database records](DYNAMODB_DATA_MODEL.md#stripe-customer-and-checkout-records) and [architecture](ARCHITECTURE.md) for details.
 
@@ -67,42 +71,92 @@ No AWS credentials are needed locally. ElasticMQ messages disappear when its con
 
 `POST /v1/billing/stripe/checkout-session` requires a user access token with `write:checkout`, `openid`, `email`, JSON `{"planId":"premium_monthly"}` and a UUID `Idempotency-Key`. It returns `sessionId`, `url`, `expiresAt`.
 
-1. Verify token, scopes, browser origin and input. Resolve the internal user server-side.
-2. Read Auth0 `/userinfo`; require a matching subject and verified email. Missing verification returns `403 verified_email_required`. Sync email to the owned Stripe customer, never to DynamoDB or logs.
-3. Derive customer, price, quantity and return URLs server-side. Persist the purchase intent before calling Stripe; retries reuse the same provider key.
+Before the flow below, the BFF validates token, scopes, browser origin and input, then resolves the internal user. Auth0 `/userinfo` must return a matching subject and verified email; otherwise checkout fails, including `403 verified_email_required` for missing verification. Email is synchronized to the owned Stripe customer, never to DynamoDB or logs. Customer, price, quantity and return URLs are derived server-side.
 
-| Situation                                               | Behavior                                                                                |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Same attempt UUID                                       | Resume the same session; changed parameters return `409`                                |
-| Competing attempts or existing subscription             | Block another purchase; only `canceled` / `incomplete_expired` subscriptions are exempt |
-| Return via Cancel                                       | Session stays open; retry the same attempt                                              |
-| Session expires after one hour                          | Replacement requires Stripe-confirmed expiration                                        |
-| Completed session, even after later cancellation        | Purchase lock remains; no automatic repurchase/unlock                                   |
-| Missing customer/session ID after an uncertain response | Recovery stops after 23 hours / 20 minutes; inspect the original Stripe operation       |
+```mermaid
+flowchart TD
+    startRequest["Checkout request with attempt UUID"] --> knownAttempt{"Attempt already stored?"}
+    knownAttempt -->|"Yes"| sameInput{"Same parameters?"}
+    sameInput -->|"No"| conflict["HTTP 409: idempotency conflict"]
+    sameInput -->|"Yes"| recoverSession["Load session or create with the same Stripe key"]
+    knownAttempt -->|"No"| purchaseAllowed{"Purchase slot available and no blocking subscription?"}
+    purchaseAllowed -->|"No"| blockedPurchase["HTTP 409: another purchase blocked"]
+    purchaseAllowed -->|"Yes"| reserveAttempt["Atomically reserve attempt and purchase lock"]
+    reserveAttempt --> recoverSession
+    recoverSession --> result{"Result?"}
+    result -->|"Open session"| openCheckout["Open the existing Checkout"]
+    result -->|"Completed or expired session"| unusableSession["HTTP 409: session unavailable"]
+    result -->|"Timeout or lost response"| recoveryWindow{"Safe recovery still possible?"}
+    recoveryWindow -->|"Yes: retry the same attempt UUID"| startRequest
+    recoveryWindow -->|"No"| manualRecovery["Recovery required: inspect the original operation"]
+```
+
+| Recovery boundary                                       | Rule                                                                              |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Existing subscription                                   | Only `canceled` / `incomplete_expired` are exempt from the subscription guard     |
+| Return via Cancel                                       | Session stays open; retry the same attempt                                        |
+| Session expires after one hour                          | Replacement requires Stripe-confirmed expiration                                  |
+| Completed session, even after later cancellation        | Purchase lock remains; no automatic repurchase/unlock                             |
+| Missing customer/session ID after an uncertain response | Recovery stops after 23 hours / 20 minutes; inspect the original Stripe operation |
 
 Never delete mappings or reset locks to bypass recovery. Exact errors and checks: [checkout service](../services/bff/src/billing/checkout-service.ts).
 
 ## Processing and retries
 
-1. **Webhook:** Verify unchanged request bytes using Stripe's signature, without Auth0. Supported events receive `200` only after enqueue; queue failure returns `503`. Bad signatures/invalid events/live mode/Connect return `400`; valid unsupported test types are ignored with `200`.
-2. **Worker:** Skip completed event IDs. Check stored customer ownership against Stripe metadata; read aggregate revision → subscriptions → current Stripe state. Old event payloads never directly overwrite state.
-3. **Verify payment:** Require the configured product/price and matching paid invoice lines. `active` or a nominal period end alone proves no payment. Missing ownership fails; metadata cannot create mappings.
-4. **Commit, then acknowledge:** One revision-guarded transaction writes subscription, all-provider entitlements, immutable owner and completion marker; add a pending outbox event only for a domain change. On conflicts, reread local and Stripe state up to three times, then let the queue retry.
+Local development uses ElasticMQ; the AWS configuration uses SQS. Webhook redelivery and worker retries are independent: an accepted webhook can still have an unfinished job.
+
+### Webhook delivery
+
+The webhook verifies Stripe's signature against unchanged request bytes, without Auth0. Live mode and Connect events are rejected. The queue receives only validated references and trace metadata.
 
 ```mermaid
-flowchart LR
-    Queue[Work queue] --> Worker[Worker]
-    Worker -->|Committed or duplicate| Done[Acknowledge]
-    Worker -->|Failed| Retry[Retry after visibility timeout]
-    Retry -->|Receives remain| Queue
-    Retry -->|Limit reached| DLQ[Dead-letter queue]
-    DLQ -->|Fix cause, then redrive| Queue
+flowchart TD
+    stripeEvent["Stripe sends webhook"] --> validateEvent{"Valid signature and allowed test account?"}
+    validateEvent -->|"No"| rejectEvent["HTTP 400: reject"]
+    validateEvent -->|"Yes"| supportedType{"Supported event type?"}
+    supportedType -->|"No"| ignoreEvent["HTTP 200: intentionally ignored"]
+    supportedType -->|"Yes"| enqueueJob["Validate and enqueue job"]
+    enqueueJob -->|"Invalid job"| rejectEvent
+    enqueueJob -->|"Queue accepted"| acceptedEvent["HTTP 200: accepted"]
+    acceptedEvent --> workerJob["Worker processes independently"]
+    enqueueJob -->|"Queue failure"| queueFailure["HTTP 503"]
+    queueFailure --> redelivery["Redeliver webhook"]
+    acceptedEvent -.->|"HTTP response lost"| redelivery
+    redelivery --> stripeEvent
 ```
 
-- **Duplicate/crash after commit:** Completion marker prevents another change. A new event with unchanged domain state updates verification metadata and aggregate revision, without another outbox event.
-- **Queue:** Visibility 360 s; DLQ after five receives. AWS retention 4 days / 14 days in DLQ; worker timeout 60 s, batch size 1, concurrency 2, partial failure reporting.
+Registered endpoints follow [Stripe's delivery retry policy](https://docs.stripe.com/webhooks#automatic-retries). Local CLI forwarding may require a manual resend. Repeated delivery cannot repair a bad signature or invalid configuration; fix the cause first.
+
+### Worker retries
+
+The worker checks stored customer ownership against Stripe metadata, then reads aggregate revision → subscriptions → current Stripe state. Delayed webhook payloads never directly overwrite state. Payment verification requires the configured product/price and matching paid invoice lines; `active` or a nominal period end alone proves no payment. Metadata cannot create missing ownership mappings.
+
+```mermaid
+flowchart TD
+    receiveJob["Queue delivers job"] --> processedEvent{"Event already completed?"}
+    processedEvent -->|"Yes"| acknowledgeJob["Acknowledge and remove message"]
+    processedEvent -->|"No"| freshState["Verify owner; read local revision and current Stripe state"]
+    freshState -->|"Verified"| commitState["Atomic commit: subscription, grants, owner, completion marker and optional outbox"]
+    freshState -->|"Provider failure or invalid ownership"| failedJob["Do not acknowledge"]
+    commitState -->|"Success"| acknowledgeJob
+    commitState -->|"Revision conflict; event still incomplete"| retryBudget{"Fewer than 3 processing attempts?"}
+    retryBudget -->|"Yes: short jittered delay"| freshState
+    retryBudget -->|"No"| failedJob
+    commitState -->|"DB failure without completion marker"| failedJob
+    commitState -.->|"Crash after commit, before acknowledgement"| failedJob
+    failedJob --> visibilityTimeout["Visibility expires: 360 seconds from receipt"]
+    visibilityTimeout --> receiveLimit{"5 unsuccessful receives reached?"}
+    receiveLimit -->|"No"| receiveJob
+    receiveLimit -->|"Yes"| deadLetter["DLQ: dead-letter queue"]
+    deadLetter --> repair["Fix cause and redrive unchanged message"]
+    repair --> receiveJob
+```
+
+- **Commit semantics:** Grants include all providers. An outbox entry is added only for a domain change; an unchanged refresh updates verification metadata and aggregate revision. A lost commit response is also resolved by checking the completion marker before retrying. Jobs without a subscription are ignored and acknowledged.
+- **Payment failure is a business state:** `invoice.payment_failed` follows normal processing and the [access policy](#access-policy); it is not itself a technical error requiring a queue retry.
+- **AWS settings:** Retention 4 days / 14 days in DLQ; worker timeout 60 s, batch size 1, concurrency 2, partial failure reporting.
 - **Demo limits:** At most 100 recent paid invoices; incomplete relevant history/truncated lines fail processing. No full discounts, out-of-band payments, prorations or complex billing changes. [Invoice checks](../services/subscription-worker/src/processing/stripe-source.ts).
-- **Later work:** Pending outbox records have no TTL. Publication is [P08](TASKS.md#p08-outbox-publisher-and-eventbridge); scheduled missed-event repair is [P09](TASKS.md#p09-reconciliation-and-expiration).
+- **Later work:** Pending outbox records have no TTL. Publication is [P08](TASKS.md#p08-outbox-publisher-and-eventbridge); scheduled missed-event repair is [P09](TASKS.md#p09-reconciliation-and-expiration). Premium access does not wait for outbox publication. Verification evidence and remaining local/live scenarios are tracked in [P06](TASKS.md#p06-stripe-purchase-and-reliable-processing).
 
 ## Access policy
 

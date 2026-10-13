@@ -20,6 +20,8 @@ export class CheckoutService {
   }
 
   private async customer(userId: string, verifiedEmail: string) {
+    // Persist intent before Stripe is called. If saving the response fails,
+    // a retry can reuse the same creation key instead of making another customer.
     const mapping = await this.store.reserveCustomer(userId, this.seconds());
     let customerId = mapping.customerId;
     if (!customerId) {
@@ -72,6 +74,8 @@ export class CheckoutService {
   ): Promise<{ sessionId: string; url: string; expiresAt: string }> {
     const successUrl = `${this.config.webOrigin}/?checkout=success`;
     const cancelUrl = `${this.config.webOrigin}/?checkout=cancel`;
+    // One idempotency key represents one immutable purchase intent. The hash
+    // detects retries that reuse it with different effective parameters.
     const fingerprint = createHash('sha256')
       .update(
         JSON.stringify({
@@ -102,6 +106,8 @@ export class CheckoutService {
         if (!previous || previous.customerId !== customerId)
           throw new CheckoutError('checkout_recovery_required', 409);
         const session = await this.session(previous);
+        // Only provider-confirmed expiration releases this purchase slot.
+        // Returning through Cancel does not expire an open Stripe session.
         if (session.status !== 'expired')
           throw new CheckoutError(
             session.status === 'complete'
@@ -124,6 +130,8 @@ export class CheckoutService {
         createdAt,
         expiresAt: createdAt + 3600,
       };
+      // Atomically reserve the attempt and per-user pointer before the external
+      // call, so competing tabs cannot each start a different purchase.
       if (await this.store.reserveAttempt(candidate, previousId))
         attempt = candidate;
       else {
@@ -148,6 +156,8 @@ export class CheckoutService {
         409,
       );
     }
+    // Return a checkout URL, never an access grant. The asynchronous worker
+    // separately verifies payment and updates subscriptions.
     return {
       sessionId: session.id,
       url: session.url,

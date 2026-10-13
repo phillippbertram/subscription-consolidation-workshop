@@ -38,6 +38,10 @@ export class DynamoDbBillingStore implements BillingStore {
     private readonly client: DynamoDBDocumentClient,
     private readonly table: string,
   ) {}
+  /**
+   * Read a committed checkout record by its exact key; absence is undefined.
+   * Callers validate its schema and ownership, while storage failures propagate.
+   */
   private async read(pk: string, sk: string) {
     return (
       await this.client.send(

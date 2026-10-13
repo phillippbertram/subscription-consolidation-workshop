@@ -1,3 +1,7 @@
+import type { Profile } from '../api-models';
+import type { AccountState } from '../hooks/use-account';
+import { AccountDetails, type SessionProfile } from './account-details';
+import { SubscriptionStatus } from './subscription-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +19,10 @@ interface Props {
   signedIn?: boolean;
   loading?: boolean;
   userId?: string | undefined;
+  profile?: Profile | undefined;
+  identity?: SessionProfile | undefined;
+  accountState?: AccountState;
+  onRefresh?: () => void;
   pending?: boolean;
   expired?: boolean;
   message?: string;
@@ -90,19 +98,14 @@ export function DemoLayout(props: Props) {
                     ? 'Signed in'
                     : 'Not signed in'}
               </Badge>
-              {props.userId ? (
-                <div>
-                  <p className="text-sm text-muted-foreground">
-                    Internal user ID
-                  </p>
-                  <p className="mt-1 break-all font-mono text-sm">
-                    {props.userId}
-                  </p>
-                </div>
+              {props.signedIn ? (
+                <AccountDetails
+                  profile={props.profile}
+                  identity={props.identity}
+                />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  The backend links your verified identity to a stable customer
-                  record.
+                  Sign in to see your profile and verified subscription status.
                 </p>
               )}
             </CardContent>
@@ -154,11 +157,18 @@ export function DemoLayout(props: Props) {
             </CardFooter>
           </Card>
         </div>
+        {props.signedIn && props.accountState && props.onRefresh && (
+          <SubscriptionStatus
+            state={props.accountState}
+            onRefresh={props.onRefresh}
+          />
+        )}
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Learning checkpoint · This step creates the customer and checkout
-          session. Webhooks and subscription processing follow in P06 step 2;
-          returning here does not unlock Premium. Use synthetic details and
-          Stripe test cards only.
+          session. The webhook and worker verify the subscription
+          asynchronously. Refresh your account here or in the mobile app to see
+          access; this redirect alone does not unlock Premium. Use synthetic
+          details and Stripe test cards only.
         </p>
       </main>
       <footer className="mx-auto max-w-5xl border-t px-6 py-6 text-xs text-muted-foreground">
