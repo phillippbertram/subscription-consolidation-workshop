@@ -166,7 +166,7 @@ The BFF verifies the user token/scope, loads that user's subscriptions and evalu
 | ---------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | `active`, `trialing`                                                   | Until verified `accessUntil`; checkout offers no trials                    |
 | Active with period-end cancellation                                    | Same paid boundary                                                         |
-| `past_due`                                                             | Existing paid access plus stored grace, capped at `accessUntil + 24 hours` |
+| `past_due`                                                             | Existing paid access plus stored grace; Apple uses its verified grace boundary, other providers cap grace at `accessUntil + 24 hours` |
 | Initial failure, `pending`, `paused`, `canceled`, `expired`, `revoked` | None                                                                       |
 | Unknown product/status                                                 | None; return a mapping warning                                             |
 | Provider outage                                                        | Existing limits still apply; no extension                                  |
@@ -174,7 +174,7 @@ The BFF verifies the user token/scope, loads that user's subscriptions and evalu
 - Boundaries are exclusive: `now < validUntil`. No prior paid boundary means no grace; retries cannot extend it.
 - Combine all valid grants: ending one provider never removes another's access.
 - `effectiveUntil` means the **next reevaluation boundary**, not necessarily the end of all Premium access. `verifiedAt` records the last successful verification, not current provider health.
-- Stripe `incomplete` → `pending`; `incomplete_expired` / `unpaid` → `expired`. Apple/Google demo statuses are mock conventions. [Domain rules](../packages/domain/src/subscriptions.ts).
+- Stripe `incomplete` → `pending`; `incomplete_expired` / `unpaid` → `expired`. Apple sandbox maps verified numeric store statuses; the remaining Apple/Google demo records use mock conventions. See [Apple purchases](APPLE_PURCHASES.md). [Domain rules](../packages/domain/src/subscriptions.ts).
 
 | Endpoint                        | Requirement                  | Result                                              |
 | ------------------------------- | ---------------------------- | --------------------------------------------------- |

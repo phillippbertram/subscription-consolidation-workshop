@@ -14,6 +14,6 @@ Copy [`.env.example`](.env.example) to `.env` only on first setup. Use the BFF's
 
 From the repository root, `pnpm dev:worker` starts the watcher. `pnpm dev` includes it in grouped startup. Shared package edits are watched; restart after `.env` changes. On shutdown, idle polling is aborted; an in-flight job may finish. Unacknowledged jobs remain retryable. ElasticMQ messages disappear when its container stops.
 
-`pnpm -C services/subscription-worker build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm -C services/subscription-worker start` runs the built poller. `pnpm demo:subscription` retains its local-only scenario behavior.
+`pnpm --filter @premiumpass/subscription-worker run build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm --filter @premiumpass/subscription-worker run start` runs the built poller. `pnpm demo:subscription` retains its local-only scenario behavior.
 
 Follow [Payments](../../docs/PAYMENTS.md) for setup and manual checks, [infrastructure](../../infra/README.md) for synthesis, and [P06](../../docs/TASKS.md#p06-stripe-purchase-and-reliable-processing) for verification status.

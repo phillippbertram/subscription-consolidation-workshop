@@ -49,7 +49,7 @@ export function PremiumCard({ entitlements }: { entitlements: Entitlements }) {
       <Text className="text-foreground">
         {entitlements.tier === 'premium'
           ? 'Score history is available.'
-          : 'Activate a local demo subscription to unlock score history.'}
+          : 'Subscribe to Premium to unlock score history.'}
       </Text>
       {entitlements.effectiveUntil && (
         <Text className="text-sm text-muted-foreground">
@@ -99,7 +99,7 @@ export function PremiumCard({ entitlements }: { entitlements: Entitlements }) {
       )}
       <Text className="text-xs text-muted-foreground">
         The API checks your permissions and subscription for every history
-        request. No purchase is made in this demo.
+        request. Apple purchases use the sandbox environment.
       </Text>
     </Card>
   );

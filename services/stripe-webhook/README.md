@@ -14,6 +14,6 @@ Copy [`.env.example`](.env.example) to `.env` only on first setup. Local runtime
 
 From the repository root, `pnpm dev:webhook` starts the watcher; `pnpm stripe:listen` runs separately. `pnpm dev` includes the webhook in grouped startup. Shared package edits are watched; restart after `.env` changes. Use either grouped or individual startup on the same ports.
 
-`pnpm -C services/stripe-webhook build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm -C services/stripe-webhook start` runs the built local server. Lambda exports `handler` without starting an HTTP listener.
+`pnpm --filter @premiumpass/stripe-webhook run build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm --filter @premiumpass/stripe-webhook run start` runs the built local server. Lambda exports `handler` without starting an HTTP listener.
 
 Follow [Payments](../../docs/PAYMENTS.md) for setup and manual checks, [infrastructure](../../infra/README.md) for synthesis, and [P06](../../docs/TASKS.md#p06-stripe-purchase-and-reliable-processing) for verification status.

@@ -4,6 +4,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { CheckoutError } from './billing/contracts.js';
 import { getVerifiedCheckoutEmail } from './billing/auth0-email.js';
+import type { AppleBilling } from './billing/apple.js';
 import type { CheckoutService } from './billing/checkout-service.js';
 import { type AppEnv, authenticate, requireScopes } from './auth.js';
 import type { AuthConfig } from './config.js';
@@ -20,7 +21,11 @@ export function createApp(
   stores: { users: UserStore; subscriptions: SubscriptionStore },
   logLevel: LogLevel = 'info',
   now: () => Date = () => new Date(),
-  options: { checkout?: CheckoutService; webOrigin?: string } = {},
+  options: {
+    checkout?: CheckoutService;
+    webOrigin?: string;
+    apple?: AppleBilling | undefined;
+  } = {},
 ) {
   const app = new Hono<AppEnv>();
 
@@ -124,6 +129,55 @@ export function createApp(
           { date: '2026-09-01', score: 93 },
           { date: '2026-10-01', score: 94 },
         ],
+      });
+    },
+  );
+
+  app.get(
+    '/v1/billing/apple/config',
+    requireScopes('read:me', 'write:checkout'),
+    async (c) => {
+      if (!options.apple) throw new CheckoutError('apple_unavailable', 503);
+      const user = await stores.users.getOrCreate(c.get('auth'));
+      return c.json({
+        productId: options.apple.productId,
+        appAccountToken: user.userId,
+        environment: 'Sandbox',
+      });
+    },
+  );
+  app.post(
+    '/v1/billing/apple/sync',
+    requireScopes('write:checkout'),
+    bodyLimit({ maxSize: 1024 }),
+    async (c) => {
+      if (!options.apple) throw new CheckoutError('apple_unavailable', 503);
+      const input = z
+        .object({ transactionId: z.string().regex(/^[0-9]{1,64}$/) })
+        .strict()
+        .safeParse(await c.req.json<unknown>().catch(() => null));
+      if (!input.success) throw new CheckoutError('invalid_apple_request', 400);
+      const user = await stores.users.getOrCreate(c.get('auth'));
+      const operationId = await options.apple.enqueue(
+        user.userId,
+        input.data.transactionId,
+        c.get('requestId'),
+      );
+      return c.json({ operationId, status: 'pending' }, 202);
+    },
+  );
+  app.get(
+    '/v1/billing/apple/sync/:operationId',
+    requireScopes('read:me'),
+    async (c) => {
+      if (!options.apple) throw new CheckoutError('apple_unavailable', 503);
+      const id = z.uuid().safeParse(c.req.param('operationId'));
+      if (!id.success) throw new CheckoutError('invalid_apple_request', 400);
+      const user = await stores.users.getOrCreate(c.get('auth'));
+      return c.json({
+        status: (await options.apple.completed(user.userId, id.data))
+          ? 'completed'
+          : 'pending',
       });
     },
   );

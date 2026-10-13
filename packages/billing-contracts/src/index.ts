@@ -33,3 +33,19 @@ export const jobSchema = z
     }
   });
 export type StripeJob = z.infer<typeof jobSchema>;
+
+export const appleJobSchema = z
+  .object({
+    provider: z.literal('apple'),
+    environment: z.literal('Sandbox'),
+    eventId: z.uuid(),
+    eventType: z.enum(['client.sync', 'notification']),
+    transactionId: z.string().regex(/^[0-9]{1,64}$/),
+    userId: z.uuid(),
+    receivedAt: z.iso.datetime(),
+    correlationId: z.uuid(),
+  })
+  .strict();
+export type AppleJob = z.infer<typeof appleJobSchema>;
+export const subscriptionJobSchema = z.union([jobSchema, appleJobSchema]);
+export type SubscriptionJob = z.infer<typeof subscriptionJobSchema>;

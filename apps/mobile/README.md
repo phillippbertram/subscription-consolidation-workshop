@@ -48,7 +48,7 @@ The configured app scheme is `premiumpass`, and the default iOS bundle identifie
 premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
 ```
 
-The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. Tokens remain in SDK-managed secure storage. The dashboard can temporarily display access and ID tokens for inspection; they are never written to AsyncStorage or logs.
+The callback returns to the app, not the local backend. Login uses PKCE and requests `openid profile email read:me read:premium write:checkout`. No refresh token is requested for this first flow: the SDK restores still-valid credentials from secure storage; when credentials expire, sign in again. Tokens remain in SDK-managed secure storage. The dashboard can temporarily display access and ID tokens for inspection; they are never written to AsyncStorage or logs.
 
 If Auth0 displays **Callback URL mismatch**, open the application whose Client ID is configured in `apps/mobile/.env`. Confirm its type is **Native** and add the exact callback using the configured domain and the installed app's bundle identifier. The SDK lowercases the bundle identifier in the URL. A bundle identifier changed only in Xcode can differ from the Expo default; persist it through `IOS_BUNDLE_IDENTIFIER` before running prebuild. Keep existing callback/logout URLs for other installed simulator or device builds. Changing the allowlist requires saving the Auth0 settings and retrying login; it does not require rebuilding the app unless its domain/scheme/identifier also changes. The Mac's LAN address does not belong in this callback.
 
@@ -111,7 +111,7 @@ Connect the iPhone to the Mac, trust the computer, and enable iOS Developer Mode
 3. Apply the native network settings once, then install the app. The script explicitly passes `--no-clean` because this Expo CLI recreates native folders by default. It applies changes to the existing project and retains signing settings:
 
    ```sh
-   pnpm -C apps/mobile prebuild:ios
+   pnpm --filter @premiumpass/mobile run prebuild:ios
    pnpm mobile:ios --device
    ```
 
@@ -130,6 +130,10 @@ To return to the unchanged simulator defaults, run `unset EXPO_PUBLIC_API_URL` w
 The app permits HTTP for loopback, private IPv4 ranges (`10/8`, `172.16/12`, `192.168/16`), and `.local` names. Other API origins require HTTPS. iOS configuration includes a local-network usage description, `NSAllowsLocalNetworking`, and the IP/CIDR exceptions supported by iOS 17+. See [Apple's ATS exceptions](https://developer.apple.com/documentation/bundleresources/information-property-list/nsapptransportsecurity/nsexceptiondomains). Changes to these native settings require prebuild and a native rebuild; API address changes within these ranges only require a reload.
 
 If Safari cannot reach `/health`, check that the BFF is in LAN mode, both devices share the network, the macOS firewall permits the server, and the Wi-Fi does not isolate clients. If Safari succeeds but the app cannot connect, allow PremiumPass under **Settings → Privacy & Security → Local Network** and confirm the app was rebuilt. Metro uses port 8081 by default; it and the BFF on port 3000 must both be reachable. An Expo Metro tunnel alone does not expose the local backend.
+
+## Apple sandbox purchases
+
+The dashboard includes product loading, purchase, restore, and unfinished-transaction recovery through `expo-iap`. Follow the [Apple setup guide](../../docs/APPLE_PURCHASES.md) for backend key configuration, the Native application's `write:checkout` grant, the required development-client rebuild, and local notification forwarding. Apple API keys never belong in mobile configuration.
 
 ## App structure
 
@@ -231,7 +235,7 @@ Sources: [Axios instances](https://axios-http.com/docs/instance), [Axios interce
 6. Sign in as demo user B and confirm a different internal ID. Sign back in as A and confirm A's original ID.
 7. A user without `read:me` should receive a permission error. A rejected/expired session should offer sign-out/sign-in recovery.
 
-No automated tests or test framework are part of this project. `pnpm check` includes mobile typechecking, linting, formatting, and an iOS JavaScript export; the export does not prove a native build or successful login. `pnpm --filter @premiumpass/mobile exec expo install --check` checks Expo dependency compatibility. Native configuration can be regenerated separately using `pnpm --filter @premiumpass/mobile prebuild:ios`.
+No automated tests or test framework are part of this project. `pnpm check` includes mobile typechecking, linting, formatting, and an iOS JavaScript export; the export does not prove a native build or successful login. `pnpm --filter @premiumpass/mobile exec expo install --check` checks Expo dependency compatibility. Native configuration can be regenerated separately using `pnpm --filter @premiumpass/mobile run prebuild:ios`.
 
 Sources: [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo), [Auth0 SDK](https://github.com/auth0/react-native-auth0), [Expo monorepos](https://docs.expo.dev/guides/monorepos/).
 

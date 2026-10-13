@@ -17,12 +17,12 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 | P04 | Mobile login through to the user's profile | P02, P03 local portion                | complete |
 | P05 | Subscription and entitlement domain rules  | P01, P02, P03 local portion           | complete |
 | P06 | Stripe purchase and reliable processing    | P02, P03, P05                         | partial  |
-| P07 | Apple sandbox and Google mocks             | P04, P05, P06 local processing        | open     |
+| P07 | Apple sandbox and Google mocks             | P04, P05, P06 local processing        | partial  |
 | P08 | Outbox publisher and EventBridge           | P06                                   | open     |
 | P09 | Reconciliation and expiration              | P07, P08                              | open     |
 | P10 | CI/CD, operations, and final demo          | P04, P06–P09                          | open     |
 
-**Next step:** Start P07 with real Apple sandbox purchases against the local backend, ahead of the remaining Stripe lifecycle exercises. Establish the App Store Connect/product/device prerequisites, then implement purchase and restore with server verification, followed by notifications through an HTTPS tunnel. The existing local Stripe activation and queue recovery path supplies the processing foundation; completing P06's remaining Stripe scenarios or deploying AWS is not a prerequisite. P06 remains partial with its outstanding work below; P03 still requires separately authorized AWS verification.
+**Next step:** Complete P07's real Apple sandbox verification against the local backend: fill the worker's key configuration, enable Apple in the three local services, grant the Native client `write:checkout`, and rebuild the iPhone app. Then exercise purchase, restore, lifecycle changes, and signed notifications through an HTTPS tunnel using [the Apple guide](APPLE_PURCHASES.md). P06 remains partial with its outstanding Stripe scenarios below; P03 still requires separately authorized AWS verification.
 
 ## P00 Prepare the project for agents
 
@@ -205,7 +205,7 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 **Outcome:** A real Apple sandbox subscription grants centrally verified Premium access through the local backend. Apple and the later Google mock reuse the domain rules and atomic persistence used by Stripe.
 
-**Priority changed October 13, 2026:** The user requested real Apple sandbox purchases before the remaining Stripe exercises. Apple mocks are no longer the intended delivery. Status remains open: no Apple SDK, provider adapter, account setup, or sandbox purchase has been verified by this planning update.
+**Priority changed October 13, 2026:** The user requested real Apple sandbox purchases before the remaining Stripe exercises. Apple mocks are no longer the intended delivery. The initial planning update did not implement or verify Apple integration; the implementation evidence below supersedes that baseline.
 
 **Implementation sequence:**
 
@@ -216,7 +216,16 @@ Allowed status values: `open`, `in progress`, `partial`, `complete`. For `partia
 
 **Acceptance:** A sandbox purchase on the iPhone activates Premium for the matching Auth0 user in Mobile and Web; a purchase UI result alone grants nothing. Restore/restart recovers the same ownership without duplicates or account reassignment. Verified Apple lifecycle changes reach the local worker through the tunnel and update access correctly. Expiration or revocation removes only the Apple grant, preserving valid Stripe access. T10–T15 cover the relevant Apple and Google-mock paths; Apple grace follows verified Apple state. Google mock state remains separate from the subscription read model and supports event suppression for P09.
 
-**Boundary:** One Apple sandbox auto-renewable product mapped to `premium_monthly`; synthetic users only. No production transactions, App Store release, real Google APIs, or required AWS deployment. Xcode StoreKit simulation is optional development assistance and does not satisfy Apple sandbox acceptance. Expose only the notification ingress through the tunnel; do not expose local database/admin tools. The exact SDK and account-specific configuration remain implementation/setup work.
+**Boundary:** One Apple sandbox auto-renewable product mapped to `premium_monthly`; synthetic users only. No production transactions, App Store release, real Google APIs, or required AWS deployment. Xcode StoreKit simulation is optional development assistance and does not satisfy Apple sandbox acceptance. Expose only the notification ingress through the tunnel; do not expose local database/admin tools. Account-specific key configuration and live verification remain setup work.
+
+
+**Local Apple implementation (October 13, 2026):** Added `expo-iap` 6.0.1 product loading, purchase, restore, and unfinished-transaction recovery. The confirmed product is `premiumpass.premium.monthly.v2`. Protected BFF configuration/synchronization uses `read:me`/`write:checkout`, server-derived account ownership, queue acceptance, and per-user committed-completion polling. The app finishes transactions only after completion. A new local `services/apple-webhook` verifies Notifications V2 with Apple's official library/public roots and shares the existing queue. The worker verifies current sandbox transaction/renewal state and uses the existing atomic aggregate/outbox persistence, immutable ownership, and conflict retries. Apple grace follows verified provider data. Web/Mobile accept the new `apple` provider. Added disabled configuration slots to existing ignored `.env` files and [setup instructions](APPLE_PURCHASES.md); no private key was supplied or read.
+
+**Verification:** `pnpm check` passed formatting, lint, workspace typechecks, builds, and the iOS JavaScript export. `pnpm install --frozen-lockfile` and `pnpm synth` passed; synthesis is not deployment. iOS prebuild with `--no-clean` and CocoaPods installation passed; ExpoIap/openiap are present and the existing signing team/bundle ID remained intact. CocoaPods initially encountered a sandbox cache-write restriction; the authorized retry succeeded. No native Xcode build, iPhone run, or real Apple purchase is claimed.
+
+**Manual local evidence:** Temporary isolated DynamoDB/ElasticMQ resources exercised the real BFF queue handoff and processor persistence with synthetic provider responses used only in the verification process. Generated signed JWTs plus an isolated JWKS response covered missing token 401, missing scope/machine identity 403, invalid transaction/forged owner 400, and server-derived ownership. Queue acceptance returned 202 while completion remained false; processing committed the marker and both Apple/Stripe grants, and completion was invisible to a different user. Duplicate delivery preserved the revision; parallel refreshes, Apple revocation preserving Stripe, verified Apple grace beyond 24 hours, wrong-owner rejection, immutable binding, and stale-revision rejection behaved as expected. The real Apple verifier rejected malformed signed data without enqueueing; an isolated accepted-payload response with a failing queue returned 503. The built ingress returned health 200 and invalid-signature 400. Temporary processes, table, and queue were removed. These checks neither contacted Apple's purchase APIs nor proved real Apple-signed sandbox delivery. No automated test files or framework were added.
+
+**Outstanding:** Fill the worker key/issuer/path, enable matching local Apple configuration, grant the Native client `write:checkout` and sign in again, rebuild/install on the iPhone, then verify real purchase, restore, renewal/cancellation/expiration and signed notification delivery through the HTTPS tunnel. Google mocks remain unimplemented. Apple AWS routing, secret/IAM wiring, deployment, P08 publication, and P09 scheduled reconciliation are outside this local change. P07 remains partial until its acceptance evidence is complete.
 
 ## P08 Outbox publisher and EventBridge
 

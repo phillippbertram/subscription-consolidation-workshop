@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const subscriptionSchema = z.object({
   userId: z.uuid(),
-  provider: z.enum(['stripe', 'apple_mock', 'google_mock']),
+  provider: z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']),
   providerSubscriptionId: z.string().min(1),
   // Unknown products/statuses stay visible but never grant access.
   productId: z.string().min(1),
@@ -44,6 +44,21 @@ export function normalizeProviderStatus(
       case 'paused':
       case 'canceled':
         return status;
+      default:
+        return null;
+    }
+  }
+  if (provider === 'apple') {
+    switch (status) {
+      case '1':
+        return 'active';
+      case '2':
+        return 'expired';
+      case '3':
+      case '4':
+        return 'past_due';
+      case '5':
+        return 'revoked';
       default:
         return null;
     }
@@ -103,13 +118,15 @@ export function deriveEntitlements(
     const accessEnd = Date.parse(accessUntil);
     let validUntil = accessEnd;
     if (state === 'past_due') {
-      // The persisted boundary may shorten grace, but can never extend it.
+      // Apple supplies a verified grace boundary; synthetic/Stripe grace is capped.
       const graceEnd = subscription.graceUntil
         ? Date.parse(subscription.graceUntil)
         : accessEnd;
       validUntil = Math.max(
         accessEnd,
-        Math.min(graceEnd, accessEnd + GRACE_MS),
+        provider === 'apple'
+          ? graceEnd
+          : Math.min(graceEnd, accessEnd + GRACE_MS),
       );
     } else if (state !== 'active' && state !== 'trialing') {
       continue;

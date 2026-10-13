@@ -1,4 +1,5 @@
 import { readDatabaseConfig } from '@premiumpass/persistence';
+import { createLocalAppleBilling } from './billing/apple.js';
 import { CheckoutService } from './billing/checkout-service.js';
 import { StripeBillingProvider } from './billing/stripe-provider.js';
 import { readStripeConfig, readWebOrigin } from './billing/config.js';
@@ -11,7 +12,8 @@ import { createLogger, readLogLevel } from '@premiumpass/logging';
 const config = readLocalConfig(process.env);
 const logLevel = readLogLevel(process.env, 'debug');
 const log = createLogger(logLevel, 'premiumpass-bff');
-const stores = createPersistence(readDatabaseConfig(process.env, true));
+const database = readDatabaseConfig(process.env, true);
+const stores = createPersistence(database);
 const stripe = readStripeConfig(process.env);
 const app = createApp(
   readAuthConfig(process.env),
@@ -20,6 +22,7 @@ const app = createApp(
   () => new Date(),
   {
     webOrigin: readWebOrigin(process.env),
+    apple: createLocalAppleBilling(process.env, database),
     ...(stripe
       ? {
           checkout: new CheckoutService(

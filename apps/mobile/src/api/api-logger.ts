@@ -12,6 +12,7 @@ export function startApiLog(
   params: unknown,
   body: unknown,
 ) {
+  const billing = new URL(url).pathname.startsWith('/v1/billing/');
   const id = ++nextRequestId;
   const startedAt = Date.now();
   const label = `[API #${id}] ${method.toUpperCase()} ${url}`;
@@ -23,14 +24,14 @@ export function startApiLog(
     }
   }
 
-  write('request', { params, body });
+  write('request', billing ? {} : { params, body });
   return {
     response(status: number, body: unknown, serverRequestId: unknown) {
       write('response', {
         status,
         durationMs: Date.now() - startedAt,
         serverRequestId,
-        body,
+        body: billing ? undefined : body,
       });
     },
     error(error: Failure, body?: unknown) {
@@ -39,7 +40,7 @@ export function startApiLog(
         durationMs: Date.now() - startedAt,
         code: error.code,
         message: error.message,
-        body,
+        body: billing ? undefined : body,
       });
     },
   };

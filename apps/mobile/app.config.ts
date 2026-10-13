@@ -34,6 +34,7 @@ const config: ExpoConfig = {
   android: { package: 'com.example.premiumpass' },
   plugins: [
     'expo-dev-client',
+    'expo-iap',
     [
       'react-native-auth0',
       {

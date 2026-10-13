@@ -200,8 +200,10 @@ JWT and scope checks in this table run entirely in the backend.
 | `GET /v1/premium/score-history` | JWT, `read:premium`, entitlement | Synthetic history or `403` |
 | `POST /v1/billing/stripe/checkout-session` | JWT, `write:checkout` | Hosted test checkout URL |
 | `POST /v1/webhooks/stripe` | Stripe signature | `2xx` after successful queue acceptance |
-| Apple purchase/restore synchronization (path and scope to select in P07) | JWT, explicit scope, verified Apple ownership | Synchronize verified sandbox state for the authenticated user |
-| Apple notification ingress (path to select in P07) | Apple signed payload, expected app and environment | `2xx` after successful queue acceptance |
+| `GET /v1/billing/apple/config` | JWT, `read:me`, `write:checkout` | Product and server-derived account token |
+| `POST /v1/billing/apple/sync` | JWT, `write:checkout`, verified Apple ownership | Queue sandbox synchronization for the authenticated user |
+| `GET /v1/billing/apple/sync/:operationId` | JWT, `read:me` | Own committed operation status |
+| `POST /v1/webhooks/apple` | Apple signed payload, expected app and environment | `2xx` after successful queue acceptance |
 
 Trigger reconciliation and mock scenarios through local development scripts with AWS IAM permissions. No public admin endpoint is needed.
 
@@ -241,7 +243,7 @@ A **subscription** describes the contract observed at the provider. An **entitle
 ### Normalized model
 
 ```typescript
-type Provider = 'stripe' | 'apple' | 'google_mock'; // Target model; Apple implementation is P07
+type Provider = 'stripe' | 'apple' | 'apple_mock' | 'google_mock';
 
 type SubscriptionState =
   | 'pending' | 'trialing' | 'active' | 'past_due'
@@ -402,13 +404,13 @@ Use a signed iPhone development build with a native StoreKit integration, an App
 
 The BFF, queue, subscription worker, and DynamoDB remain local. The app reaches the BFF over the local network; purchase traffic goes directly to Apple. A public HTTPS tunnel such as ngrok forwards App Store Server Notifications V2 to a dedicated local notification ingress. Configure that URL as the sandbox notification destination; no AWS deployment is required for this flow.
 
-Planned processing boundaries:
+Processing boundaries:
 
 - The authenticated backend supplies a stable UUID `appAccountToken` mapped to the internal user. Verify this association and bind `originalTransactionId` immutably to its owner. Scope provider references, duplicate markers, and bindings by Apple environment as well as provider; never reassign a restored purchase to the current user merely because the client submits it.
 - An authenticated purchase/restore endpoint triggers server synchronization. Verify Apple's signed transaction and renewal data, bundle ID, environment, allowed product, ownership, expiration, and revocation; refresh current state through the App Store Server API. A successful purchase sheet alone grants no access. Finish the StoreKit transaction after durable processing, with safe restart/retry recovery.
 - The notification ingress verifies the signed payload using Apple's certificate chain and expected app/environment. It requires no Auth0 token and acknowledges accepted work only after successful queue acceptance. Client synchronization and notifications converge on the same Apple processor.
 - Extend the currently Stripe-specific processing/store contracts only as needed. Keep provider reads and mapping separate from the shared domain rules and revision-guarded transaction. Atomically persist subscription, aggregate entitlement, owner binding, completion marker, and pending outbox. Outbox publication remains P08; scheduled repair remains P09.
-- Keep App Store Server API signing keys in ignored backend configuration. The proposed verifier/API client is Apple's official Node library. Native IAP library selection remains an implementation decision; verify compatibility with the pinned Expo/React Native versions before installation.
+- Keep App Store Server API signing keys in ignored worker configuration. Apple's official Node library verifies signed data and reads current sandbox state; `expo-iap` supplies the native StoreKit integration. See [Apple purchases](docs/APPLE_PURCHASES.md) for configuration and the manual flow; implementation and verification status remain in P07.
 
 Manual acceptance covers purchase, restore/restart, renewal, cancellation and expiration, duplicate/delayed notifications, wrong-owner rejection, and preserving a concurrent Stripe grant. Use a separate Free synthetic user when needed so an existing Stripe entitlement cannot hide Apple activation failures. Record the actual sandbox account setup and device verification without secrets in P07.
 

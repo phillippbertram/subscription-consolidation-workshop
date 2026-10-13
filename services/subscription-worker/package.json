@@ -20,7 +20,8 @@
     "@premiumpass/domain": "workspace:*",
     "@premiumpass/persistence": "workspace:*",
     "@premiumpass/logging": "workspace:*",
-    "@premiumpass/billing-contracts": "workspace:*"
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@premiumpass/apple-store": "workspace:*"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.159",

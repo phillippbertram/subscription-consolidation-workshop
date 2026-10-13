@@ -35,7 +35,7 @@ In the API's **Permissions** tab, add:
 |---|---|---|
 | `read:me` | Read the current user's profile and subscription status | Required by the current `GET /v1/me` |
 | `read:premium` | Request Premium demo content | Required by `GET /v1/premium/score-history`; also requires a valid entitlement |
-| `write:checkout` | Start checkout for the current user | `POST /v1/billing/stripe/checkout-session` |
+| `write:checkout` | Start checkout or synchronize an Apple purchase for the current user | `POST /v1/billing/stripe/checkout-session`, `POST /v1/billing/apple/sync` |
 
 These are custom API scopes. `openid profile email` are OIDC scopes requested during login, not entries to add to this API's permissions list. [API permissions](https://auth0.com/docs/get-started/apis/add-api-permissions).
 
@@ -55,7 +55,7 @@ Check **API Settings → Application Access Policy**. For the dedicated demo API
 
 | Application | Allowed API permissions |
 |---|---|
-| `PremiumPass Mobile` | `read:me`, `read:premium` |
+| `PremiumPass Mobile` | `read:me`, `read:premium`, `write:checkout` |
 | `PremiumPass Web` | `read:me`, `read:premium`, `write:checkout` |
 
 Save each grant. An API allowing all applications may not need these individual grants, but RBAC and requested scopes still apply. **Client Access** is a separate policy for M2M tokens; it does not authorize interactive mobile or web login. Leave it disabled unless using the optional M2M check below. [Application access policies](https://auth0.com/docs/get-started/apis/api-access-policies-for-applications).

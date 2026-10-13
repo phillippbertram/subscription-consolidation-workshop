@@ -1,0 +1,22 @@
+{
+  "name": "@premiumpass/apple-store",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
+    "zod": "4.6.5",
+    "node-fetch": "2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3",
+    "@types/node-fetch": "2.6.13"
+  }
+}

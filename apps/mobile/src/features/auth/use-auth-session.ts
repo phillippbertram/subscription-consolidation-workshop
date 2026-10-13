@@ -14,7 +14,7 @@ export function useAuthSession(audience: string) {
       await authorize(
         {
           audience,
-          scope: 'openid profile email read:me read:premium',
+          scope: 'openid profile email read:me read:premium write:checkout',
           additionalParameters: { prompt: 'login' },
         },
         { customScheme: 'premiumpass' },

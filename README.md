@@ -14,6 +14,7 @@ A hands-on learning project: a React Native app with Auth0 and an AWS backend th
 | [Auth0 setup](docs/AUTH0_SETUP.md) | Existing tenant setup: API, permissions, clients, users, and local configuration |
 | [Infrastructure](infra/README.md) | Local CDK synthesis, DynamoDB setup, and future deployment commands |
 | [DynamoDB data model](docs/DYNAMODB_DATA_MODEL.md) | Implemented identity, profile, and subscription records, fields, examples, and access patterns |
+| [Apple sandbox purchases](docs/APPLE_PURCHASES.md) | Key configuration, iPhone purchase/restore, and local notifications |
 | [Payments](docs/PAYMENTS.md) | Stripe setup, checkout, processing, access rules, and manual checks |
 | [Web app](apps/web/README.md) | React, Tailwind, shadcn/ui, and Auth0 SPA startup |
 | [Stripe webhook](services/stripe-webhook/README.md) | Signed event ingestion and queue delivery |
@@ -25,7 +26,7 @@ The project directory is the source of truth. Earlier Library files are historic
 
 ## Current implementation
 
-The pnpm workspace has one package per executable service: `services/bff`, `services/stripe-webhook`, and `services/subscription-worker`. `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
+The pnpm workspace has one package per executable service: `services/bff`, `services/stripe-webhook`, and `services/subscription-worker`. The local stack also includes `services/apple-webhook` for sandbox notifications; the subscription worker processes both providers. Apple credential setup and the required native rebuild are in the [Apple guide](docs/APPLE_PURCHASES.md). `GET /health` is public and returns `{"status":"ok"}`. It checks only whether the application responds, not whether external services are ready. `GET /v1/me` requires an Auth0 user access token with `read:me` and returns its persisted internal user ID and creation time. All routes registered after the public health route require authentication; an authenticated request to an unknown route returns 404. Progress is tracked in the [task plan](docs/TASKS.md).
 
 ```text
 services/
@@ -51,7 +52,7 @@ apps/
 infra/                  CDK and local queue definitions
 ```
 
-`infra` contains the CDK app for the HTTP API, BFF, DynamoDB, webhook/worker Lambdas, SQS/DLQ, and logs; see the [infrastructure guide](infra/README.md). Additional apps, workers, and shared packages are added only when needed. The target structure is in the [project plan](PROJECT_PLAN.md#14-repository-and-cicd). pnpm scripts coordinate the workspace.
+`infra` contains the CDK app for the HTTP API, BFF, DynamoDB, webhook/worker Lambdas, SQS/DLQ, and logs; see the [infrastructure guide](infra/README.md). Additional apps, workers, and shared packages are added only when needed. The target structure is in the [project plan](PROJECT_PLAN.md#14-repository-and-cicd). Root scripts address individual workspace packages by name with `pnpm --filter @premiumpass/<name> run <script>`. For example, `pnpm dev:api` delegates to `pnpm --filter @premiumpass/bff run dev`. Workspace-wide typechecking and builds use `pnpm -r`.
 
 The HTTP API uses a `$default` integration to forward requests to the BFF. Define BFF routes once in Hono; no per-endpoint CDK registration is needed. Unknown paths reach the same authentication middleware and return 401 without a valid token or 404 with one. The explicit `POST /v1/webhooks/stripe` integration overrides the catch-all and verifies Stripe signatures in its own handler.
 
@@ -77,7 +78,7 @@ Start Docker Desktop, then run:
 pnpm dev
 ```
 
-This first runs `local:up` (DynamoDB Local, DynamoDB Admin, ElasticMQ, and idempotent table initialization), then starts four processes with labeled logs: **api**, **webhook**, **worker**, and **web**. BFF, webhook, and worker use `tsx watch`; Vite handles website updates. Shared package source edits are picked up by the backend watchers. Restart after changing `.env` files. Ports are 3000, 3002, and 5173; stop older individual processes before starting the group. Configuration errors remain visible in the corresponding watcher; fix them and restart. If a supervised command exits, the other commands are stopped too.
+This first runs `local:up` (DynamoDB Local, DynamoDB Admin, ElasticMQ, and idempotent table initialization), then starts five processes with labeled logs: **api**, **webhook**, **apple**, **worker**, and **web**. BFF, webhook, and worker use `tsx watch`; Vite handles website updates. Shared package source edits are picked up by the backend watchers. Restart after changing `.env` files. Ports are 3000, 3002, 3003, and 5173; stop older individual processes before starting the group. Configuration errors remain visible in the corresponding watcher; fix them and restart. If a supervised command exits, the other commands are stopped too.
 
 `Ctrl+C` stops the supervised processes; remaining children are forcibly stopped after 15 seconds. Docker stays running so queue messages are retained. `pnpm local:down` stops Docker separately; DynamoDB records survive in their volume, but in-memory ElasticMQ messages are lost. Open [DynamoDB Admin](http://127.0.0.1:8001) to inspect `premiumpass-local`.
 
@@ -217,6 +218,7 @@ This command runs formatting checks, linting, typechecking, and the build. Indiv
 | `pnpm local:up` | Start DynamoDB Local, its GUI, and ElasticMQ; automatically initialize the table |
 | `pnpm local:down` | Stop/remove all Compose containers; database volume survives, in-memory queue messages do not |
 | `pnpm dev:webhook` | Start the signature-only webhook on loopback port 3002 |
+| `pnpm dev:apple-webhook` | Start Apple sandbox notification ingress on port 3003 |
 | `pnpm dev:worker` | Consume local subscription jobs and commit entitlements |
 | `pnpm local:logs` | Show the latest logs for all Compose services; append `dynamodb`, `dynamodb-admin`, or `elasticmq` to select one |
 | `pnpm stripe:listen` | Forward supported Stripe test events to the local webhook; requires Stripe CLI login |
@@ -231,7 +233,7 @@ For deployment configuration and the one-time bootstrap step, see the [infrastru
 
 Check Markdown links and consistency when changing documentation. `git diff --check` also checks tracked changes for whitespace issues; inspect new files separately.
 
-The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. Webhook and worker each build `dist/local.js` and `dist/lambda.js` in their own service directory. Use `pnpm -C services/stripe-webhook start` or `pnpm -C services/subscription-worker start` to run a built service. Shared packages export TypeScript source for tsx and esbuild/CDK to consume, so development needs no separate library build watcher. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` also typechecks infrastructure and exports the mobile iOS JavaScript bundle to `apps/mobile/dist`; it does not build the native iOS app. `pnpm synth` produces the deployable AWS assembly.
+The build produces `services/bff/dist/local.js` and `services/bff/dist/lambda.js` as ESM bundles for Node 24. Run `pnpm start` after `pnpm build` to launch the built local server. Webhook and worker each build `dist/local.js` and `dist/lambda.js` in their own service directory. Use `pnpm --filter @premiumpass/stripe-webhook run start` or `pnpm --filter @premiumpass/subscription-worker run start` to run a built service. Shared packages export TypeScript source for tsx and esbuild/CDK to consume, so development needs no separate library build watcher. The standalone Lambda export is `handler` (`lambda.handler` in an ESM package). CDK separately bundles the same source as `index.mjs` with deployment handler `index.handler`, including the pinned AWS SDK. `pnpm build` also typechecks infrastructure and exports the mobile iOS JavaScript bundle to `apps/mobile/dist`; it does not build the native iOS app. `pnpm synth` produces the deployable AWS assembly.
 
 At the user's request, this learning project has no automated tests or test framework. Verify behavior through manual requests; typechecking, linting, and builds remain configured. The Lambda entry point opens no HTTP port and does not require `PORT`. The local portion of P03 is implemented; live AWS verification remains outstanding by request.
 

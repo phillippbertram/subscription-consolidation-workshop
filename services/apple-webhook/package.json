@@ -1,0 +1,27 @@
+{
+  "name": "@premiumpass/apple-webhook",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false --include \"../../packages/*/src/**/*.ts\" --env-file-if-exists=.env src/local.ts",
+    "start": "node --env-file-if-exists=.env dist/local.js",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/local.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-sqs": "3.1149.0",
+    "@hono/node-server": "2.1.4",
+    "hono": "4.13.13",
+    "pino": "10.4.0",
+    "zod": "4.6.5",
+    "@premiumpass/logging": "workspace:*",
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@premiumpass/apple-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
+  }
+}

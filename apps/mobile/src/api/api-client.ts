@@ -14,7 +14,7 @@ const entitlementsSchema = z.object({
   evaluatedAt: z.iso.datetime(),
   grants: z.array(
     z.object({
-      provider: z.enum(['stripe', 'apple_mock', 'google_mock']),
+      provider: z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']),
       providerSubscriptionId: z.string(),
       revision: z.number().int().positive(),
       validUntil: z.iso.datetime(),

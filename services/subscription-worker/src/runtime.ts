@@ -2,7 +2,13 @@ import Stripe from 'stripe';
 import type { Logger } from 'pino';
 import { createDocumentClient } from '@premiumpass/persistence';
 import { DynamoDbProcessingStore } from './processing/dynamodb-processing.js';
-import { jobSchema } from '@premiumpass/billing-contracts';
+import {
+  subscriptionJobSchema,
+  type SubscriptionJob,
+} from '@premiumpass/billing-contracts';
+import { readAppleSettings } from '@premiumpass/apple-store';
+import { AppleSubscriptionProcessor } from './processing/apple-processor.js';
+import { createAppleSource } from './processing/apple-source.js';
 import { ProcessingError } from './processing/contracts.js';
 import { SubscriptionProcessor } from './processing/processor.js';
 import { StripeSubscriptionSource } from './processing/stripe-source.js';
@@ -36,22 +42,37 @@ export async function workerRuntime(local: boolean) {
     );
     stores.set(local, store);
   }
+  const stripeProcessor = new SubscriptionProcessor(
+    store,
+    new StripeSubscriptionSource(stripe, credentials.priceId),
+  );
+  // Apple keys/files are local-only until cloud secret/IAM wiring is explicitly added.
+  const settings = local ? readAppleSettings(process.env) : undefined;
+  const appleProcessor = settings
+    ? new AppleSubscriptionProcessor(
+        store,
+        createAppleSource(settings, process.env),
+      )
+    : undefined;
   return {
     ...config,
-    processor: new SubscriptionProcessor(
-      store,
-      new StripeSubscriptionSource(stripe, credentials.priceId),
-    ),
+    processor: {
+      process(job: SubscriptionJob) {
+        if (job.provider === 'stripe') return stripeProcessor.process(job);
+        if (!appleProcessor) throw new ProcessingError('apple_not_configured');
+        return appleProcessor.process(job);
+      },
+    },
   };
 }
 
 export async function processMessage(
-  processor: SubscriptionProcessor,
+  processor: { process(job: SubscriptionJob): Promise<{ outcome: string }> },
   body: string,
   log: Logger,
 ) {
   // Avoid Zod error output: it can contain arbitrary queue payload content.
-  const parsed = jobSchema.safeParse(JSON.parse(body) as unknown);
+  const parsed = subscriptionJobSchema.safeParse(JSON.parse(body) as unknown);
   if (!parsed.success) throw new ProcessingError('invalid_queue_job');
   const job = parsed.data;
   const fields = {

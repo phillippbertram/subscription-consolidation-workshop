@@ -2,6 +2,7 @@ import { Button, ButtonText } from '../../components/ui/button';
 import { Spinner } from '../../components/ui/spinner';
 import { Screen } from '../../components/Screen';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { ApplePurchaseCard } from '../subscriptions/ApplePurchaseCard';
 import { PremiumCard } from '../subscriptions/PremiumCard';
 import { ProfileCard } from './ProfileCard';
 import { useProfile } from './use-profile';
@@ -25,6 +26,7 @@ export function ProfileScreen({
       description="Your profile and current access come from the backend."
     >
       {!isSigningOut && <SessionCard />}
+      {!isSigningOut && <ApplePurchaseCard onVerified={reload} />}
       {state.status === 'success' && (
         <>
           <PremiumCard entitlements={state.entitlements} />

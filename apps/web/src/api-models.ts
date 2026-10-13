@@ -4,7 +4,7 @@ export const profileSchema = z.object({
   userId: z.uuid(),
   createdAt: z.iso.datetime(),
 });
-const providerSchema = z.enum(['stripe', 'apple_mock', 'google_mock']);
+const providerSchema = z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']);
 export const subscriptionsSchema = z.object({
   subscriptions: z.array(
     z.object({

@@ -171,7 +171,7 @@ Subscriptions are stored under the internal user partition and are read through 
 | `pk` | String: `USER#<userId>` | Owner partition |
 | `sk` | String: `SUB#<provider>#<providerSubscriptionId>` | Unique provider subscription |
 | `userId` | String: UUID | Must match the selected user and partition |
-| `provider` | String: `stripe`, `apple_mock`, `google_mock` | Provider namespace |
+| `provider` | String: `stripe`, `apple`, `apple_mock`, `google_mock` | Provider namespace |
 | `providerSubscriptionId` | Nonempty string | Provider subscription identifier |
 | `productId` | Nonempty string | Only `premium_monthly` is currently mapped |
 | `state` | Nonempty string | Normalized state; unknown values grant no access |
@@ -278,3 +278,9 @@ Synthetic materialized snapshot:
 An unchanged verification could produce aggregate revision 5 with the same grant source revision 1, a later evaluation time, and a new processed marker, but no outbox entry. A duplicate provider event produces no writes. The snapshot may become stale after a time boundary; API reads always recompute access instead of trusting its stored tier.
 
 The writer reads `ENTITLEMENTS` consistently before querying subscriptions and fetching authoritative provider state, then conditions the transaction on that exact revision (or absence for the first write). All writers must follow this order. A conflict requires rereading and recomputing; writes made directly in DynamoDB Admin bypass these guarantees. See [processing behavior](PAYMENTS.md#processing-and-retries).
+
+## Apple sandbox records
+
+Apple subscriptions use `SUB#apple#Sandbox:<originalTransactionId>` under the existing user partition. `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` binds the lineage to one internal user. `EVENT#apple#Sandbox#<eventId>` / `PROCESSED` stores the user, submitted transaction reference, event type, and committed completion. Client synchronization uses a server-generated UUID; notifications use Apple's verified notification UUID. The marker is never written before subscription verification and commit.
+
+These writes share the existing aggregate revision guard, profile condition, entitlement snapshot, and optional pending outbox transaction. A conflicting owner rolls back the whole transaction. BFF completion reads are consistent and disclose completion only to the owning user. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).

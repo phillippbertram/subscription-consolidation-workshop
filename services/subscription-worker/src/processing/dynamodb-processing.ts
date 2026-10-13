@@ -1,4 +1,4 @@
-import type { StripeJob } from '@premiumpass/billing-contracts';
+import type { AppleJob, StripeJob } from '@premiumpass/billing-contracts';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -196,6 +196,90 @@ export class DynamoDbProcessingStore {
       extra,
       now,
       changed ? job : undefined,
+    );
+  }
+
+  async isAppleProcessed(job: AppleJob) {
+    const item = await this.get(
+      `EVENT#apple#Sandbox#${job.eventId}`,
+      'PROCESSED',
+    );
+    if (
+      item &&
+      (item.userId !== job.userId || item.transactionId !== job.transactionId)
+    )
+      throw new ProcessingError('apple_event_owner_mismatch');
+    return Boolean(item);
+  }
+
+  async commitApple(
+    aggregate: Aggregate,
+    subscription: Subscription,
+    job: AppleJob,
+    now: Date,
+    changed: boolean,
+  ) {
+    if (
+      aggregate.userId !== job.userId ||
+      subscription.userId !== job.userId ||
+      subscription.provider !== 'apple'
+    )
+      throw new ProcessingError('apple_owner_mismatch');
+    const writes: Write[] = [
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            pk: `PROVIDER#apple#SUB#${subscription.providerSubscriptionId}`,
+            sk: 'OWNER',
+            userId: job.userId,
+          },
+          ConditionExpression: 'attribute_not_exists(pk) OR userId = :user',
+          ExpressionAttributeValues: { ':user': job.userId },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            pk: `USER#${job.userId}`,
+            sk: `SUB#apple#${subscription.providerSubscriptionId}`,
+            ...subscription,
+          },
+        },
+      },
+      {
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            pk: `EVENT#apple#Sandbox#${job.eventId}`,
+            sk: 'PROCESSED',
+            userId: job.userId,
+            transactionId: job.transactionId,
+            eventId: job.eventId,
+            eventType: job.eventType,
+            correlationId: job.correlationId,
+            processedAt: now.toISOString(),
+            outcome: changed ? 'changed' : 'verified',
+          },
+          ConditionExpression: 'attribute_not_exists(pk)',
+        },
+      },
+    ];
+    const subscriptions = aggregate.subscriptions.filter(
+      (s) =>
+        !(
+          s.provider === 'apple' &&
+          s.providerSubscriptionId === subscription.providerSubscriptionId
+        ),
+    );
+    subscriptions.push(subscription);
+    await this.commit(
+      aggregate,
+      subscriptions,
+      writes,
+      now,
+      changed ? { ...job, eventId: `apple:Sandbox:${job.eventId}` } : undefined,
     );
   }
 

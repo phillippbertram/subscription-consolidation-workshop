@@ -13,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 const providerNames = {
   stripe: 'Stripe',
+  apple: 'Apple Sandbox',
   apple_mock: 'Apple mock',
   google_mock: 'Google mock',
 };

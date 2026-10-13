@@ -20,7 +20,9 @@
     "zod": "4.6.5",
     "@premiumpass/domain": "workspace:*",
     "@premiumpass/persistence": "workspace:*",
-    "@premiumpass/logging": "workspace:*"
+    "@premiumpass/logging": "workspace:*",
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@aws-sdk/client-sqs": "3.1149.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.159",
