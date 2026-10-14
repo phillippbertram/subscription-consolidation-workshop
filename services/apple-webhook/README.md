@@ -1,5 +1,16 @@
 # Apple webhook
 
-Local App Store Server Notifications V2 ingress on port 3003. It validates Apple-signed sandbox data, queues minimal synchronization jobs, and acknowledges only after queue acceptance. It uses public Apple root certificates and requires no private signing key or database credentials.
+Verifies App Store Server Notifications V2 using public Apple certificates and
+enqueues Sandbox subscription references. It needs no Auth0 token, database
+access, or private key. Verified TEST notifications are acknowledged without jobs.
 
-Configure the existing ignored `.env` using [Apple sandbox setup](../../docs/APPLE_PURCHASES.md), then run `pnpm dev:apple-webhook` from the root, or use the grouped `pnpm dev`. `GET /health` reports whether Apple verification is enabled. Forward `POST /v1/webhooks/apple` through an HTTPS tunnel. This service has no AWS deployment wiring yet.
+| Entry                           | Responsibility                                                       |
+| ------------------------------- | -------------------------------------------------------------------- |
+| `src/app.ts`                    | Signature verification, test/ignored notifications, queue acceptance |
+| `src/runtime.ts`                | Shared local/cloud composition                                       |
+| `src/local.ts`, `src/lambda.ts` | Loopback port 3003 / API Gateway handler                             |
+
+`pnpm dev:apple-webhook` starts individually; `pnpm dev` includes it.
+`GET /health` reports `appleEnabled`; disabled notification handling returns 503.
+Follow [local ngrok setup](../../docs/APPLE_PURCHASES.md#receive-apple-notifications-through-ngrok)
+or [AWS notification setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing).

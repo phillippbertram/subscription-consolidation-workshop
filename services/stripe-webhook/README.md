@@ -1,19 +1,22 @@
 # Stripe webhook
 
-`@premiumpass/stripe-webhook` verifies signed Stripe events and enqueues minimal jobs. It grants no access and has no DynamoDB dependency. The event allowlist and job schema come from `@premiumpass/billing-contracts`.
+Verifies Stripe signatures against unchanged bytes and enqueues minimal references
+before acknowledging supported events. It grants no access and has no database
+or Auth0 dependency. [Payment processing](../../docs/PAYMENTS.md#processing-and-retries).
 
-| File                              | Purpose                                                           |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `src/app.ts`                      | Raw-byte signature verification and queue acceptance before `200` |
-| `src/config.ts`, `src/runtime.ts` | Queue client, signing secret and application composition          |
-| `src/local.ts`                    | Hono server on loopback port 3002                                 |
-| `src/lambda.ts`                   | API Gateway Lambda handler                                        |
-| `scripts/stripe-listen.ts`        | Stripe CLI forwarding with the shared event allowlist             |
+| Entry                             | Responsibility                                 |
+| --------------------------------- | ---------------------------------------------- |
+| `src/app.ts`                      | Signature verification and queue handoff       |
+| `src/config.ts`, `src/runtime.ts` | Queue/signing configuration and composition    |
+| `src/local.ts`, `src/lambda.ts`   | Loopback port 3002 / Gateway handler           |
+| `scripts/stripe-listen.ts`        | CLI forwarding with the shared event allowlist |
 
-Copy [`.env.example`](.env.example) to `.env` only on first setup. Local runtime needs `SUBSCRIPTION_QUEUE_URL` and `STRIPE_WEBHOOK_SECRET`; it requires no Stripe API key, price, Auth0 or database settings. Existing shell variables take precedence. Lambda reads the signing field from the existing Secrets Manager secret referenced by `STRIPE_SECRET_ARN`, caching it for five minutes. The shared cloud secret still contains worker credentials; package separation does not change secret permissions.
+Local setup needs only queue URL and signing secret, using the
+[configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
+`pnpm dev:webhook` starts individually; grouped `pnpm dev` includes it.
+The [Stripe listener](../../docs/PAYMENTS.md#stripe-test-setup) runs separately.
 
-From the repository root, `pnpm dev:webhook` starts the watcher; `pnpm stripe:listen` runs separately. `pnpm dev` includes the webhook in grouped startup. Shared package edits are watched; restart after `.env` changes. Use either grouped or individual startup on the same ports.
-
-`pnpm --filter @premiumpass/stripe-webhook run build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm --filter @premiumpass/stripe-webhook run start` runs the built local server. Lambda exports `handler` without starting an HTTP listener.
-
-Follow [Payments](../../docs/PAYMENTS.md) for setup and manual checks, [infrastructure](../../infra/README.md) for synthesis, and [P06](../../docs/TASKS.md#p06-stripe-purchase-and-reliable-processing) for verification status.
+Lambda reads the signing field of the referenced Stripe Secrets Manager secret
+with a five-minute cache. That existing secret also contains worker credentials;
+service separation does not split its secret permissions. See
+[cloud registration](../../docs/PAYMENTS.md#register-the-cloud-webhook).

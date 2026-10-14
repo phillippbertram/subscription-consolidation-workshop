@@ -1,286 +1,154 @@
 # DynamoDB data model
 
-See the [payments guide](PAYMENTS.md) for checkout, subscription processing, and access rules.
+One table holds identities, subscriptions, and processing records. Start with
+[architecture](ARCHITECTURE.md); [Payments](PAYMENTS.md) explains the access rules.
 
-This reference describes the records accessed by the BFF, subscription worker and local demo script. Implementation progress and verification evidence are tracked in [P03](TASKS.md#p03-small-aws-stack-and-user-persistence) and [P06](TASKS.md#p06-stripe-purchase-and-reliable-processing). The broader [proposed table in the project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency) includes future record types that are not implemented yet.
+## Relationships
+
+```mermaid
+flowchart LR
+    Identity["Verified issuer + subject"] --> Map["IDENTITY / MAP"]
+    Map --> User["USER / PROFILE"]
+    User --> Customer["Stripe customer mappings"]
+    User --> Subs["SUB records across providers"]
+    Owner["Provider subscription OWNER"] --> Subs
+    Subs --> Snapshot["ENTITLEMENTS revision"]
+    Snapshot --> Event["PROCESSED marker"]
+    Snapshot --> Outbox["Pending OUTBOX event"]
+```
+
+The last three records participate in the worker transaction; arrows show
+relationships, not separate sequential writes. API access is recalculated from
+subscriptions and current time, so an old snapshot cannot extend access.
 
 ## Table structure
 
-The application uses one table with a composite primary key:
+String `pk` and `sk` form the primary key. Other fields belong to application
+records. No secondary indexes or TTL are configured. Local table:
+`premiumpass-local`; AWS uses the generated name from `DYNAMODB_TABLE_NAME`.
+Both use on-demand billing. [Retention and cleanup](../infra/README.md#cleanup).
 
-| Attribute | DynamoDB type | Role |
-|---|---|---|
-| `pk` | String (`S`) | Partition key; namespaces identities, users, provider references, checkout attempts, events and outbox entries |
-| `sk` | String (`S`) | Sort key; identifies the record type within that partition |
+Shorthand: `U` = internal UUID, `H` = SHA-256 of JSON `[issuer, subject]`,
+`C` = Stripe customer ID, `Q` = request UUID, `S` = subscription ID,
+`E` = event ID, `R` = aggregate revision.
 
-Only these two attributes are defined in the table schema. The application supplies the other attributes when writing items. Identity and profile fields below are strings. Subscription fields additionally use numbers, booleans, and nulls as documented below.
+## Identity and profile
 
-The local initializer creates `premiumpass-local`; the CDK stack uses a generated table name and passes it to the BFF and worker as `DYNAMODB_TABLE_NAME`. Both configure on-demand billing (`PAY_PER_REQUEST`). There are no secondary indexes or TTL attributes configured. The CDK table uses `RETAIN`; local Compose storage uses a persistent named volume. See the [infrastructure guide](../infra/README.md#local-dynamodb-and-manual-requests) for startup and manual requests.
+| PK / SK              | Fields                                | Purpose                               |
+| -------------------- | ------------------------------------- | ------------------------------------- |
+| `IDENTITY#H` / `MAP` | `issuer`, `subject`, `userId`         | Resolve exact verified Auth0 identity |
+| `USER#U` / `PROFILE` | `userId`, `identityHash`, `createdAt` | Stable internal profile               |
 
-## Access patterns
-
-Implemented application access only; table initialization and manual DynamoDB Admin operations are excluded. All `GetItem` and `Query` reads use `ConsistentRead: true`; queries load every page. No application flow uses a table scan or secondary index.
-
-Key shorthand: `H` = identity hash, `U` = internal user UUID, `C` = Stripe customer ID, `Q` = checkout request UUID, `E` = Stripe event ID.
-
-### Reads
-
-| Purpose                                                   | Caller                | Operation | `pk` / `sk`                              |
-| --------------------------------------------------------- | --------------------- | --------- | ---------------------------------------- |
-| Resolve verified identity to internal user                | BFF                   | `GetItem` | `IDENTITY#H` / `MAP`                     |
-| Load the mapped profile                                   | BFF                   | `GetItem` | `USER#U` / `PROFILE`                     |
-| Find customer creation intent or verify forward ownership | BFF, worker           | `GetItem` | `USER#U` / `CUSTOMER#stripe`             |
-| Resolve or verify the customer's internal owner           | BFF, worker           | `GetItem` | `PROVIDER#stripe#CUSTOMER#C` / `OWNER`   |
-| Resume a checkout attempt                                 | BFF                   | `GetItem` | `CHECKOUT#U#Q` / `REQUEST`               |
-| Find the user's active purchase attempt                   | BFF                   | `GetItem` | `USER#U` / `CHECKOUT#ACTIVE`             |
-| Load all provider subscriptions                           | BFF, worker, demo CLI | `Query`   | `pk = USER#U`, `begins_with(sk, 'SUB#')` |
-| Load the aggregate revision before processing             | Worker, demo CLI      | `GetItem` | `USER#U` / `ENTITLEMENTS`                |
-| Detect a completed Stripe event                           | Worker                | `GetItem` | `EVENT#stripe#E` / `PROCESSED`           |
-
-- The BFF derives access from `SUB#` records and the current time; it does not read the stored `ENTITLEMENTS` tier for authorization.
-- Writers read the aggregate revision **before** subscriptions and provider state. The subsequent transaction rejects concurrent changes; separate consistent reads are not an atomic snapshot.
-
-### Writes
-
-| Purpose                                           | Caller   | Operation and affected records                                                                                                             | Required condition                                                                                                                           |
-| ------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create identity and profile together              | BFF      | `TransactWriteItems`: `IDENTITY#H` / `MAP` + `USER#U` / `PROFILE`                                                                          | Both items absent; concurrent losers reread                                                                                                  |
-| Reserve customer creation                         | BFF      | `PutItem`: `USER#U` / `CUSTOMER#stripe`                                                                                                    | Item absent; preserve the winning creation request ID                                                                                        |
-| Bind the Stripe customer to its user              | BFF      | `TransactWriteItems`: forward customer mapping + `PROVIDER#stripe#CUSTOMER#C` / `OWNER`                                                    | Same creation request; forward customer absent or identical; reverse owner absent or identical                                               |
-| Reserve a checkout attempt and active pointer     | BFF      | `TransactWriteItems`: `CHECKOUT#U#Q` / `REQUEST` + `USER#U` / `CHECKOUT#ACTIVE`                                                            | New attempt absent; pointer absent or still equal to the previously read request                                                             |
-| Attach the resulting checkout session             | BFF      | `PutItem`: `CHECKOUT#U#Q` / `REQUEST`                                                                                                      | Same fingerprint; session ID absent or identical                                                                                             |
-| Commit verified Stripe state and event completion | Worker   | `TransactWriteItems`: [subscription, entitlement snapshot, owner, completion marker and optional outbox](#subscription-processing-records) | Loaded revision unchanged, profile and customer ownership match, subscription owner absent or identical, completion marker/new outbox absent |
-| Apply or clear local subscription scenarios       | Demo CLI | `TransactWriteItems`: two reserved demo `SUB#` rows + `ENTITLEMENTS` + `OUTBOX`                                                            | Local table only; existing profile, unchanged aggregate revision, new outbox absent; demo rows absent or marked `p05-local-demo`             |
-
-The worker adds an outbox entry only for a domain change. The demo CLI always writes one and deletes only its reserved demo rows when the selected scenario requires it. All transaction items commit or fail together. Subscription-owner bindings are protected by write conditions; there is no separate application read for those records yet.
-
-**Not implemented:** Finding/publishing pending outbox entries ([P08](TASKS.md#p08-outbox-publisher-and-eventbridge)) and scheduled reconciliation/expiration ([P09](TASKS.md#p09-reconciliation-and-expiration)). No scan, index or update pattern for these tasks is implemented yet.
-
-Sources: [user store](../services/bff/src/dynamodb-users.ts), [checkout store](../services/bff/src/billing/dynamodb-billing.ts), [subscription reads](../packages/persistence/src/subscriptions.ts), [processing store](../services/subscription-worker/src/processing/dynamodb-processing.ts), [demo CLI](../services/subscription-worker/scripts/seed-subscription.ts).
-
-## Identity mapping
-
-The mapping connects a verified Auth0 identity to an internal user ID. JWT claims `iss` and `sub` become the stored fields `issuer` and `subject`.
-
-| Field | Value / format | Purpose |
-|---|---|---|
-| `pk` | `IDENTITY#<identityHash>` | Deterministic lookup key for the issuer/subject pair |
-| `sk` | `MAP` | Identity mapping record type |
-| `issuer` | Exact validated issuer, including its trailing slash | Identifies the issuer of the access token |
-| `subject` | Exact validated subject | Identifies the user within that issuer |
-| `userId` | UUID generated with `randomUUID()` | References the internal user's profile |
-
-The identity hash is the lowercase hexadecimal SHA-256 digest of the UTF-8 JSON serialization of the ordered pair:
-
-```ts
-const identityHash = createHash('sha256')
-  .update(JSON.stringify([identity.issuer, identity.subject]))
-  .digest('hex');
-```
-
-The implementation uses the exact validated values, without additional normalization. Including both values means that the same subject under a different issuer resolves to a different identity. The hash is a lookup key, not encryption: the item also contains the issuer and subject in plaintext. There is no email-based account linking.
-
-## User profile
-
-The profile contains the minimal application-facing user data and a backlink to the identity hash.
-
-| Field | Value / format | Purpose |
-|---|---|---|
-| `pk` | `USER#<userId>` | Internal user partition |
-| `sk` | `PROFILE` | User profile record type |
-| `userId` | Same UUID as the identity mapping | Stable application-facing user ID |
-| `identityHash` | 64 lowercase hexadecimal characters | Connects the profile to its expected identity mapping |
-| `createdAt` | UTC timestamp produced by `Date.toISOString()` | Time the profile was created; preserved on subsequent reads |
-
-The store accepts an injectable clock for creation time. These formats describe values generated by the writer; reads check the relationships and string types described below, rather than applying a full UUID or timestamp schema validator.
-
-## Synthetic example
-
-These examples use a fictional identity and show plain JSON objects as handled by `DynamoDBDocumentClient`, without DynamoDB's low-level `{"S": "..."}` wrappers. They contain no real account data or tokens.
-
-The exact input to SHA-256 is:
-
-```json
-["https://demo-tenant.example/","auth0|demo-user-001"]
-```
-
-Identity mapping item:
-
-```json
-{
-  "pk": "IDENTITY#8dd1584699dfc4ea2040b5f0e550b963a7a8c6433395f0a5ff5222c9926e623a",
-  "sk": "MAP",
-  "issuer": "https://demo-tenant.example/",
-  "subject": "auth0|demo-user-001",
-  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f"
-}
-```
-
-Corresponding profile item:
-
-```json
-{
-  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "sk": "PROFILE",
-  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "identityHash": "8dd1584699dfc4ea2040b5f0e550b963a7a8c6433395f0a5ff5222c9926e623a",
-  "createdAt": "2026-10-10T12:00:00.000Z"
-}
-```
-
-`GET /v1/me` returns only:
-
-```json
-{
-  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "createdAt": "2026-10-10T12:00:00.000Z"
-}
-```
-
-The endpoint requires a validated user access token with `read:me`. It rejects machine identities before accessing the store. Client-supplied user IDs do not select the profile.
-
-## Reads, creation, and concurrency
-
-1. Compute the identity hash from the verified issuer and subject.
-2. Read `IDENTITY#<identityHash>` / `MAP` with `GetItem` and `ConsistentRead: true`.
-3. If the mapping exists, verify that its issuer and subject match the requested identity and that `userId` is a string. Read `USER#<userId>` / `PROFILE`, also consistently. Require matching `identityHash` and `userId`, plus a string `createdAt`, then return the profile fields.
-4. If the mapping is absent, generate a UUID and creation timestamp. Write both items together through `TransactWriteItems`. Each put has `attribute_not_exists(pk)` to prevent overwriting an existing item at its full primary key. Each transaction request has a generated `ClientRequestToken`.
-5. On a transaction cancellation containing only conditional-check or transaction-conflict failures (plus any `None` reasons), retry the read/create loop with exponential delay and jitter. There are at most five loop attempts; a losing request can read the mapping created by the winner. Other errors, or exhausted retries, propagate to the HTTP error handler.
-
-Existing profiles are read without updating their creation time. The profile flow uses key lookups and transactional puts. Subscription reads additionally query the user partition; no table scans are needed. Missing profiles or inconsistent mappings fail with the API's generic `500 / internal_error`; the store does not silently repair data or fabricate a replacement profile.
-
-## Scope and source files
-
-The implemented model stores no email addresses, display names, tokens, or separate mock provider state. Subscription processing records are documented below; future mock provider state remains in the [project plan](../PROJECT_PLAN.md#8-dynamodb-and-concurrency). No profile update, account linking, or deletion flow exists yet.
-
-| Source | Responsibility |
-|---|---|
-| [User contracts](../services/bff/src/users.ts) | `UserIdentity`, `UserProfile`, and `UserStore` |
-| [DynamoDB user store](../services/bff/src/dynamodb-users.ts) | Item shapes, identity hash, consistency checks, and atomic creation |
-| [HTTP app](../services/bff/src/app.ts) | Protected profile endpoint and API response |
-| [CDK stack](../infra/src/stack.ts) | Cloud table schema and retention configuration |
-| [Local initializer](../services/bff/scripts/init-local-db.ts) | Local table creation and key schema verification |
-
+Both records are created in one conditional transaction. Concurrent first
+requests converge by rereading the winning mapping. Existing inconsistent
+mappings fail; no fabricated profile or email-based linking is allowed.
+The hash is a lookup key, not encryption. Email, display name, and tokens are not
+stored. Changing the issuer creates a different identity even with the same subject.
 
 ## Subscriptions
 
-Subscriptions are stored under the internal user partition and are read through `DynamoDbSubscriptionStore`. P05's only writer is the loopback-only scenario CLI; it is not a payment provider integration.
+Each subscription is `USER#U` / `SUB#<provider>#<providerSubscriptionId>`.
+Records are written by verified processing or explicitly local demo tools.
 
-| Field | Type / format | Meaning |
-| --- | --- | --- |
-| `pk` | String: `USER#<userId>` | Owner partition |
-| `sk` | String: `SUB#<provider>#<providerSubscriptionId>` | Unique provider subscription |
-| `userId` | String: UUID | Must match the selected user and partition |
-| `provider` | String: `stripe`, `apple`, `apple_mock`, `google_mock` | Provider namespace |
-| `providerSubscriptionId` | Nonempty string | Provider subscription identifier |
-| `productId` | Nonempty string | Only `premium_monthly` is currently mapped |
-| `state` | Nonempty string | Normalized state; unknown values grant no access |
-| `providerStatus` | Nonempty string | Original status; must map to the normalized state |
-| `cancelAtPeriodEnd` | Boolean | Scheduled cancellation, not immediate revocation |
-| `accessUntil` | UTC ISO string or null | Previously verified access boundary, not an unpaid period |
-| `graceUntil` | UTC ISO string or null | Fixed grace boundary; reads cap it at 24 hours after prior access |
-| `verifiedAt` | UTC ISO string | Last source verification; never extends access by itself |
-| `revision` | Positive integer | Source record revision; not an aggregate revision |
-| `demoScenario` | String, local demo records only | `p05-local-demo`; protects the CLI's two reserved records |
+| Field                                          | Meaning                                                                                             |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `userId`, `provider`, `providerSubscriptionId` | Owner and namespaced source identity                                                                |
+| `productId`                                    | Internal mapping; only `premium_monthly` grants access                                              |
+| `state`, `providerStatus`                      | Normalized state and original provider state                                                        |
+| `cancelAtPeriodEnd`                            | Renewal disabled; not immediate revocation                                                          |
+| `accessUntil`, `graceUntil`                    | Verified UTC access/grace boundaries or null; [provider-specific limits](PAYMENTS.md#access-policy) |
+| `verifiedAt`                                   | Last successful source verification, UTC                                                            |
+| `revision`                                     | Positive source revision; distinct from aggregate revision                                          |
+| `demoScenario`                                 | Optional `p05-local-demo` marker protecting reserved local records                                  |
 
-All fields except the local marker are required. JSON example:
+Synthetic document shape (timestamps illustrate a record, not current access):
 
 ```json
 {
   "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "sk": "SUB#apple_mock#demo-p05-apple_mock",
+  "sk": "SUB#stripe#sub_SYNTHETIC",
   "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "provider": "apple_mock",
-  "providerSubscriptionId": "demo-p05-apple_mock",
+  "provider": "stripe",
+  "providerSubscriptionId": "sub_SYNTHETIC",
   "productId": "premium_monthly",
   "state": "active",
   "providerStatus": "active",
   "cancelAtPeriodEnd": false,
-  "accessUntil": "2026-10-10T13:00:00.000Z",
+  "accessUntil": "2026-11-01T12:00:00.000Z",
   "graceUntil": null,
-  "verifiedAt": "2026-10-10T12:00:00.000Z",
-  "revision": 1,
-  "demoScenario": "p05-local-demo"
+  "verifiedAt": "2026-10-01T12:00:00.000Z",
+  "revision": 1
 }
 ```
 
-Reads use `pk = USER#<resolved-userId>` and `begins_with(sk, 'SUB#')`, `ConsistentRead: true`, and pagination. Zod strips persistence-only fields from API responses. A malformed record or ownership/key mismatch fails closed with 500. Unknown product/status strings remain visible for diagnosis and grant nothing. There is no TTL: expiration is checked during API access even when the row is still present.
-
-The local CLI transaction checks that the profile exists, then puts/deletes only `demo-p05-apple_mock` and `demo-p05-google_mock`. Each write requires either an absent record or the exact demo marker. `free` removes those two records; other subscriptions are preserved. Existing demo source revisions increase per scenario application; deleting and recreating a demo starts that source at 1. The CLI shares the processor aggregate CAS, writes a fresh entitlement snapshot, and emits a pending outbox event.
-
-See the [access policy](PAYMENTS.md#access-policy) and [manual checks](PAYMENTS.md#manual-checks) for endpoints and scenarios. The following processing records complement those subscription rows; API access is still recalculated from current time and `SUB` records.
+Zod validates persisted fields/ownership before API responses. Unknown product
+or status strings remain visible but grant nothing; malformed records fail
+closed. Expired records remain stored; expiry is evaluated during reads.
 
 ## Stripe customer and checkout records
 
-The same table contains four technical record types for local checkout. Every record has string `pk`/`sk`; there are no new indexes or TTL fields. Times below are Unix seconds, unlike profile timestamps. The API still returns ISO dates.
+| PK / SK                                | Fields beyond keys                                                                                              |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `USER#U` / `CUSTOMER#stripe`           | `userId`, creation `requestId`, `createdAt`, optional `customerId`                                              |
+| `PROVIDER#stripe#CUSTOMER#C` / `OWNER` | `userId`, `customerId`                                                                                          |
+| `CHECKOUT#U#Q` / `REQUEST`             | Owner/request IDs, fingerprint, customer/price IDs, return URLs, `createdAt`, `expiresAt`, optional `sessionId` |
+| `USER#U` / `CHECKOUT#ACTIVE`           | `userId`, `requestId`                                                                                           |
 
-| Key | Fields | Purpose |
-|---|---|---|
-| `USER#<userId>` / `CUSTOMER#stripe` | `userId`, `requestId`, `createdAt`, optional `customerId` | Durable customer creation intent and resulting `cus_` reference |
-| `PROVIDER#stripe#CUSTOMER#<customerId>` / `OWNER` | `userId`, `customerId` | Reverse ownership lookup, written atomically with the forward mapping |
-| `CHECKOUT#<userId>#<requestId>` / `REQUEST` | `userId`, `requestId`, `fingerprint`, `customerId`, `priceId`, `successUrl`, `cancelUrl`, `createdAt`, `expiresAt`, optional `sessionId` | Immutable request parameters; resulting `cs_test_` reference added conditionally |
-| `USER#<userId>` / `CHECKOUT#ACTIVE` | `userId`, `requestId` | Conditional pointer serializing purchase attempts |
-
-`userId` and both request identifiers are UUIDs. `fingerprint` is SHA-256 of the serialized plan ID, price ID, and return URLs. The customer request ID is independent of a checkout request ID. Missing provider IDs mean a pending or unresolved operation, not permission to start a new one. No hosted checkout URL, payment payload, email, or token is stored.
-
-Synthetic completed customer mapping example:
-
-```json
-{
-  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "sk": "CUSTOMER#stripe",
-  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "requestId": "7bd20b71-fc13-4546-b424-f8cc0db45729",
-  "createdAt": 1791633600,
-  "customerId": "cus_synthetic"
-}
-```
-
-All lookups are consistent point reads. Customer intent creation is conditional; forward/reverse mappings are one transaction. Attempt reservation atomically creates the request and compares/replaces the active pointer. Saving the session requires the original fingerprint and an absent or identical session ID. Only a Stripe-confirmed expired session permits a new attempt. These records never grant entitlements. See [checkout recovery](PAYMENTS.md#checkout-and-recovery) for ambiguity windows and manual recovery boundaries.
-
+Creation intent is durable; forward/reverse customer mappings bind atomically.
+Checkout reservation compares the active pointer, and session attachment requires
+the same fingerprint. Missing provider references mean unresolved work, not
+permission to purchase again. These technical times use Unix seconds. Hosted
+checkout URLs, payment payloads, and emails are not persisted.
+[Recovery behavior](PAYMENTS.md#checkout-and-recovery).
 
 ## Subscription processing records
 
-The signed-webhook worker commits these items atomically. The customer's existing forward/reverse mapping and profile must agree. `U` is the internal user UUID, `S` the Stripe subscription ID, `E` the provider event ID, and `R` the next aggregate revision.
+| PK / SK                           | Main fields and role                                                                                                                    |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `USER#U` / `ENTITLEMENTS`         | `userId`, aggregate `revision`, `tier`, `features`, `effectiveUntil`, `evaluatedAt`, `grants`, `warnings`                               |
+| `PROVIDER#stripe#SUB#S` / `OWNER` | Immutable `userId` / `customerId` binding                                                                                               |
+| `EVENT#stripe#E` / `PROCESSED`    | Owner/event/type/correlation IDs, `processedAt`, outcome (`changed` or `verified`), aggregate revision                                  |
+| `OUTBOX#U:R` / `EVENT`            | Stable `domainEventId=U:R`, owner/revision, `SubscriptionChanged`, pending status, provider/correlation IDs, timestamp and entitlements |
 
-| PK / SK | Fields beyond keys | Meaning |
-| --- | --- | --- |
-| `USER#U` / `SUB#stripe#S` | Subscription fields above | Normalized provider state; source `revision` increases only when domain fields change, while `verifiedAt` updates on successful refresh |
-| `USER#U` / `ENTITLEMENTS` | `userId`, positive integer `revision`, `tier`, `features`, `effectiveUntil`, `evaluatedAt`, `grants`, `warnings` | Materialized union of all providers at evaluation time; aggregate revision increases on every successful new event or demo write |
-| `PROVIDER#stripe#SUB#S` / `OWNER` | `userId`, `customerId` | Binding that cannot be reassigned to another user/customer by a processor write |
-| `EVENT#stripe#E` / `PROCESSED` | `userId`, `eventId`, `eventType`, `correlationId`, `processedAt`, `outcome`, `revision` | Completion marker; `outcome` is `changed` or `verified`, and `revision` identifies the committed aggregate |
-| `OUTBOX#U:R` / `EVENT` | `domainEventId`, `userId`, `revision`, `type`, `status`, `providerEventId`, `correlationId`, `createdAt`, `entitlements` | Pending `SubscriptionChanged` event with stable ID `U:R` and an entitlement payload; publication belongs to P08 |
+Writers read aggregate revision **before** subscriptions and provider state.
+The transaction checks that revision, profile, ownership, and absent completion
+marker before committing all records. A conflict reloads and recomputes.
+Separate consistent reads alone are not an atomic snapshot.
 
-All timestamp fields use UTC ISO strings. Entitlement payloads contain the tier, features, grants and next boundary from the [access evaluation](PAYMENTS.md#access-policy), including provider/source revisions in grants. `effectiveUntil` is nullable. `status` is currently always `pending`; no publisher sets `sent` yet. The local scenario writer uses `local-demo-<UUID>` as its event reference; it emits an outbox record but no Stripe processed marker. No TTL is enabled for markers or pending outbox records.
-
-Synthetic materialized snapshot:
-
-```json
-{
-  "pk": "USER#389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "sk": "ENTITLEMENTS",
-  "userId": "389f7e6b-2f11-423c-ba09-110e64cc1e7f",
-  "revision": 4,
-  "tier": "premium",
-  "features": ["score_history"],
-  "effectiveUntil": "2026-11-10T12:00:00.000Z",
-  "evaluatedAt": "2026-10-10T12:00:00.000Z",
-  "grants": [{
-    "provider": "stripe",
-    "providerSubscriptionId": "sub_SYNTHETIC",
-    "revision": 1,
-    "validUntil": "2026-11-10T12:00:00.000Z"
-  }],
-  "warnings": []
-}
-```
-
-An unchanged verification could produce aggregate revision 5 with the same grant source revision 1, a later evaluation time, and a new processed marker, but no outbox entry. A duplicate provider event produces no writes. The snapshot may become stale after a time boundary; API reads always recompute access instead of trusting its stored tier.
-
-The writer reads `ENTITLEMENTS` consistently before querying subscriptions and fetching authoritative provider state, then conditions the transaction on that exact revision (or absence for the first write). All writers must follow this order. A conflict requires rereading and recomputing; writes made directly in DynamoDB Admin bypass these guarantees. See [processing behavior](PAYMENTS.md#processing-and-retries).
+A duplicate event makes no writes. An unchanged new verification updates the
+aggregate/verification metadata without another domain-change outbox event.
+Grant source revisions can therefore differ from the aggregate revision.
+Outbox publication is P08; pending records have no automatic TTL cleanup.
 
 ## Apple sandbox records
 
-Apple subscriptions use `SUB#apple#Sandbox:<originalTransactionId>` under the existing user partition. `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` binds the lineage to one internal user. `EVENT#apple#Sandbox#<eventId>` / `PROCESSED` stores the user, submitted transaction reference, event type, and committed completion. Client synchronization uses a server-generated UUID; notifications use Apple's verified notification UUID. The marker is never written before subscription verification and commit.
+| PK / SK                                                        | Meaning                                                     |
+| -------------------------------------------------------------- | ----------------------------------------------------------- |
+| `USER#U` / `SUB#apple#Sandbox:<originalTransactionId>`         | Normalized subscription lineage                             |
+| `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` | Immutable internal owner                                    |
+| `EVENT#apple#Sandbox#<eventId>` / `PROCESSED`                  | User, transaction reference, type, and committed completion |
 
-These writes share the existing aggregate revision guard, profile condition, entitlement snapshot, and optional pending outbox transaction. A conflicting owner rolls back the whole transaction. BFF completion reads are consistent and disclose completion only to the owning user. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+Client sync uses a generated operation UUID; notifications use Apple's verified
+notification UUID. Completion is visible only to its owner and is written in the
+same transaction as access. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+
+## Access patterns
+
+| Operation                                            | Pattern                                                                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                  |
+| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                              |
+| Identity creation                                    | Conditional transaction for mapping + profile                                                     |
+| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                      |
+| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                          |
+| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows |
+
+Application flows use no table scan. Local Stripe reconciliation discovers
+provider subscriptions through the stored customer and reuses processing.
+Scheduled discovery and outbox publication access patterns remain future work.
+Direct DynamoDB Admin edits bypass these guarantees.
+
+Sources: [user store](../services/api/src/dynamodb-users.ts),
+[checkout store](../services/api/src/billing/dynamodb-billing.ts),
+[subscription reads](../packages/persistence/src/subscriptions.ts),
+[processing store](../services/subscription-worker/src/processing/dynamodb-processing.ts).

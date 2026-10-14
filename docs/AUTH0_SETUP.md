@@ -1,205 +1,139 @@
-# Auth0 setup with an existing tenant
+# Auth0 setup
 
-This guide prepares an existing Auth0 tenant for PremiumPass. It documents configuration to perform; it does not confirm that any tenant resources have been created. Backend behavior is described in the [README](../README.md#backend-authentication), and implementation status remains in [TASKS.md](TASKS.md).
+Auth0 identifies the user; PremiumPass verifies the access token and checks
+subscription access separately. Use one development tenant and the same user
+connection for Web and Mobile. Start from [Getting started](GETTING_STARTED.md).
 
-## 1. Resources and timing
+## Web and API setup
 
-Select the intended development tenant in the Auth0 Dashboard. Create dedicated PremiumPass resources within it, or reuse compatible resources already created for this demo. Keep unrelated applications and tenant-wide defaults unchanged.
+1. **Select or create your development tenant** in the [Auth0 Dashboard](https://manage.auth0.com/).
+   Create dedicated PremiumPass resources; leave unrelated tenant settings alone.
+2. **Create a Custom API** under Applications → APIs:
 
-| Resource | Purpose | Needed when |
-|---|---|---|
-| Custom API: `PremiumPass API` | Audience, signing algorithm, and API permissions | Now, for real backend tokens |
-| Native application: `PremiumPass Mobile` | React Native login with Universal Login and PKCE | P04 |
-| SPA application: `PremiumPass Web` | Browser login for the separate Stripe test website | P06 |
-| Existing user connection and two synthetic users | Shared identity across mobile and web | P04, then P06 |
-| Optional M2M application: `PremiumPass API Smoke` | Manual token-verification check before a client exists | Optional in P02 |
+   | Setting                 | Value                                                       |
+   | ----------------------- | ----------------------------------------------------------- |
+   | Name                    | `PremiumPass API`                                           |
+   | Identifier / audience   | `https://api.premiumpass.example` or your chosen identifier |
+   | Signing algorithm       | `RS256`                                                     |
+   | JWT profile, if offered | `Auth0`; no access-token encryption                         |
 
-The API represents the protected resource; applications represent clients requesting access. The BFF verifies tokens and needs neither a separate login application nor a client secret. API Gateway has no JWT or Lambda authorizer.
+   The identifier is not a network address and need not resolve. Keep it exact
+   across API and clients. [API registration](https://auth0.com/docs/get-started/auth0-overview/set-up-apis).
 
-## 2. Register the Custom API
+3. **Add API permissions:** `read:me` for profile/subscriptions,
+   `read:premium` for protected scores, and `write:checkout` for billing actions.
+   `openid profile email` are login scopes, not Custom API permissions.
+4. **Enable RBAC** for this API. Leave **Add Permissions in the Access Token**
+   off: this backend reads the verified `scope` claim. Under **User Management →
+   Roles**, create `premiumpass-user`; in its **Permissions** tab, add all three
+   permissions from PremiumPass API. Both Free and Premium
+   users get this role; subscription access stays in the backend.
+   [RBAC setup](https://auth0.com/docs/get-started/apis/enable-role-based-access-control-for-apis).
+5. **Create `PremiumPass Web` as a Single Page Application.** Set these allowlists:
 
-Open **Applications → APIs → Create API** and use:
+   | Setting               | Value                   |
+   | --------------------- | ----------------------- |
+   | Allowed Callback URLs | `http://localhost:5173` |
+   | Allowed Logout URLs   | `http://localhost:5173` |
+   | Allowed Web Origins   | `http://localhost:5173` |
 
-| Field | Demo value |
-|---|---|
-| Name | `PremiumPass API` |
-| Identifier | `https://api.premiumpass.example` |
-| Signing Algorithm | `RS256` |
-| JWT Profile, if offered | `Auth0` |
+6. **Enable its user connection.** Use an existing development database
+   connection, or create one under Authentication → Database. Enable it for
+   PremiumPass Web. Create two synthetic users under User Management → Users in
+   that database connection. Use fictional names and two mailbox addresses/aliases
+   you control. In each user's **Roles** tab, assign `premiumpass-user`.
+   Open Auth0's verification email and follow its link; if needed, use the user's
+   **Actions → Send Verification Email**. Check spam and confirm the user profile
+   shows a verified email. Addresses ending in `.example` cannot receive this mail.
+   [Email verification](https://auth0.com/docs/manage-users/user-accounts/resend-verification-emails).
+7. **Authorize the client** as described below. Copy Domain and Client ID from
+   the SPA settings, and the identifier from the Custom API. Enter them using
+   the [configuration map](GETTING_STARTED.md#5-connect-the-configuration), then
+   continue with Stripe setup in the getting-started guide.
 
-The identifier is the audience, not the backend's network address. It does not need to resolve. Choose it once: Auth0 does not allow changing an API identifier afterward. Copy it exactly, including any trailing slash. Use this Custom API, not the built-in Auth0 Management API. The current backend accepts signed RS256 JWTs; do not enable access-token encryption for this API. [Register APIs](https://auth0.com/docs/get-started/auth0-overview/set-up-apis).
+The issuer is `https://<domain>/`; client domain values contain only the
+hostname. With a custom domain, use it consistently. No Auth0 client secret or
+Management API token belongs in either app or the API's runtime configuration.
+When testing, use the database email/password login for these users. Choosing a
+social login creates a different identity with its own role assignment and data.
 
-In the API's **Permissions** tab, add:
+## Application access policy
 
-| Permission | Description | Backend use |
-|---|---|---|
-| `read:me` | Read the current user's profile and subscription status | Required by the current `GET /v1/me` |
-| `read:premium` | Request Premium demo content | Required by `GET /v1/premium/score-history`; also requires a valid entitlement |
-| `write:checkout` | Start checkout or synchronize an Apple purchase for the current user | `POST /v1/billing/stripe/checkout-session`, `POST /v1/billing/apple/sync` |
+For the dedicated API, select **Per-app authorization** for **User-Delegated
+Access**. Under Application Access, authorize PremiumPass Web and, when created,
+PremiumPass Mobile for `read:me`, `read:premium`, and `write:checkout`.
 
-These are custom API scopes. `openid profile email` are OIDC scopes requested during login, not entries to add to this API's permissions list. [API permissions](https://auth0.com/docs/get-started/apis/add-api-permissions).
+Permissions must be requested by the client, allowed for that application, and
+assigned to the user when RBAC is enabled. **Client Access** concerns machine
+credentials and does not enable user login. A shared API with an all-apps policy
+may not require individual grants; do not change its policy for this demo.
+[Auth0 application access policies](https://auth0.com/blog/developers-guide-api-access-policies-auth0/).
 
-## 3. Configure user permissions and application access
+## Add the Native application
 
-### Suggested demo setup: RBAC with a basic user role
+1. Create **PremiumPass Mobile**, type **Native**, in the same tenant.
+2. Enable the same user connection and user-delegated API permissions.
+3. Choose your iOS bundle identifier and set `IOS_BUNDLE_IDENTIFIER` in the
+   mobile configuration before building. Register this URL in both **Allowed
+   Callback URLs** and **Allowed Logout URLs**, replacing the domain and bundle
+   identifier (lowercase in the callback path):
 
-For the dedicated PremiumPass API, enable **Settings → RBAC Settings → Enable RBAC**. Leave **Add Permissions in the Access Token** off: the BFF reads the verified `scope` string, not the separate `permissions` array. With RBAC enabled, a user's token scopes are the intersection of requested scopes and assigned permissions. Merely defining a permission does not assign it to anyone. If reusing an API with RBAC disabled, understand that clients can request its defined permissions without user-role assignments. [Auth0 RBAC behavior](https://auth0.com/docs/get-started/apis/enable-role-based-access-control-for-apis).
+   ```text
+   premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
+   ```
 
-Under **User Management → Roles**, create `premiumpass-user`. In its **Permissions** tab, add all three PremiumPass API permissions. Assign this role to both demo users through **User Management → Users → selected user → Roles**. This is a suggested setup for this guide, not a previously applied tenant configuration. [Create roles](https://auth0.com/docs/manage-users/access-control/configure-core-rbac/roles/create-roles) · [Assign roles](https://auth0.com/docs/manage-users/access-control/configure-core-rbac/rbac-users/assign-roles-to-users).
+4. Copy the Native Client ID and domain into the [mobile configuration](../apps/mobile/README.md#configure-the-app).
+   Keep the API audience unchanged. Preserve callbacks for other installed demo builds.
 
-Both Free and Premium users receive the same basic role. `read:premium` permits a request; only the backend's entitlement check permits Premium content. Do not encode subscription status in an Auth0 role.
+The app uses PKCE and requests `openid profile email read:me read:premium
+write:checkout`. Sign out/in after permission changes. Native domain, scheme,
+or bundle changes require a rebuild; Expo Go cannot run this app.
+[Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo).
 
-### Application access policy
+## Manual verification
 
-Check **API Settings → Application Access Policy**. For the dedicated demo API, use **Per-app authorization** for **User-Delegated Access** and explicitly grant each client access after creating it. Under **Application Access → Edit → User-Delegated Access**, enable access and select:
+| Scenario                                                             | Expected result                                       |
+| -------------------------------------------------------------------- | ----------------------------------------------------- |
+| T01: user access token with `read:me` → `/v1/me`                     | `200`, stable `userId` and `createdAt`                |
+| T02: missing/expired/tampered token, wrong issuer/audience/algorithm | `401`; no protected handler runs                      |
+| T03: valid token without required scope                              | `403`                                                 |
+| T05: user B submits user A's identifiers                             | No access or ownership transfer                       |
+| Machine token calls a user route                                     | `403 user_identity_required`; no user profile created |
 
-| Application | Allowed API permissions |
-|---|---|
-| `PremiumPass Mobile` | `read:me`, `read:premium`, `write:checkout` |
-| `PremiumPass Web` | `read:me`, `read:premium`, `write:checkout` |
-
-Save each grant. An API allowing all applications may not need these individual grants, but RBAC and requested scopes still apply. **Client Access** is a separate policy for M2M tokens; it does not authorize interactive mobile or web login. Leave it disabled unless using the optional M2M check below. [Application access policies](https://auth0.com/docs/get-started/apis/api-access-policies-for-applications).
-
-## 4. Configure the backend now
-
-Copy [`.env.example`](../services/bff/.env.example) to `services/bff/.env` only if that file does not exist. Otherwise update the existing file:
-
-```dotenv
-PORT=3000
-AUTH0_ISSUER=https://your-tenant.eu.auth0.com/
-AUTH0_AUDIENCE=https://api.premiumpass.example
-```
-
-Use the domain through which clients actually authenticate. With an existing custom domain, use its issuer consistently in the BFF and clients; tokens issued through the tenant domain and custom domain have different issuer values. The issuer includes `https://` and a trailing `/`; the client SDK's domain value is only the hostname. [Auth0 custom domains](https://auth0.com/docs/customize/custom-domains/configure-features-to-use-custom-domains).
-
-The backend derives `https://<domain>/.well-known/jwks.json` from that issuer. No client ID, client secret, Management API token, or callback URL belongs in the BFF configuration. Restart `pnpm dev:api` after changing `.env`.
-
-## 5. Configure the Native application for P04
-
-Under **Applications → Applications → Create Application**, choose **Native** and name it `PremiumPass Mobile`. Set its **Domain** and **Client ID** in `apps/mobile/.env` as described in the [mobile guide](../apps/mobile/README.md). Use Authorization Code with PKCE through the Auth0 SDK; no client secret is embedded in the app.
-
-The mobile project uses these values in `apps/mobile/app.config.ts`:
-
-| Mobile setting | Configured value |
-|---|---|
-| Explicit custom scheme | `premiumpass` |
-| iOS bundle identifier | `IOS_BUNDLE_IDENTIFIER` from `apps/mobile/.env`, default `com.example.premiumpass` |
-| Android package name | `com.example.premiumpass` |
-
-With those values, put both URLs below in **Allowed Callback URLs** and **Allowed Logout URLs**, replacing the domain:
-
-```text
-premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
-premiumpass://your-tenant.eu.auth0.com/android/com.example.premiumpass/callback
-```
-
-If Xcode signing uses another iOS bundle identifier, set `IOS_BUNDLE_IDENTIFIER` to that value before prebuild and replace the iOS callback path's identifier with its lowercase form. Preserve existing allowlist entries for older simulator/device builds. The callback does not change when the BFF moves from loopback to LAN.
-
-Save the application settings. Match the Expo Auth0 plugin's `domain` and explicit `customScheme`, the platform identifiers, and the SDK login/logout options to these URLs. Rebuild the native development app after native configuration changes; Expo Go does not support this SDK. [Auth0 Expo quickstart](https://auth0.com/docs/quickstart/native/react-native-expo) · [React Native SDK](https://github.com/auth0/react-native-auth0).
-
-The login request must explicitly use the Custom API audience and request `openid profile email read:me read:premium`. After adding `read:premium`, sign out and sign in again: existing credentials do not gain new scopes. Verify the API permission, user role, and application grant all allow it. Send the resulting **access token** to the BFF, not the ID token. The callback returns to the mobile app; `http://127.0.0.1:3000/v1/me` is an API endpoint, not a login callback.
-
-## 6. Enable the user connection and prepare users
-
-In each application's **Connections** tab, enable the intended existing database or social connection. For a simple demo, use one database connection for both clients. You can also manage application enablement from **Authentication → Database → selected connection → Applications**. [Connections](https://auth0.com/docs/authenticate/identity-providers/view-connections).
-
-Create two synthetic accounts through **User Management → Users → Create User**, selecting that database connection, or reuse two existing demo accounts. Assign the basic role from section 3 to both. Check that existing tenant Actions do not block these clients or rewrite their scopes unexpectedly.
-
-Use the same account and connection when moving from mobile to web. The backend identifies users by verified `iss` and `sub`; identical email addresses across different connections do not establish the same identity. No automatic account linking by email is planned.
-
-## 7. Configure the SPA for P06
-
-Create `PremiumPass Web` as a **Single Page Application**. It has its own Client ID but uses the same domain, API audience, connection, and demo accounts as mobile. For the Vite development origin of `http://localhost:5173`, configure:
-
-| Application setting | Example |
-|---|---|
-| Allowed Callback URLs | `http://localhost:5173` |
-| Allowed Logout URLs | `http://localhost:5173` |
-| Allowed Web Origins | `http://localhost:5173` |
-
-The React SDK uses Authorization Code with PKCE. The web app requests `openid profile email read:me write:checkout` and the Custom API audience. Do not ship a client secret to the browser. [SPA dashboard configuration](https://auth0.com/docs/quickstart/spa/react) · [SPA SDK](https://auth0.com/docs/libraries/auth0-single-page-app-sdk).
-
-Checkout additionally requires a verified email on the Auth0 demo account. The backend obtains it from `/userinfo` with the already validated access token and compares the returned subject. The SPA already requests the required `openid` and `email` scopes; no custom claims or Management API credentials are needed. Complete the email verification flow and sign in again before checkout. See [verified email prefill](PAYMENTS.md#checkout-and-recovery).
-
-Auth0's allowed origins do not configure BFF CORS. The local BFF implements CORS for `WEB_ORIGIN` (default `http://localhost:5173`). Follow the [Stripe/web setup](PAYMENTS.md#local-startup) to configure both apps. Stripe return URLs also have a separate purpose from Auth0 callbacks.
-
-## 8. Obtain a token and check the backend manually
-
-### Get a user token now with the Auth0 CLI
-
-The CLI can perform browser login before the mobile or web application code exists. Register `PremiumPass Mobile` as a **Native** application, or use a compatible demo SPA registration. Enable its user connection and user-delegated API access with `read:me`; with RBAC enabled, assign that permission to the demo user as described in section 3. Use this application's Client ID, not an M2M client ID.
-
-Install the CLI on macOS and connect it to the intended tenant:
+Repeat login/profile loading for both synthetic users. The same verified
+issuer/subject must retain its ID; different identities must get different IDs.
+Email equality does not link accounts. For backend-only requests, optionally
+use the [Auth0 CLI user token flow](https://auth0.github.io/auth0-cli/auth0_test_token.html)
+and keep the access token only in your shell:
 
 ```sh
-brew install auth0
-auth0 login
-```
-
-This authenticates the CLI to manage the tenant. The following command performs a separate application login as your demo user:
-
-```sh
-auth0 test token YOUR_APPLICATION_CLIENT_ID \
-  --audience "https://api.premiumpass.example" \
-  --scopes "openid,profile,email,read:me,read:premium"
-```
-
-Replace the audience with the exact `AUTH0_AUDIENCE` value. If the BFF uses a custom-domain issuer, add `--domain "login.example.com"` with that hostname. [CLI token command](https://auth0.github.io/auth0-cli/auth0_test_token.html).
-
-Follow the CLI prompts and sign in through the browser with a synthetic demo user. The CLI may request permission to temporarily add its local callback URL to the application and remove it afterward. This callback belongs to the CLI's local login flow, not the BFF. [Auth0 CLI login walkthrough](https://developer.auth0.com/resources/labs/tools/auth0-cli-basics).
-
-After the CLI confirms that it copied the access token to the clipboard, capture it in your macOS terminal:
-
-```sh
-ACCESS_TOKEN="$(pbpaste)"
-```
-
-Use the **access token**, not the ID token or the CLI's tenant-management token. Keep it out of project files and logs. Clipboard copying is implemented by the [official CLI](https://github.com/auth0/auth0-cli/blob/main/internal/cli/test.go).
-
-The Native client in P04 obtains user tokens through its SDK; the SPA follows in P06. The CLI flow remains useful for independent backend requests.
-
-### Machine tokens do not provide a user profile
-
-The verifier can authenticate a valid M2M token, but `/v1/me` rejects it with `403 user_identity_required`, even with `read:me`. Its subject identifies an application, not a person; no profile is created. A dashboard Client Credentials example therefore cannot supply a successful user-profile request. No M2M application is needed for the CLI user-login flow above.
-
-### Call the local backend
-
-Start DynamoDB Local with `pnpm local:up` and the BFF with `pnpm dev:api`. In the terminal containing `ACCESS_TOKEN`, run:
-
-```sh
-curl -i http://127.0.0.1:3000/health
-curl -i http://127.0.0.1:3000/v1/me
 curl -i -H "Authorization: Bearer $ACCESS_TOKEN" http://127.0.0.1:3000/v1/me
 unset ACCESS_TOKEN
 ```
 
-With DynamoDB running and its table created, expect 200 for health, 401 without a token, and 200 with a valid user token containing `read:me`. The last response contains the persisted `userId` and `createdAt`. Follow the [local database setup](../infra/README.md#local-dynamodb-and-manual-requests) first. These are manual requests, not an automated test suite.
+For isolated authentication verification, also exercise missing `exp`, unknown
+`kid`, key rotation, cache reuse, and JWKS outage with controlled keys. No test
+verifier is a runtime fallback. See [API authentication](../services/api/README.md#authentication).
 
-## 9. Optional refresh tokens
+## Troubleshooting
 
-Refresh tokens are not required for P02. If adding persistent login later, enable **Allow Offline Access** for the API, enable the application's Refresh Token grant and rotation, and request `offline_access`. Configure expiration and use the SDK's supported credential storage. The BFF continues to receive access tokens, never refresh tokens. [Configure refresh token rotation](https://auth0.com/docs/secure/tokens/refresh-tokens/configure-refresh-token-rotation).
+| Symptom                        | Check                                                                                     |
+| ------------------------------ | ----------------------------------------------------------------------------------------- |
+| Startup refuses Auth0 settings | Issuer is an HTTPS origin with trailing `/`; audience is the Custom API identifier        |
+| Callback mismatch              | Configured application's domain, scheme, bundle identifier, and allowlists                |
+| Login or token request denied  | Connection, user role, requested scopes, and application access grant                     |
+| API `401`                      | Use an access token, not an ID or Management API token; verify issuer/audience and expiry |
+| API `403`                      | Required scopes and fresh login; Premium also needs a valid entitlement                   |
+| `verified_email_required`      | Complete the synthetic account's email verification and sign in again                     |
+| API `503`                      | JWKS cannot be obtained; retry after the advertised interval                              |
+| Browser CORS error             | API `WEB_ORIGIN` must match; Auth0 allowlists do not configure API CORS                   |
 
-## 10. Troubleshooting and completion
+## Cleanup
 
-| Symptom | Check |
-|---|---|
-| Server refuses to start | Both Auth0 variables exist; issuer is an HTTPS origin ending in `/` |
-| Callback mismatch | Actual scheme, domain, platform identifier, and path match the allowlist and SDK |
-| Login cannot use the connection | Connection enabled for this application; user belongs to that connection |
-| Token request denied | Correct API audience and user-delegated/client access policy for this grant |
-| BFF returns 401 | Access token rather than ID/Management API token; exact issuer/audience, RS256 signature, expiration |
-| BFF returns 403 | Client requested `read:me`; app grant allows it; RBAC user has it; `scope` contains it |
-| Role changes have no effect | Obtain a fresh access token; an already-issued JWT does not change |
-| BFF returns 503 | Configured issuer's JWKS is reachable; retry after the advertised 30 seconds |
-| Browser call fails despite a valid token | BFF CORS includes the actual SPA origin; Auth0 allowlists alone are insufficient |
-
-After setup, record only non-secret configuration and the manual outcome:
-
-- [ ] Dedicated API identifier, RS256, and permissions configured.
-- [ ] Backend issuer and audience match the selected tenant/domain and API.
-- [ ] Each implemented client has the correct type, redirects, connection, audience, and requested scopes.
-- [ ] App access grants and user permissions allow the intended scopes.
-- [ ] Two demo users can log in through implemented clients and retain distinct subjects.
-- [ ] Manual BFF requests produce the expected responses; distinguish M2M checks from user login.
-
-Dashboard guidance was checked against the linked official documentation on October 10, 2026. Complete only the steps needed for the current task; mobile and web login remain later implementation work.
+Sign out of Web and Mobile first. In the intended tenant, remove only applications,
+API, roles, and synthetic users created exclusively for this demo. Deleting users
+or applications breaks their login; deleting Auth0 users does not remove their
+DynamoDB records or cancel subscriptions. Preserve shared connections and tenants.
+See [delete applications](https://auth0.com/docs/get-started/applications/remove-applications)
+and [delete users](https://auth0.com/docs/manage-users/user-accounts/delete-users).
+Finish the [overall cleanup sequence](DEVELOPMENT.md#cleanup).

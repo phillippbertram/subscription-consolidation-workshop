@@ -1,19 +1,28 @@
 # Subscription worker
 
-`@premiumpass/subscription-worker` consumes billing jobs, verifies current provider state and ownership, and commits subscriptions, entitlements, completion markers and pending outbox events atomically. It has no HTTP framework or webhook handler. Queue contracts come from `@premiumpass/billing-contracts`.
+Consumes billing jobs, verifies current provider state and ownership, then commits
+subscriptions, all-provider access, completion markers, and pending outbox changes
+atomically. It has no HTTP framework. [Processing rules](../../docs/PAYMENTS.md#processing-and-retries).
 
-| File                              | Purpose                                                               |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `src/local.ts`                    | Local queue polling; delete messages only after successful processing |
-| `src/lambda.ts`                   | SQS Lambda handler with partial batch failure reporting               |
-| `src/config.ts`, `src/runtime.ts` | Queue/database clients, Stripe credentials and processor composition  |
-| `src/processing/`                 | Provider reads, domain mapping, idempotency and transactional writes  |
-| `scripts/seed-subscription.ts`    | Explicit local-only demo scenarios                                    |
+| Entry                                     | Responsibility                                               |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| `src/local.ts`, `src/lambda.ts`           | Local polling / SQS partial-batch handler                    |
+| `src/config.ts`, `src/runtime.ts`         | Validate configuration and compose clients/processors        |
+| `src/apple-credentials.ts`                | Local key / cached cloud Apple credentials                   |
+| `src/processing/`                         | Provider reads, normalization, idempotency and transactions  |
+| `scripts/subscription-cli.ts`, `src/cli/` | CLI lifecycle, commands, prompts and presentation            |
+| `src/local-admin/`                        | Fixed local database edits, seeding and reconciliation setup |
+| `src/reconciliation/stripe.ts`            | Reusable Stripe discovery through the existing processor     |
 
-Copy [`.env.example`](.env.example) to `.env` only on first setup. Use the BFF's local DynamoDB table/endpoint, Stripe test key and price, plus the webhook's queue URL. No webhook signing secret or Auth0 configuration is required. Existing shell variables take precedence. Local startup rejects cloud database/queue endpoints. Lambda reads the key/price fields from the existing Secrets Manager secret referenced by `STRIPE_SECRET_ARN`, caching them for five minutes.
+`pnpm dev:worker` runs individually; `pnpm dev` includes it. Follow the
+[configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
+No Auth0 configuration or webhook signing secret is needed. In-flight jobs may
+finish on shutdown; unacknowledged jobs become visible again after timeout.
 
-From the repository root, `pnpm dev:worker` starts the watcher. `pnpm dev` includes it in grouped startup. Shared package edits are watched; restart after `.env` changes. On shutdown, idle polling is aborted; an in-flight job may finish. Unacknowledged jobs remain retryable. ElasticMQ messages disappear when its container stops.
+Cloud credentials come from existing Secrets Manager references and cache for
+five minutes. Only this service reads the Apple private key. See
+[Apple AWS setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing).
 
-`pnpm --filter @premiumpass/subscription-worker run build` produces independent `dist/local.js` and `dist/lambda.js` bundles. `pnpm --filter @premiumpass/subscription-worker run start` runs the built poller. `pnpm demo:subscription` retains its local-only scenario behavior.
-
-Follow [Payments](../../docs/PAYMENTS.md) for setup and manual checks, [infrastructure](../../infra/README.md) for synthesis, and [P06](../../docs/TASKS.md#p06-stripe-purchase-and-reliable-processing) for verification status.
+The [subscription CLI](../../docs/DEVELOPMENT.md#local-subscription-cli) writes
+only DynamoDB Local. Reconciliation preserves other providers and reports partial
+failure. Scheduled/all-user processing remains tracked in [P09](../../docs/TASKS.md#p09-reconciliation-and-expiration).

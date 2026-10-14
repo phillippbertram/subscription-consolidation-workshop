@@ -28,7 +28,7 @@ Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISION
 - The domain must not depend on HTTP requests or framework contexts. Use an injectable clock for time-dependent access rules.
 - Duplicate and delayed events are normal. Store state, completion markers, and outbox entries atomically; reconciliation uses the same domain processing path.
 - An ending subscription must not remove another valid grant belonging to the same user. Check expiration times during API access as well.
-- A provider outage grants no additional access period. Existing access follows the limits defined in the project plan.
+- A provider outage grants no additional access period. Existing access follows the limits defined in docs/PAYMENTS.md.
 
 ## Configuration and secrets
 
@@ -39,7 +39,7 @@ Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISION
 
 ## Commands and verification
 
-The pnpm workspace contains the Hono BFF. `pnpm check` runs formatting checks, linting, typechecking, and the build. Installation, startup, and individual commands are documented in the README. Cloud infrastructure starts with P03.
+The pnpm workspace contains the Hono API. `pnpm check` runs formatting checks, linting, typechecking, and the build. Installation is documented in docs/GETTING_STARTED.md; everyday commands and cleanup are in docs/DEVELOPMENT.md. Cloud infrastructure starts with P03.
 
 - Inspect `package.json`, the lockfile, and runtime pins first. Use that toolchain; do not switch package managers when installing dependencies.
 - For backend changes, run typechecking, linting, and the build, and check relevant flows manually.
@@ -52,7 +52,7 @@ The pnpm workspace contains the Hono BFF. `pnpm check` runs formatting checks, l
 
 Maintain implementation task status exclusively in `docs/TASKS.md`. Mark a task complete only when its acceptance criteria are met. For partial progress, state exactly which verification is missing.
 
-Update the smallest relevant set of documents: commands in the README, decisions in `docs/DECISIONS.md`, and domain or architecture changes in the project plan. Repetition does not turn a recommendation into a confirmed decision.
+Update the smallest relevant set of documents: setup in `docs/GETTING_STARTED.md`, commands in `docs/DEVELOPMENT.md`, decisions in `docs/DECISIONS.md`, and technical behavior in the owning architecture, payment, or data-model guide. Keep goals and scope in the project plan. Repetition does not turn a recommendation into a confirmed decision.
 
 Report the outcome, relevant files, checks actually performed, and remaining limitations concisely. Distinguish local checks, synthesis, live AWS evidence, and mobile checks. Never claim successful verification or deployment without evidence.
 

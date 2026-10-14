@@ -1,7 +1,13 @@
 # Apple Store
 
-Shared sandbox-only configuration, App Store Server API client, and JWS verifier for the subscription worker and Apple notification ingress. Uses Apple's official Node library with fixed Apple trust anchors and online certificate-status checks. The API client has an eight-second per-request timeout and a bounded response size.
+Shared Sandbox configuration, App Store Server API client, and JWS verification
+using Apple's official library and public trust anchors. `src/index.ts` owns
+configuration/client factories; `src/roots.ts` records certificate sources from
+[Apple PKI](https://www.apple.com/certificateauthority/).
 
-`createAppleClient` reads an absolute `.p8` path only in the worker. `createAppleVerifier` needs only the app bundle ID and the public certificates. No production, Xcode-simulation, or mock fallback is supported. See [setup](../../docs/APPLE_PURCHASES.md).
+The worker loads local `.p8` credentials or a cloud secret and passes them into
+`createAppleClient`. `createAppleVerifier` needs only bundle configuration and
+public roots, with online certificate checks. Requests have an eight-second
+transport timeout and bounded response size. No production or mock fallback.
 
-Public trust anchors were obtained from [Apple PKI](https://www.apple.com/certificateauthority/); source URLs are retained beside their DER values in `src/roots.ts`.
+[Local and AWS setup](../../docs/APPLE_PURCHASES.md).
