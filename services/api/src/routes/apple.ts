@@ -28,6 +28,8 @@ export function registerAppleRoutes(
       const user = await users.getOrCreate(c.get('auth'));
       return c.json({
         productId: apple.productId,
+        // appAccountToken needs to be a UUID which uniquely identifies the user.
+        // our userId is already a UUID, so we can use it as is.
         appAccountToken: user.userId,
         environment: 'Sandbox',
       } satisfies AppleConfig);

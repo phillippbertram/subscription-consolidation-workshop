@@ -6,10 +6,17 @@ import {
   subscriptionOverviewSchema,
   scoreHistorySchema,
   apiErrorSchema,
+  appleConfigSchema,
+  appleSyncOperationSchema,
+  appleSyncStatusSchema,
   type UserProfile,
   type Entitlements,
   type SubscriptionOverview,
   type ScoreHistory,
+  type AppleConfig,
+  type AppleSyncRequest,
+  type AppleSyncOperation,
+  type AppleSyncStatus,
 } from '@premiumpass/api-contracts';
 import { startApiLog, type ApiRequestLog } from './api-logger';
 
@@ -130,7 +137,7 @@ export class ApiClient {
     );
   }
 
-  async request<T>(
+  private async request<T>(
     method: Method,
     path: string,
     schema: z.ZodType<T>,
@@ -155,11 +162,15 @@ export class ApiClient {
     return result.data;
   }
 
-  get<T>(path: string, schema: z.ZodType<T>, options: RequestOptions = {}) {
+  private get<T>(
+    path: string,
+    schema: z.ZodType<T>,
+    options: RequestOptions = {},
+  ) {
     return this.request('GET', path, schema, options);
   }
 
-  post<T>(
+  private post<T>(
     path: string,
     data: unknown,
     schema: z.ZodType<T>,
@@ -188,6 +199,33 @@ export class ApiClient {
 
   getProfile(options: RequestOptions = {}): Promise<UserProfile> {
     return this.get('/v1/me', userProfileSchema, options);
+  }
+
+  getAppleConfig(options: RequestOptions = {}): Promise<AppleConfig> {
+    return this.get('/v1/billing/apple/config', appleConfigSchema, options);
+  }
+
+  startAppleSync(
+    input: AppleSyncRequest,
+    options: RequestOptions = {},
+  ): Promise<AppleSyncOperation> {
+    return this.post(
+      '/v1/billing/apple/sync',
+      input,
+      appleSyncOperationSchema,
+      options,
+    );
+  }
+
+  getAppleSyncStatus(
+    operationId: string,
+    options: RequestOptions = {},
+  ): Promise<AppleSyncStatus> {
+    return this.get(
+      `/v1/billing/apple/sync/${encodeURIComponent(operationId)}`,
+      appleSyncStatusSchema,
+      options,
+    );
   }
 }
 

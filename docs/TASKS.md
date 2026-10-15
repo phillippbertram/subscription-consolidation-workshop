@@ -168,6 +168,11 @@ against the local backend. AWS verification is a separately authorized path.
   covered configuration, base64 input, invalid JWS, disabled/TEST paths, queue
   failure, provider ownership, duplicate processing, and secret-cache expiry.
   Provider/Secrets Manager substitutes are not real AWS or Apple evidence.
+- **Mobile API client, October 15:** added typed Apple config, sync-start, and
+  sync-status methods using shared contracts; migrated all mobile callers and
+  made generic request/get/post helpers private. Response validation and feature
+  polling remain in place. `pnpm format`, `pnpm check` (including the iOS bundle
+  export), and diff checks passed. No device or real Apple purchase rerun.
 - **Outstanding local/device:** configure own key/product/bundle and Native scopes,
   rebuild/install, then verify real purchase, restore, management, renewal,
   cancellation/expiry, override and signed tunnel delivery. Google mocks are absent.

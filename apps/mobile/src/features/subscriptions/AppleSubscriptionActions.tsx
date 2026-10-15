@@ -16,15 +16,11 @@ import {
   showManageSubscriptionsIOS,
   type Purchase,
 } from 'expo-iap';
-import {
-  appleConfigSchema,
-  appleSyncOperationSchema,
-  appleSyncStatusSchema,
-  type AppleConfig,
-  type AppleSyncRequest,
+import type {
+  AppleConfig,
+  SubscriptionOverview,
 } from '@premiumpass/api-contracts';
 import { ApiError, type ApiClient } from '../../api/api-client';
-import type { SubscriptionOverview } from '@premiumpass/api-contracts';
 import { useApiClient } from '../../api/use-api-client';
 import { Text } from '../../components/ui/text';
 import { Button, ButtonText } from '../../components/ui/button';
@@ -85,11 +81,7 @@ function AppleStoreCard({
           return;
         }
 
-        const settings = await api.get(
-          '/v1/billing/apple/config',
-          appleConfigSchema,
-          { signal },
-        );
+        const settings = await api.getAppleConfig({ signal });
         if (purchase.productId !== settings.productId) {
           return;
         }
@@ -190,11 +182,9 @@ function AppleStoreCard({
     const controller = new AbortController();
     void (async () => {
       try {
-        const settings = await api.get(
-          '/v1/billing/apple/config',
-          appleConfigSchema,
-          { signal: controller.signal },
-        );
+        const settings = await api.getAppleConfig({
+          signal: controller.signal,
+        });
         if (controller.signal.aborted) {
           return;
         }
@@ -271,7 +261,7 @@ function AppleStoreCard({
     try {
       // Recheck the backend before opening StoreKit, including purchases made on the web.
       const [current, latest] = await Promise.all([
-        api.get('/v1/billing/apple/config', appleConfigSchema, {
+        api.getAppleConfig({
           signal: lifetime.current.signal,
         }),
         api.getSubscriptionOverview({ signal: lifetime.current.signal }),
@@ -496,19 +486,12 @@ async function synchronizeApplePurchase(
   transactionId: string,
   signal: AbortSignal,
 ) {
-  const operation = await api.post(
-    '/v1/billing/apple/sync',
-    { transactionId } satisfies AppleSyncRequest,
-    appleSyncOperationSchema,
-    { signal },
-  );
+  const operation = await api.startAppleSync({ transactionId }, { signal });
   const deadline = Date.now() + 60_000;
   while (!signal.aborted && Date.now() < deadline) {
-    const result = await api.get(
-      `/v1/billing/apple/sync/${operation.operationId}`,
-      appleSyncStatusSchema,
-      { signal },
-    );
+    const result = await api.getAppleSyncStatus(operation.operationId, {
+      signal,
+    });
     if (result.status === 'completed') {
       return;
     }
