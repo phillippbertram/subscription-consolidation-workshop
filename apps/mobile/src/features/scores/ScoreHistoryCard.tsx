@@ -1,19 +1,12 @@
-import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { ApiError } from '../../api/api-client';
-import type { ScoreHistory } from '@premiumpass/api-contracts';
-import { useApiClient } from '../../api/use-api-client';
+import { useScoreHistory } from '../../api/use-account-queries';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { Button, ButtonText } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Spinner } from '../../components/ui/spinner';
 import { Text } from '../../components/ui/text';
 import { ScoreHistoryChart } from './ScoreHistoryChart';
-
-type HistoryState =
-  | { status: 'loading' }
-  | { status: 'success'; history: ScoreHistory }
-  | { status: 'error'; message: string };
 
 interface ScoreHistoryCardProps {
   hasAccess: boolean | null;
@@ -24,52 +17,13 @@ export function ScoreHistoryCard({
   hasAccess,
   loading,
 }: ScoreHistoryCardProps) {
-  const api = useApiClient();
-  const [state, setState] = useState<HistoryState>({ status: 'loading' });
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    setState({ status: 'loading' });
-    if (!hasAccess) {
-      return;
-    }
-
-    const controller = new AbortController();
-
-    async function loadHistory() {
-      try {
-        const history = await api.getScoreHistory({
-          signal: controller.signal,
-        });
-        if (!controller.signal.aborted) {
-          setState({
-            status: 'success',
-            history: {
-              ...history,
-              points: [...history.points].sort((a, b) =>
-                a.date.localeCompare(b.date),
-              ),
-            },
-          });
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          setState({
-            status: 'error',
-            message:
-              error instanceof ApiError
-                ? error.message
-                : 'Unable to load your score history. Please retry.',
-          });
-        }
-      }
-    }
-
-    void loadHistory();
-    return () => controller.abort();
-  }, [api, hasAccess, revision]);
-
-  const history =
-    hasAccess && state.status === 'success' ? state.history : null;
+  const query = useScoreHistory(hasAccess === true);
+  const history = hasAccess && query.isSuccess ? query.data : null;
+  const errorMessage = query.isPaused
+    ? 'You are offline. Reconnect to load your score history.'
+    : query.error instanceof ApiError
+      ? query.error.message
+      : 'Unable to load your score history. Please retry.';
   const latest = history?.points.at(-1);
   return (
     <Card className="gap-4 rounded-3xl border-0 bg-secondary p-6 shadow-none">
@@ -86,7 +40,7 @@ export function ScoreHistoryCard({
           </Text>
         )}
       </View>
-      {(loading || (hasAccess && state.status === 'loading')) && (
+      {(loading || (hasAccess && query.isPending && !query.isPaused)) && (
         <View className="min-h-32 items-center justify-center gap-3">
           <Spinner accessibilityLabel="Loading score history" />
           <Text className="text-sm text-muted-foreground">
@@ -110,13 +64,10 @@ export function ScoreHistoryCard({
           </Text>
         </View>
       )}
-      {hasAccess && state.status === 'error' && (
+      {hasAccess && (query.isError || (query.isPaused && !history)) && (
         <View className="gap-3">
-          <ErrorMessage message={state.message} />
-          <Button
-            variant="outline"
-            onPress={() => setRevision((value) => value + 1)}
-          >
+          <ErrorMessage message={errorMessage} />
+          <Button variant="outline" onPress={() => void query.refetch()}>
             <ButtonText>Retry score history</ButtonText>
           </Button>
         </View>

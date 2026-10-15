@@ -173,6 +173,17 @@ against the local backend. AWS verification is a separately authorized path.
   made generic request/get/post helpers private. Response validation and feature
   polling remain in place. `pnpm format`, `pnpm check` (including the iOS bundle
   export), and diff checks passed. No device or real Apple purchase rerun.
+- **Mobile query cache, October 15:** profile, subscriptions, and score history
+  now use TanStack Query with a separate in-memory cache per API/Auth0 identity.
+  Logout cancels/clears queries; foreground/reconnect and verified-purchase
+  callbacks refresh account data. StoreKit processing remains unchanged; the
+  expiry timer hides expired cached access even when refresh is offline/failing.
+  `pnpm format`, `pnpm check` (including iOS JavaScript export), and diff checks
+  passed. Local synthetic HTTP requests exercised typed responses, cache reuse/
+  isolation, history invalidation, 401/503 retry limits, cancellation/clearing,
+  and query recovery after canceled logout. No automated test suite was added.
+  Native rebuild for `expo-network`, device foreground/offline/expiry behavior,
+  real account switching, and Sandbox purchase verification remain outstanding.
 - **Outstanding local/device:** configure own key/product/bundle and Native scopes,
   rebuild/install, then verify real purchase, restore, management, renewal,
   cancellation/expiry, override and signed tunnel delivery. Google mocks are absent.

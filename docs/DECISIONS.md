@@ -30,7 +30,7 @@ status and evidence belong exclusively in [TASKS](TASKS.md).
 | Service structure    | API, Stripe webhook, Apple webhook, worker; local and Lambda adapters stay in their service                                        |
 | Shared code          | HTTP contracts separate from queue/domain schemas; AWS factories have no environment reads or global registry                      |
 | Web                  | React/Vite, Tailwind v4, locally owned shadcn UI; SDK local-storage token cache for demo reloads; no refresh tokens                |
-| Mobile               | Expo, SDK secure credentials, Axios/Zod API client; feature folders; Gluestack/NativeWind v4 with Tailwind v3                      |
+| Mobile               | Expo, SDK secure credentials, Axios/Zod API client, session-isolated TanStack Query cache; feature folders; Gluestack/NativeWind v4 with Tailwind v3 |
 | Dashboard            | Fixed dark theme, score-first layout, Account modal, collapsed developer tools; subscription details separated from current grants |
 | Apple                | Direct `expo-iap` and official Apple server library; Sandbox only; no RevenueCat; internal UUID as `appAccountToken`               |
 | Purchase completion  | Finish StoreKit transaction only after committed backend operation; immutable owner binding                                        |

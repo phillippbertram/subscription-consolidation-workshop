@@ -4,6 +4,7 @@ import { LoginScreen } from '../features/auth/LoginScreen';
 import { useAuthSession } from '../features/auth/use-auth-session';
 import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import type { MobileConfig } from './config';
+import { SessionQueryProvider } from '../api/SessionQueryProvider';
 
 export function AppContent({ config }: { config: MobileConfig }) {
   // One hook instance owns action state across the login/profile transition.
@@ -33,11 +34,15 @@ export function AppContent({ config }: { config: MobileConfig }) {
   }
 
   return (
-    <DashboardScreen
-      key={`${config.domain}:${session.user.sub}`}
+    <SessionQueryProvider
+      key={JSON.stringify([config.apiUrl, config.domain, session.user.sub])}
       isSigningOut={session.isBusy}
-      authError={session.error}
-      onSignOut={session.signOut}
-    />
+    >
+      <DashboardScreen
+        isSigningOut={session.isBusy}
+        authError={session.error}
+        onSignOut={session.signOut}
+      />
+    </SessionQueryProvider>
   );
 }

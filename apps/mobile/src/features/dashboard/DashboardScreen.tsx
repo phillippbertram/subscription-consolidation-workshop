@@ -24,7 +24,7 @@ export function DashboardScreen({
   authError,
   onSignOut,
 }: DashboardScreenProps) {
-  const { state, reload } = useDashboard(!isSigningOut);
+  const { state, reload, isRefreshing } = useDashboard(!isSigningOut);
   const [accountOpen, setAccountOpen] = useState(false);
   const overview = state.status === 'success' ? state.overview : null;
   return (
@@ -61,11 +61,11 @@ export function DashboardScreen({
               variant="outline"
               size="icon"
               className="h-11 w-11 rounded-full bg-card"
-              isDisabled={isSigningOut || state.status === 'loading'}
+              isDisabled={isSigningOut || isRefreshing}
               accessibilityLabel="Refresh dashboard"
               onPress={reload}
             >
-              {state.status === 'loading' ? (
+              {isRefreshing ? (
                 <Spinner accessibilityLabel="Refreshing dashboard" />
               ) : (
                 <DashboardIcon name="refresh" />

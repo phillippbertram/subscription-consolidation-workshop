@@ -93,22 +93,43 @@ user ID with Web. Simulator can reach the Mac's loopback address.
 | ---------------------------------------------------- | ------------------------------------------------------------------ |
 | `src/App.tsx`, `src/app/`                            | Providers, configuration, session-dependent screen selection       |
 | `src/features/auth/`                                 | Login/logout and optional session inspector                        |
-| `src/features/dashboard/`                            | Score-first layout, refresh, foreground/expiry updates             |
+| `src/features/dashboard/`                            | Score-first layout, query refresh, expiry updates                  |
 | `src/features/profile/`, `scores/`, `subscriptions/` | Account modal, protected history, subscription/purchase behavior   |
-| `src/api/`                                           | Axios token bridge, cancellation, timeout, shared Zod validation   |
+| `src/api/`                                           | Typed Axios/Zod client, account queries, session cache, native focus/network events |
 | `src/components/ui/`                                 | Locally owned Gluestack/NativeWind components and fixed dark theme |
 
 API schemas live in [HTTP contracts](../../packages/api-contracts/README.md).
-Screens call `useApiClient()` without passing tokens. SDK credentials remain the
-source of truth; decoded session claims are only a developer display.
-The Apple listener stays mounted during dashboard refreshes and modal changes.
+Profile, subscription overview, and score history use TanStack Query hooks over
+the typed API client. Each API/Auth0 identity gets its own in-memory QueryClient;
+logout cancels requests and clears it. Nothing is persisted, and SDK credentials
+remain the token source. Decoded session claims are only a developer display.
+
+Profile/history stay fresh for 30 seconds; subscription overview is always stale
+and refreshes on foreground/reconnect. `expo-network` supplies connection events
+and requires a rebuilt native development app when first added. Transient read
+failures retry at most twice; authentication, permissions, and invalid responses
+do not retry. Manual refresh and verified Apple completion invalidate all three
+account queries. Inactive queries refetch when enabled again.
+
+The backend-relative Premium expiry timer uses the snapshot's original fetch
+time, so cache reads cannot extend access. At expiry, old access/history are
+hidden until the backend confirms the current state, including while offline.
+StoreKit synchronization/polling stays in the purchase feature; its listener
+stays mounted during dashboard refreshes and modal changes.
 
 ## Manual checks
 
 - Sign in as A, refresh/restart, and confirm stable identity; sign in as B and
   confirm separate records. Sign-out hides account data; failures stay visible.
+- Start a refresh and sign out before it completes; sign in as B and confirm no
+  cached data from A appears. Cancel logout and confirm A's data reloads.
+- Background/foreground the app and disconnect/reconnect networking; verify
+  subscription refresh, bounded retries, and an explicit offline message on an
+  uncached load. Dashboard refresh must also refresh an already visible history.
 - Free shows no fabricated score history. Premium loads protected scores.
   Expiry/refresh hides stale data; network failures show retry instead of Free.
+- Let Premium expire while offline; cached Premium/history must disappear. After
+  reconnecting or a verified Sandbox purchase, confirm access/history reload.
 - Current subscriptions show active grants; Subscription details includes previous
   records. Open/close Account and details, including on a narrow device.
 - Developer tools start collapsed. Session details clear on background/sign-out;
