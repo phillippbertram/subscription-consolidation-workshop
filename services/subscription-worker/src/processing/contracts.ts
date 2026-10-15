@@ -1,6 +1,14 @@
 import type { Subscription } from '@premiumpass/domain';
 import type { StripeJob } from '@premiumpass/billing-contracts';
 
+/** Internal manual refresh, distinct from a signed Stripe webhook event. */
+export type StripeProcessingJob =
+  | StripeJob
+  | (Omit<StripeJob, 'eventType'> & {
+      eventType: 'reconciliation';
+      expectedUserId: string;
+    });
+
 /**
  * Provider object references resolved from a queued event. They identify what
  * to refresh; stored mappings and a fresh provider read must still prove ownership.
@@ -33,7 +41,7 @@ export interface SubscriptionSource {
    * Resolve customer/subscription references; null means a non-subscription
    * event that can be ignored. Invalid references and provider failures throw.
    */
-  locate(job: StripeJob): Promise<SubscriptionTarget | null>;
+  locate(job: StripeProcessingJob): Promise<SubscriptionTarget | null>;
   /**
    * Fetch fresh state after loading the local aggregate revision, checking
    * ownership against userId and payment periods against the supplied clock.
@@ -79,7 +87,7 @@ export interface ProcessingStore {
     aggregate: Aggregate,
     subscription: Subscription,
     customerId: string,
-    job: StripeJob,
+    job: StripeProcessingJob,
     now: Date,
     changed: boolean,
   ): Promise<void>;

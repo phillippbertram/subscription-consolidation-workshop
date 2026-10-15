@@ -1,43 +1,18 @@
 import axios, { type AxiosInstance, type Method } from 'axios';
-import { z } from 'zod';
+import type { z } from 'zod';
+import {
+  userProfileSchema,
+  entitlementsSchema,
+  subscriptionOverviewSchema,
+  scoreHistorySchema,
+  apiErrorSchema,
+  type UserProfile,
+  type Entitlements,
+  type SubscriptionOverview,
+  type ScoreHistory,
+} from '@premiumpass/api-contracts';
 import { startApiLog, type ApiRequestLog } from './api-logger';
 
-const userProfileSchema = z.object({
-  userId: z.uuid(),
-  createdAt: z.iso.datetime(),
-});
-
-const entitlementsSchema = z.object({
-  tier: z.enum(['free', 'premium']),
-  features: z.array(z.literal('score_history')),
-  effectiveUntil: z.iso.datetime().nullable(),
-  evaluatedAt: z.iso.datetime(),
-  grants: z.array(
-    z.object({
-      provider: z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']),
-      providerSubscriptionId: z.string(),
-      revision: z.number().int().positive(),
-      validUntil: z.iso.datetime(),
-    }),
-  ),
-  warnings: z.array(
-    z.object({
-      provider: z.string(),
-      providerSubscriptionId: z.string(),
-      reason: z.string(),
-    }),
-  ),
-});
-const scoreHistorySchema = z.object({
-  synthetic: z.literal(true),
-  points: z.array(
-    z.object({ date: z.iso.date(), score: z.number().min(0).max(100) }),
-  ),
-});
-export type Entitlements = z.infer<typeof entitlementsSchema>;
-export type ScoreHistory = z.infer<typeof scoreHistorySchema>;
-
-export type UserProfile = z.infer<typeof userProfileSchema>;
 export type AccessTokenProvider = () => Promise<string>;
 
 export interface RequestOptions {
@@ -100,11 +75,17 @@ export class ApiClient {
             'invalid_request',
           );
         }
-        if (config.signal?.aborted) throw new axios.CanceledError();
+
+        if (config.signal?.aborted) {
+          throw new axios.CanceledError();
+        }
+
         let token: string;
         try {
           token = await getAccessToken();
-          if (!token.trim()) throw new Error('No access token.');
+          if (!token.trim()) {
+            throw new Error('No access token.');
+          }
         } catch {
           // Do not expose SDK errors, which may contain authentication details.
           throw new ApiError(
@@ -112,7 +93,11 @@ export class ApiClient {
             'authentication_required',
           );
         }
-        if (config.signal?.aborted) throw new axios.CanceledError();
+
+        if (config.signal?.aborted) {
+          throw new axios.CanceledError();
+        }
+
         config.headers.set('Authorization', `Bearer ${token}`);
         return config;
       } catch (error) {
@@ -138,6 +123,7 @@ export class ApiClient {
         if (axios.isAxiosError(error) && error.config) {
           this.logs.get(error.config)?.error(failure, error.response?.data);
         }
+
         // Axios errors contain request headers. Expose only our safe error shape.
         throw failure;
       },
@@ -165,6 +151,7 @@ export class ApiClient {
       this.logs.get(response.config)?.error(failure);
       throw failure;
     }
+
     return result.data;
   }
 
@@ -185,6 +172,16 @@ export class ApiClient {
     return this.get('/v1/me/entitlements', entitlementsSchema, options);
   }
 
+  getSubscriptionOverview(
+    options: RequestOptions = {},
+  ): Promise<SubscriptionOverview> {
+    return this.get(
+      '/v1/me/subscriptions',
+      subscriptionOverviewSchema,
+      options,
+    );
+  }
+
   getScoreHistory(options: RequestOptions = {}): Promise<ScoreHistory> {
     return this.get('/v1/premium/score-history', scoreHistorySchema, options);
   }
@@ -195,9 +192,14 @@ export class ApiClient {
 }
 
 function normalizeError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  if (axios.isCancel(error))
+  if (error instanceof ApiError) {
+    return error;
+  }
+
+  if (axios.isCancel(error)) {
     return new ApiError('The request was cancelled.', 'cancelled');
+  }
+
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
@@ -206,6 +208,7 @@ function normalizeError(error: unknown): ApiError {
         'timeout',
       );
     }
+
     if (status === 401) {
       return new ApiError(
         'The backend rejected this session. Sign out and sign in again.',
@@ -213,10 +216,9 @@ function normalizeError(error: unknown): ApiError {
         status,
       );
     }
+
     if (status === 403) {
-      const body = z
-        .object({ error: z.object({ code: z.string() }) })
-        .safeParse(error.response?.data);
+      const body = apiErrorSchema.safeParse(error.response?.data);
       if (body.success && body.data.error.code === 'premium_required') {
         return new ApiError(
           'Premium access is required. Reload your status after changing the local scenario.',
@@ -224,12 +226,14 @@ function normalizeError(error: unknown): ApiError {
           status,
         );
       }
+
       return new ApiError(
         'Access was denied. Check the required Auth0 API permissions.',
         'forbidden',
         status,
       );
     }
+
     if (status) {
       return new ApiError(
         'The backend could not complete the request. Check the backend and DynamoDB, then retry.',
@@ -238,6 +242,7 @@ function normalizeError(error: unknown): ApiError {
       );
     }
   }
+
   return new ApiError(
     'Cannot reach the backend. Check pnpm dev and the API URL, then retry.',
     'network_error',

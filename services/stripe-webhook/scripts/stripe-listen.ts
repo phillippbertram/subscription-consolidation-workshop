@@ -21,4 +21,5 @@ if (result.error) {
     'Could not start Stripe CLI. Install it and run stripe login first.',
   );
 }
+
 process.exitCode = result.status ?? (result.signal === 'SIGINT' ? 130 : 1);

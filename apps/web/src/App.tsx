@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { DemoLayout } from './components/demo-layout';
-import { useCheckout } from './hooks/use-checkout';
-import { useAccount } from './hooks/use-account';
+import { useCheckout } from './features/subscriptions/use-checkout';
+import { useAccount } from './features/account/use-account';
 
 export function App() {
   const auth = useAuth0();
@@ -32,7 +32,7 @@ function AccountApp() {
       accountState={account.state}
       onRefresh={account.reload}
       pending={checkout.pending}
-      expired={checkout.expired}
+      canStartNewAttempt={checkout.canStartNewAttempt}
       message={
         auth.error
           ? 'Unable to restore your Auth0 session. Check the SPA settings and sign in again.'

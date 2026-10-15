@@ -9,16 +9,18 @@ export const eventTypes = [
   'invoice.payment_failed',
 ] as const;
 
-export const jobSchema = z
-  .object({
+const baseJobSchema = z.strictObject({
+  receivedAt: z.iso.datetime(),
+  correlationId: z.uuid(),
+});
+
+export const jobSchema = baseJobSchema
+  .extend({
     provider: z.literal('stripe'),
     eventId: z.string().regex(/^evt_[A-Za-z0-9]+$/),
     eventType: z.enum(eventTypes),
     objectId: z.string().regex(/^(cs_test_|sub_|in_)[A-Za-z0-9]+$/),
-    receivedAt: z.iso.datetime(),
-    correlationId: z.uuid(),
   })
-  .strict()
   .superRefine((job, context) => {
     const prefix = job.eventType.startsWith('checkout.')
       ? 'cs_test_'
@@ -34,18 +36,17 @@ export const jobSchema = z
   });
 export type StripeJob = z.infer<typeof jobSchema>;
 
-export const appleJobSchema = z
-  .object({
-    provider: z.literal('apple'),
-    environment: z.literal('Sandbox'),
-    eventId: z.uuid(),
-    eventType: z.enum(['client.sync', 'notification']),
-    transactionId: z.string().regex(/^[0-9]{1,64}$/),
-    userId: z.uuid(),
-    receivedAt: z.iso.datetime(),
-    correlationId: z.uuid(),
-  })
-  .strict();
+export const appleJobSchema = baseJobSchema.extend({
+  provider: z.literal('apple'),
+  environment: z.literal('Sandbox'),
+  eventId: z.uuid(),
+  eventType: z.enum(['client.sync', 'notification']),
+  transactionId: z.string().regex(/^[0-9]{1,64}$/),
+  userId: z.uuid(),
+});
 export type AppleJob = z.infer<typeof appleJobSchema>;
-export const subscriptionJobSchema = z.union([jobSchema, appleJobSchema]);
+export const subscriptionJobSchema = z.discriminatedUnion('provider', [
+  jobSchema,
+  appleJobSchema,
+]);
 export type SubscriptionJob = z.infer<typeof subscriptionJobSchema>;

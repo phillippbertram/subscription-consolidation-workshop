@@ -19,7 +19,8 @@
     "stripe": "23.0.0",
     "zod": "4.6.5",
     "@premiumpass/logging": "workspace:*",
-    "@premiumpass/billing-contracts": "workspace:*"
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@premiumpass/aws-clients": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

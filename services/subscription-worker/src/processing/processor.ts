@@ -1,10 +1,10 @@
-import type { StripeJob } from '@premiumpass/billing-contracts';
 import { setTimeout } from 'node:timers/promises';
 import {
   ProcessingError,
   RevisionConflict,
   type SubscriptionSource,
   type ProcessingStore,
+  type StripeProcessingJob,
 } from './contracts.js';
 import { normalizeSubscription, sameDomainState } from './normalize.js';
 
@@ -24,18 +24,27 @@ export class SubscriptionProcessor {
    * Revision conflicts repeat local/provider reads within a bounded retry budget;
    * unresolved failures throw so the transport can retry instead of acknowledging.
    */
-  async process(job: StripeJob) {
+  async process(job: StripeProcessingJob) {
     for (let attempt = 0; attempt < 3; attempt++) {
       // Fast path for repeated delivery. The transaction also guards the marker:
       // two workers can both observe it as absent before either commits.
-      if (await this.store.isProcessed(job.eventId))
+      if (await this.store.isProcessed(job.eventId)) {
         return { outcome: 'duplicate' };
+      }
+
       // locate resolves references only. Its earlier provider read must not be
       // reused as state after the local revision has been loaded.
       const target = await this.source.locate(job);
       // A one-off invoice has no subscription and cannot grant access.
-      if (!target) return { outcome: 'ignored_non_subscription' };
+      if (!target) {
+        return { outcome: 'ignored_non_subscription' };
+      }
+
       const userId = await this.store.owner(target.customerId);
+      if (job.eventType === 'reconciliation' && userId !== job.expectedUserId) {
+        throw new ProcessingError('reconciliation_owner_mismatch');
+      }
+
       const aggregate = await this.store.load(userId);
       // Never reuse a pre-conflict snapshot: both local and provider reads repeat.
       const now = this.now();
@@ -74,14 +83,20 @@ export class SubscriptionProcessor {
       } catch (error) {
         // Another worker may have completed the event, or the commit response
         // may have been lost. Durable completion evidence resolves both cases.
-        if (await this.store.isProcessed(job.eventId))
+        if (await this.store.isProcessed(job.eventId)) {
           return { outcome: 'duplicate' };
-        if (!(error instanceof RevisionConflict)) throw error;
+        }
+
+        if (!(error instanceof RevisionConflict)) {
+          throw error;
+        }
+
         // Jitter avoids repeated lockstep collisions. After this bounded loop,
         // SQS owns further retries and eventual DLQ routing.
         await setTimeout(25 + Math.random() * 75);
       }
     }
+
     throw new ProcessingError('concurrency_retry_exhausted');
   }
 }

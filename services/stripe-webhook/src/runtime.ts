@@ -6,12 +6,14 @@ import { createWebhookApp } from './app.js';
 // Reuse AWS connections in warm Lambda invocations. Secrets are refreshed
 // separately so a cached client does not freeze credential rotation.
 const configurations = new Map<boolean, ReturnType<typeof readWebhookConfig>>();
+
 function configFor(local: boolean) {
   let config = configurations.get(local);
   if (!config) {
     config = readWebhookConfig(process.env, local);
     configurations.set(local, config);
   }
+
   return config;
 }
 

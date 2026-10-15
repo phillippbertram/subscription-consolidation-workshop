@@ -1,4 +1,4 @@
-import type { AppleJob, StripeJob } from '@premiumpass/billing-contracts';
+import type { AppleJob } from '@premiumpass/billing-contracts';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -13,6 +13,7 @@ import {
   ProcessingError,
   RevisionConflict,
   type Aggregate,
+  type StripeProcessingJob,
 } from './contracts.js';
 
 type Write = NonNullable<TransactWriteCommandInput['TransactItems']>[number];
@@ -57,6 +58,7 @@ export class DynamoDbProcessingStore {
     ) {
       throw new ProcessingError('customer_owner_missing');
     }
+
     const forward = await this.get(`USER#${record.userId}`, 'CUSTOMER#stripe');
     if (
       forward?.customerId !== customerId ||
@@ -64,6 +66,7 @@ export class DynamoDbProcessingStore {
     ) {
       throw new ProcessingError('customer_owner_mismatch');
     }
+
     return record.userId as string;
   }
 
@@ -79,8 +82,10 @@ export class DynamoDbProcessingStore {
     const revision = item
       ? z.number().int().positive().parse(item.revision)
       : 0;
-    if (item && item.userId !== userId)
+    if (item && item.userId !== userId) {
       throw new ProcessingError('aggregate_owner_mismatch');
+    }
+
     const subscriptions = await new DynamoDbSubscriptionStore(
       this.client,
       this.tableName,
@@ -98,7 +103,7 @@ export class DynamoDbProcessingStore {
     aggregate: Aggregate,
     subscription: Subscription,
     customerId: string,
-    job: StripeJob,
+    job: StripeProcessingJob,
     now: Date,
     changed: boolean,
   ) {
@@ -207,8 +212,10 @@ export class DynamoDbProcessingStore {
     if (
       item &&
       (item.userId !== job.userId || item.transactionId !== job.transactionId)
-    )
+    ) {
       throw new ProcessingError('apple_event_owner_mismatch');
+    }
+
     return Boolean(item);
   }
 
@@ -223,8 +230,10 @@ export class DynamoDbProcessingStore {
       aggregate.userId !== job.userId ||
       subscription.userId !== job.userId ||
       subscription.provider !== 'apple'
-    )
+    ) {
       throw new ProcessingError('apple_owner_mismatch');
+    }
+
     const writes: Write[] = [
       {
         Put: {
@@ -376,6 +385,7 @@ export class DynamoDbProcessingStore {
       ) {
         throw new RevisionConflict();
       }
+
       // Do not include AWS cancellation item images or payloads in logs.
       throw new ProcessingError('transaction_failed');
     }

@@ -6,7 +6,7 @@
     "dev": "tsx watch --clear-screen=false --include \"../../packages/*/src/**/*.ts\" --env-file-if-exists=.env src/local.ts",
     "start": "node --env-file-if-exists=.env dist/local.js",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "dependencies": {
     "@aws-sdk/client-sqs": "3.1149.0",
@@ -16,7 +16,9 @@
     "zod": "4.6.5",
     "@premiumpass/logging": "workspace:*",
     "@premiumpass/billing-contracts": "workspace:*",
-    "@premiumpass/apple-store": "workspace:*"
+    "@premiumpass/apple-store": "workspace:*",
+    "@premiumpass/aws-clients": "workspace:*",
+    "@hono/aws-lambda": "1.0.1"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

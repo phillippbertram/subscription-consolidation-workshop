@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@premiumpass/domain": "workspace:*",
-    "@aws-sdk/client-dynamodb": "3.1149.0",
-    "@aws-sdk/lib-dynamodb": "3.1149.0"
+    "@aws-sdk/lib-dynamodb": "3.1149.0",
+    "@premiumpass/aws-clients": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

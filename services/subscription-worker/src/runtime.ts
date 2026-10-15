@@ -1,12 +1,16 @@
+import { readCloudAppleCredentials } from './apple-credentials.js';
 import Stripe from 'stripe';
 import type { Logger } from 'pino';
-import { createDocumentClient } from '@premiumpass/persistence';
+import { createDocumentClient } from '@premiumpass/aws-clients';
 import { DynamoDbProcessingStore } from './processing/dynamodb-processing.js';
 import {
   subscriptionJobSchema,
   type SubscriptionJob,
 } from '@premiumpass/billing-contracts';
-import { readAppleSettings } from '@premiumpass/apple-store';
+import {
+  readAppleSettings,
+  readLocalAppleCredentials,
+} from '@premiumpass/apple-store';
 import { AppleSubscriptionProcessor } from './processing/apple-processor.js';
 import { createAppleSource } from './processing/apple-source.js';
 import { ProcessingError } from './processing/contracts.js';
@@ -18,12 +22,14 @@ import { readWorkerConfig, readWorkerCredentials } from './config.js';
 // separately so a cached client does not freeze credential rotation.
 const configurations = new Map<boolean, ReturnType<typeof readWorkerConfig>>();
 const stores = new Map<boolean, DynamoDbProcessingStore>();
+
 function configFor(local: boolean) {
   let config = configurations.get(local);
   if (!config) {
     config = readWorkerConfig(process.env, local);
     configurations.set(local, config);
   }
+
   return config;
 }
 
@@ -42,24 +48,40 @@ export async function workerRuntime(local: boolean) {
     );
     stores.set(local, store);
   }
+
   const stripeProcessor = new SubscriptionProcessor(
     store,
     new StripeSubscriptionSource(stripe, credentials.priceId),
   );
-  // Apple keys/files are local-only until cloud secret/IAM wiring is explicitly added.
-  const settings = local ? readAppleSettings(process.env) : undefined;
-  const appleProcessor = settings
-    ? new AppleSubscriptionProcessor(
-        store,
-        createAppleSource(settings, process.env),
-      )
-    : undefined;
+  const settings = readAppleSettings(process.env);
+  const localAppleProcessor =
+    settings && local
+      ? new AppleSubscriptionProcessor(
+          store,
+          createAppleSource(settings, readLocalAppleCredentials(process.env)),
+        )
+      : undefined;
   return {
     ...config,
     processor: {
-      process(job: SubscriptionJob) {
-        if (job.provider === 'stripe') return stripeProcessor.process(job);
-        if (!appleProcessor) throw new ProcessingError('apple_not_configured');
+      async process(job: SubscriptionJob) {
+        if (job.provider === 'stripe') {
+          return stripeProcessor.process(job);
+        }
+
+        if (!settings) {
+          throw new ProcessingError('apple_not_configured');
+        }
+
+        const appleProcessor =
+          localAppleProcessor ??
+          new AppleSubscriptionProcessor(
+            store,
+            createAppleSource(
+              settings,
+              await readCloudAppleCredentials(process.env),
+            ),
+          );
         return appleProcessor.process(job);
       },
     },
@@ -73,7 +95,10 @@ export async function processMessage(
 ) {
   // Avoid Zod error output: it can contain arbitrary queue payload content.
   const parsed = subscriptionJobSchema.safeParse(JSON.parse(body) as unknown);
-  if (!parsed.success) throw new ProcessingError('invalid_queue_job');
+  if (!parsed.success) {
+    throw new ProcessingError('invalid_queue_job');
+  }
+
   const job = parsed.data;
   const fields = {
     correlationId: job.correlationId,

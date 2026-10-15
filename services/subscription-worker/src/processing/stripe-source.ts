@@ -1,4 +1,3 @@
-import type { StripeJob } from '@premiumpass/billing-contracts';
 import Stripe from 'stripe';
 import { GRACE_MS } from '@premiumpass/domain';
 import {
@@ -6,6 +5,7 @@ import {
   type ProviderSnapshot,
   type SubscriptionSource,
   type SubscriptionTarget,
+  type StripeProcessingJob,
 } from './contracts.js';
 
 function id(value: string | { id: string } | null | undefined) {
@@ -20,7 +20,7 @@ export class StripeSubscriptionSource implements SubscriptionSource {
     private readonly priceId: string,
   ) {}
 
-  async locate(job: StripeJob): Promise<SubscriptionTarget | null> {
+  async locate(job: StripeProcessingJob): Promise<SubscriptionTarget | null> {
     let customerId: string | undefined;
     let subscriptionId: string | undefined;
     if (job.eventType.startsWith('checkout.')) {
@@ -34,25 +34,36 @@ export class StripeSubscriptionSource implements SubscriptionSource {
       ) {
         throw new ProcessingError('invalid_checkout_reference');
       }
+
       customerId = id(session.customer);
       subscriptionId = id(session.subscription);
     } else if (job.eventType.startsWith('invoice.')) {
       const invoice = await this.stripe.invoices.retrieve(job.objectId);
-      if (invoice.livemode) throw new ProcessingError('live_mode_rejected');
+      if (invoice.livemode) {
+        throw new ProcessingError('live_mode_rejected');
+      }
+
       customerId = id(invoice.customer);
       subscriptionId = id(invoice.parent?.subscription_details?.subscription);
-      if (!subscriptionId) return null;
+      if (!subscriptionId) {
+        return null;
+      }
     } else {
       const subscription = await this.stripe.subscriptions.retrieve(
         job.objectId,
       );
-      if (subscription.livemode)
+      if (subscription.livemode) {
         throw new ProcessingError('live_mode_rejected');
+      }
+
       customerId = id(subscription.customer);
       subscriptionId = subscription.id;
     }
-    if (!customerId || !subscriptionId)
+
+    if (!customerId || !subscriptionId) {
       throw new ProcessingError('subscription_reference_missing');
+    }
+
     return { customerId, subscriptionId };
   }
 
@@ -77,6 +88,7 @@ export class StripeSubscriptionSource implements SubscriptionSource {
     ) {
       throw new ProcessingError('provider_owner_mismatch');
     }
+
     const item = subscription.items.data[0];
     // Metadata alone cannot turn an arbitrary price into Premium. Unknown
     // billing configurations remain visible but do not grant access.
@@ -115,16 +127,21 @@ export class StripeSubscriptionSource implements SubscriptionSource {
         ) {
           throw new ProcessingError('invoice_reference_mismatch');
         }
-        if (invoice.lines.has_more)
+
+        if (invoice.lines.has_more) {
           throw new ProcessingError('invoice_line_limit_exceeded');
+        }
+
         // A zero-value trial invoice is not a prior paid grant for renewal grace.
         // Manual/out-of-band settlement is outside this card-only demo.
         if (
           invoice.amount_paid <= 0 ||
           (invoice.amount_paid_off_stripe ?? 0) > 0 ||
           invoice.collection_method !== 'charge_automatically'
-        )
+        ) {
           continue;
+        }
+
         for (const line of invoice.lines.data) {
           // Paid invoices can contain adjustments or unrelated lines. Only the
           // matching recurring item proves the service period we can grant.
@@ -137,22 +154,33 @@ export class StripeSubscriptionSource implements SubscriptionSource {
             id(line.pricing?.price_details?.price) !== this.priceId ||
             line.quantity !== 1 ||
             line.amount <= 0
-          )
+          ) {
             continue;
-          // Reject future service periods and lines extending beyond the
-          // current subscription item boundary before deriving paid access.
+          }
+
+          // A custom cancellation shortens the item period without rewriting
+          // its paid invoice. Keep the covered portion, capped at the current
+          // provider boundary; never grant a future or empty service period.
           const { start, end } = line.period;
+          const coveredEnd = Math.min(
+            end,
+            item.current_period_end,
+            subscription.cancel_at ?? Infinity,
+          );
           if (
             end <= start ||
             start > now.getTime() / 1000 ||
-            end > item.current_period_end
-          )
+            coveredEnd <= start
+          ) {
             continue;
+          }
+
           // Use an absolute verified boundary. Adding a month per event would
           // incorrectly multiply access when Stripe delivers duplicates.
-          paidEnd = Math.max(paidEnd ?? 0, end);
+          paidEnd = Math.max(paidEnd ?? 0, coveredEnd);
         }
       }
+
       if (
         invoices.has_more &&
         (!paidEnd || paidEnd * 1000 + GRACE_MS <= now.getTime())
@@ -161,11 +189,20 @@ export class StripeSubscriptionSource implements SubscriptionSource {
         throw new ProcessingError('invoice_history_limit_exceeded');
       }
     }
+
     return {
       providerSubscriptionId: subscription.id,
       productId: mapped ? 'premium_monthly' : 'unmapped_product',
       status: subscription.status,
-      cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      // Stripe leaves its boolean false for a custom cancel_at even when that
+      // date is now the item period end. Normalize both as an ending period.
+      cancelAtPeriodEnd:
+        subscription.cancel_at_period_end ||
+        Boolean(
+          subscription.cancel_at &&
+          item &&
+          subscription.cancel_at <= item.current_period_end,
+        ),
       paidUntil: paidEnd ? new Date(paidEnd * 1000).toISOString() : null,
       trialUntil:
         mapped && subscription.trial_end && item

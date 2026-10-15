@@ -8,15 +8,15 @@
     "pnpm": "12.10.1"
   },
   "scripts": {
-    "dev": "pnpm local:up && concurrently --kill-others --kill-timeout 15000 --names api,webhook,apple,worker,web \"pnpm dev:api\" \"pnpm dev:webhook\" \"pnpm dev:apple-webhook\" \"pnpm dev:worker\" \"pnpm web:dev\"",
-    "dev:api": "pnpm --filter @premiumpass/bff run dev",
+    "dev": "pnpm local:up && concurrently --kill-others --kill-timeout 15000 --names api,stripe-webhook,apple-webhook,subscription-worker,web-app \"pnpm dev:api\" \"pnpm dev:webhook\" \"pnpm dev:apple-webhook\" \"pnpm dev:worker\" \"pnpm web:dev\"",
+    "dev:api": "pnpm --filter @premiumpass/api run dev",
     "dev:api:lan": "HOST=0.0.0.0 pnpm dev:api",
-    "start": "pnpm --filter @premiumpass/bff run start",
+    "start": "pnpm --filter @premiumpass/api run start",
     "web:dev": "pnpm --filter @premiumpass/web run dev",
     "mobile:dev": "pnpm --filter @premiumpass/mobile run dev",
     "mobile:dev:lan": "pnpm --filter @premiumpass/mobile run dev:lan",
     "mobile:ios": "pnpm --filter @premiumpass/mobile run ios",
-    "local:up": "docker compose up -d && pnpm --filter @premiumpass/bff run db:init",
+    "local:up": "docker compose up -d && pnpm --filter @premiumpass/api run db:init",
     "local:down": "docker compose down",
     "local:logs": "docker compose logs --tail=100",
     "demo:subscription": "pnpm --filter @premiumpass/subscription-worker run demo:subscription",
@@ -26,19 +26,22 @@
     "bootstrap:dev": "pnpm --filter @premiumpass/infra run bootstrap",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",
+    "format": "pnpm lint:fix && prettier --write \"**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,mjs,json,yaml,yml}\"",
     "build": "pnpm -r build",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm build",
     "dev:webhook": "pnpm --filter @premiumpass/stripe-webhook run dev",
     "dev:worker": "pnpm --filter @premiumpass/subscription-worker run dev",
-    "dev:apple-webhook": "pnpm --filter @premiumpass/apple-webhook run dev"
+    "dev:apple-webhook": "pnpm --filter @premiumpass/apple-webhook run dev",
+    "lint:fix": "eslint . --fix --max-warnings 0",
+    "subscription": "pnpm --filter @premiumpass/subscription-worker run subscription"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@stylistic/eslint-plugin": "5.10.0",
+    "concurrently": "10.0.6",
     "eslint": "10.12.0",
     "prettier": "3.9.10",
-    "typescript-eslint": "8.71.1",
-    "concurrently": "10.0.6"
+    "typescript-eslint": "8.71.1"
   }
 }

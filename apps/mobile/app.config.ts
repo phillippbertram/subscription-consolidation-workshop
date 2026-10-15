@@ -8,7 +8,7 @@ const config: ExpoConfig = {
   version: '0.1.0',
   scheme: 'premiumpass',
   orientation: 'portrait',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'dark',
   ios: {
     bundleIdentifier:
       typeof iosBundleIdentifier === 'string'
@@ -16,7 +16,7 @@ const config: ExpoConfig = {
         : 'com.example.premiumpass',
     supportsTablet: false,
     infoPlist: {
-      // The local learning app connects to the BFF on this Mac.
+      // The local learning app connects to the API on this Mac.
       NSLocalNetworkUsageDescription:
         'PremiumPass connects to the development server and local API on your Mac.',
       NSAppTransportSecurity: {

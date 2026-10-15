@@ -22,5 +22,6 @@ export function authErrorMessage(
         return 'Another authentication window is already open. Complete or close it before retrying.';
     }
   }
+
   return `${action} failed. Check the Auth0 application settings and retry. Your session has not been confirmed as changed.`;
 }

@@ -26,7 +26,10 @@ export function useSessionDetails() {
     setState({ status: 'loading' });
     void getCredentials()
       .then((credentials) => {
-        if (!active) return;
+        if (!active) {
+          return;
+        }
+
         setState({
           status: 'success',
           credentials: {
@@ -45,12 +48,13 @@ export function useSessionDetails() {
         });
       })
       .catch(() => {
-        if (active)
+        if (active) {
           setState({
             status: 'error',
             message:
               'Unable to read session details. Sign out and sign in again if your session has expired.',
           });
+        }
       });
     return () => {
       active = false;

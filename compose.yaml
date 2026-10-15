@@ -1,7 +1,7 @@
 name: premiumpass-local
 
 services:
-  # Local database used by the BFF and subscription worker, without AWS access.
+  # Local database used by the API and subscription worker, without AWS access.
   # Host API: 127.0.0.1:8000; the named volume preserves records across restarts.
   dynamodb:
     image: amazon/dynamodb-local:3.3.1

@@ -2,7 +2,7 @@ import { Spinner } from '../components/ui/spinner';
 import { Screen } from '../components/Screen';
 import { LoginScreen } from '../features/auth/LoginScreen';
 import { useAuthSession } from '../features/auth/use-auth-session';
-import { ProfileScreen } from '../features/profile/ProfileScreen';
+import { DashboardScreen } from '../features/dashboard/DashboardScreen';
 import type { MobileConfig } from './config';
 
 export function AppContent({ config }: { config: MobileConfig }) {
@@ -21,6 +21,7 @@ export function AppContent({ config }: { config: MobileConfig }) {
       </Screen>
     );
   }
+
   if (!session.user) {
     return (
       <LoginScreen
@@ -30,8 +31,9 @@ export function AppContent({ config }: { config: MobileConfig }) {
       />
     );
   }
+
   return (
-    <ProfileScreen
+    <DashboardScreen
       key={`${config.domain}:${session.user.sub}`}
       isSigningOut={session.isBusy}
       authError={session.error}

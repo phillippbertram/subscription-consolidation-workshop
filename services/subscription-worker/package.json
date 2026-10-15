@@ -5,27 +5,31 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false --include \"../../packages/*/src/**/*.ts\" --env-file-if-exists=.env src/local.ts",
     "start": "node --env-file-if-exists=.env dist/local.js",
-    "demo:subscription": "tsx scripts/seed-subscription.ts",
+    "demo:subscription": "tsx scripts/subscription-cli.ts seed",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "subscription": "tsx scripts/subscription-cli.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1149.0",
     "@aws-sdk/client-secrets-manager": "3.1149.0",
     "@aws-sdk/client-sqs": "3.1149.0",
     "@aws-sdk/lib-dynamodb": "3.1149.0",
+    "@premiumpass/apple-store": "workspace:*",
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@premiumpass/domain": "workspace:*",
+    "@premiumpass/logging": "workspace:*",
+    "@premiumpass/persistence": "workspace:*",
     "pino": "10.4.0",
     "stripe": "23.0.0",
     "zod": "4.6.5",
-    "@premiumpass/domain": "workspace:*",
-    "@premiumpass/persistence": "workspace:*",
-    "@premiumpass/logging": "workspace:*",
-    "@premiumpass/billing-contracts": "workspace:*",
-    "@premiumpass/apple-store": "workspace:*"
+    "@premiumpass/aws-clients": "workspace:*"
   },
   "devDependencies": {
+    "@clack/prompts": "1.8.1",
     "@types/aws-lambda": "8.10.159",
     "@types/node": "24.19.2",
+    "commander": "15.0.0",
     "esbuild": "0.28.2",
     "tsx": "4.23.15",
     "typescript": "6.0.3"

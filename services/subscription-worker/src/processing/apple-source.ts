@@ -7,6 +7,7 @@ import {
   InAppOwnershipType,
   AutoRenewStatus,
   type AppleClient,
+  type AppleCredentials,
   type AppleVerifier,
   type AppleSettings,
   type JWSTransactionDecodedPayload,
@@ -41,8 +42,9 @@ export class AppleSubscriptionSource {
         .regex(/^[0-9]{1,64}$/)
         .safeParse(transaction.originalTransactionId).success ||
       !z.number().int().positive().safeParse(transaction.expiresDate).success
-    )
+    ) {
       throw new ProcessingError('apple_purchase_not_owned_or_supported');
+    }
   }
 
   async read(
@@ -51,8 +53,10 @@ export class AppleSubscriptionSource {
     now: Date,
   ): Promise<Subscription> {
     const info = await this.client.getTransactionInfo(job.transactionId);
-    if (!info.signedTransactionInfo)
+    if (!info.signedTransactionInfo) {
       throw new ProcessingError('apple_transaction_missing');
+    }
+
     const submitted = await this.verifier.verifyAndDecodeTransaction(
       info.signedTransactionInfo,
     );
@@ -60,16 +64,20 @@ export class AppleSubscriptionSource {
     if (
       submitted.transactionId !== job.transactionId &&
       submitted.originalTransactionId !== job.transactionId
-    )
+    ) {
       throw new ProcessingError('apple_transaction_mismatch');
+    }
+
     const originalId = submitted.originalTransactionId!;
     // Resolve current state even when the submitted transaction/notification is old.
     const response = await this.client.getAllSubscriptionStatuses(originalId);
     if (
       response.environment !== Environment.SANDBOX ||
       response.bundleId !== this.settings.bundleId
-    )
+    ) {
       throw new ProcessingError('apple_environment_mismatch');
+    }
+
     const matches =
       response.data
         ?.flatMap((group) => group.lastTransactions ?? [])
@@ -78,8 +86,10 @@ export class AppleSubscriptionSource {
       matches.length !== 1 ||
       !matches[0]?.signedTransactionInfo ||
       !matches[0].signedRenewalInfo
-    )
+    ) {
       throw new ProcessingError('apple_subscription_missing');
+    }
+
     const item = matches[0];
     const transaction = await this.verifier.verifyAndDecodeTransaction(
       item.signedTransactionInfo!,
@@ -95,13 +105,20 @@ export class AppleSubscriptionSource {
       renewal.environment !== Environment.SANDBOX ||
       (renewal.appAccountToken &&
         renewal.appAccountToken.toLowerCase() !== job.userId)
-    )
+    ) {
       throw new ProcessingError('apple_renewal_mismatch');
-    if (transaction.isUpgraded)
+    }
+
+    if (transaction.isUpgraded) {
       throw new ProcessingError('apple_upgrade_unsupported');
+    }
+
     const status = transaction.revocationDate ? Status.REVOKED : item.status;
     const state = normalizeProviderStatus('apple', String(status));
-    if (!state) throw new ProcessingError('apple_status_unsupported');
+    if (!state) {
+      throw new ProcessingError('apple_status_unsupported');
+    }
+
     const providerSubscriptionId = `Sandbox:${originalId}`;
     const previous = previousSubscriptions.find(
       (s) =>
@@ -115,8 +132,10 @@ export class AppleSubscriptionSource {
     if (
       status === Status.BILLING_GRACE_PERIOD &&
       !z.number().int().positive().safeParse(grace).success
-    )
+    ) {
       throw new ProcessingError('apple_grace_missing');
+    }
+
     const next = subscriptionSchema.parse({
       userId: job.userId,
       provider: 'apple',
@@ -130,19 +149,21 @@ export class AppleSubscriptionSource {
       verifiedAt: now.toISOString(),
       revision: (previous?.revision ?? 0) + 1,
     });
-    if (previous && sameDomainState(previous, next))
+    if (previous && sameDomainState(previous, next)) {
       next.revision = previous.revision;
+    }
+
     return next;
   }
 }
 
 export function createAppleSource(
   settings: AppleSettings,
-  env: NodeJS.ProcessEnv,
+  credentials: AppleCredentials,
 ) {
   return new AppleSubscriptionSource(
     settings,
-    createAppleClient(settings, env),
+    createAppleClient(settings, credentials),
     createAppleVerifier(settings),
   );
 }

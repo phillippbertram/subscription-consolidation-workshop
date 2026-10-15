@@ -194,6 +194,9 @@ importers:
       '@eslint/js':
         specifier: 10.0.1
         version: 10.0.1(eslint@10.12.0(jiti@1.21.7)(supports-color@8.1.1))
+      '@stylistic/eslint-plugin':
+        specifier: 5.10.0
+        version: 5.10.0(eslint@10.12.0(jiti@1.21.7)(supports-color@8.1.1))
       concurrently:
         specifier: 10.0.6
         version: 10.0.6
@@ -215,6 +218,9 @@ importers:
       '@gluestack-ui/utils':
         specifier: 5.0.6
         version: 5.0.6(@react-spectrum/provider@3.11.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-dom@19.2.3(react@19.2.3))(react-native-web@0.21.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/metro-config@0.86.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(@types/react@19.2.4)(react@19.2.3)(supports-color@8.1.1))(react@19.2.3)(tailwindcss@3.4.19(tsx@4.23.15)(yaml@2.9.1))
+      '@premiumpass/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       axios:
         specifier: 1.20.0
         version: 1.20.0(debug@4.4.3(supports-color@8.1.1))(supports-color@8.1.1)
@@ -288,6 +294,9 @@ importers:
       '@fontsource-variable/geist':
         specifier: 5.3.0
         version: 5.3.0
+      '@premiumpass/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       class-variance-authority:
         specifier: 0.7.1
         version: 0.7.1
@@ -366,6 +375,16 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  packages/api-contracts:
+    dependencies:
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   packages/apple-store:
     dependencies:
       '@apple/app-store-server-library':
@@ -384,6 +403,28 @@ importers:
       '@types/node-fetch':
         specifier: 2.6.13
         version: 2.6.13
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
+  packages/aws-clients:
+    dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/client-secrets-manager':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/client-sqs':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/lib-dynamodb':
+        specifier: 3.1149.0
+        version: 3.1149.0(@aws-sdk/client-dynamodb@3.1149.0)
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -429,12 +470,12 @@ importers:
 
   packages/persistence:
     dependencies:
-      '@aws-sdk/client-dynamodb':
-        specifier: 3.1149.0
-        version: 3.1149.0
       '@aws-sdk/lib-dynamodb':
         specifier: 3.1149.0
         version: 3.1149.0(@aws-sdk/client-dynamodb@3.1149.0)
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../aws-clients
       '@premiumpass/domain':
         specifier: workspace:*
         version: link:../domain
@@ -446,47 +487,7 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
-  services/apple-webhook:
-    dependencies:
-      '@aws-sdk/client-sqs':
-        specifier: 3.1149.0
-        version: 3.1149.0
-      '@hono/node-server':
-        specifier: 2.1.4
-        version: 2.1.4(hono@4.13.13)
-      '@premiumpass/apple-store':
-        specifier: workspace:*
-        version: link:../../packages/apple-store
-      '@premiumpass/billing-contracts':
-        specifier: workspace:*
-        version: link:../../packages/billing-contracts
-      '@premiumpass/logging':
-        specifier: workspace:*
-        version: link:../../packages/logging
-      hono:
-        specifier: 4.13.13
-        version: 4.13.13
-      pino:
-        specifier: 10.4.0
-        version: 10.4.0
-      zod:
-        specifier: 4.6.5
-        version: 4.6.5
-    devDependencies:
-      '@types/node':
-        specifier: 24.19.2
-        version: 24.19.2
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
-      tsx:
-        specifier: 4.23.15
-        version: 4.23.15
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-
-  services/bff:
+  services/api:
     dependencies:
       '@aws-sdk/client-dynamodb':
         specifier: 3.1149.0
@@ -503,6 +504,12 @@ importers:
       '@hono/node-server':
         specifier: 2.1.4
         version: 2.1.4(hono@4.13.13)
+      '@premiumpass/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../../packages/aws-clients
       '@premiumpass/billing-contracts':
         specifier: workspace:*
         version: link:../../packages/billing-contracts
@@ -544,6 +551,52 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  services/apple-webhook:
+    dependencies:
+      '@aws-sdk/client-sqs':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@hono/aws-lambda':
+        specifier: 1.0.1
+        version: 1.0.1(hono@4.13.13)
+      '@hono/node-server':
+        specifier: 2.1.4
+        version: 2.1.4(hono@4.13.13)
+      '@premiumpass/apple-store':
+        specifier: workspace:*
+        version: link:../../packages/apple-store
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../../packages/aws-clients
+      '@premiumpass/billing-contracts':
+        specifier: workspace:*
+        version: link:../../packages/billing-contracts
+      '@premiumpass/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
+      hono:
+        specifier: 4.13.13
+        version: 4.13.13
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   services/stripe-webhook:
     dependencies:
       '@aws-sdk/client-secrets-manager':
@@ -558,6 +611,9 @@ importers:
       '@hono/node-server':
         specifier: 2.1.4
         version: 2.1.4(hono@4.13.13)
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../../packages/aws-clients
       '@premiumpass/billing-contracts':
         specifier: workspace:*
         version: link:../../packages/billing-contracts
@@ -607,6 +663,9 @@ importers:
       '@premiumpass/apple-store':
         specifier: workspace:*
         version: link:../../packages/apple-store
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../../packages/aws-clients
       '@premiumpass/billing-contracts':
         specifier: workspace:*
         version: link:../../packages/billing-contracts
@@ -629,12 +688,18 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@clack/prompts':
+        specifier: 1.8.1
+        version: 1.8.1
       '@types/aws-lambda':
         specifier: 8.10.159
         version: 8.10.159
       '@types/node':
         specifier: 24.19.2
         version: 24.19.2
+      commander:
+        specifier: 15.0.0
+        version: 15.0.0
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
@@ -1187,6 +1252,14 @@ packages:
 
   '@cacheable/utils@2.5.0':
     resolution: {integrity: sha512-buipgOVDkkPXNR5+xBpDw7Zk2n1EvU7qBJCNUcL7rhQ//kfpOXPAvQ511Os0vpLYJ1pZnvudNytkQt2hst3wqA==}
+
+  '@clack/core@1.5.1':
+    resolution: {integrity: sha512-iHTrHA8MtVuLl2TfZySmcKv1qO2PoyC9Z7pfSDozEuV5vtY3/wcOPKJXlqJ5Oq2Cx5DDGQGAMVx6HZfRRoVEbQ==}
+    engines: {node: '>= 20.12.0'}
+
+  '@clack/prompts@1.8.1':
+    resolution: {integrity: sha512-dlT1m5e/0yUL0kRNcQn7yGLVThkgbB0Ga/1AmfDDC/8ik6AIiSf2QLQO2zPYvefsHP0aFgxO93cVLCCfDp7kzQ==}
+    engines: {node: '>= 20.12.0'}
 
   '@dotenvx/dotenvx@1.75.1':
     resolution: {integrity: sha512-/BITOC9dmS/edY2zQwZNicQ059O6RKabtQfyEafV0nGtfYRNHYy1DIPiYVcov40+tob9hfmBnbR963dS+EQ1DQ==}
@@ -2879,6 +2952,12 @@ packages:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
       react-dom: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
 
+  '@stylistic/eslint-plugin@5.10.0':
+    resolution: {integrity: sha512-nPK52ZHvot8Ju/0A4ucSX1dcPV2/1clx0kLcH5wDmrE4naKso7TUC/voUyU1O9OTKTrR6MYip6LP0ogEMQ9jPQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      eslint: ^9.0.0 || ^10.0.0
+
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
@@ -3527,6 +3606,10 @@ packages:
     resolution: {integrity: sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw==}
     engines: {node: '>=20'}
 
+  commander@15.0.0:
+    resolution: {integrity: sha512-z67u4ZhzCL/Tydu1lJARtEZYWbWaN7oYLHbsuzocr6y4N6WZAagG3RQ4FW61V1/0+jImpj293XfrcYnd1qxtPg==}
+    engines: {node: '>=22.12.0'}
+
   commander@2.20.3:
     resolution: {integrity: sha512-GpVkmM8vF2vQUkj2LvZmD35JxeJOLCwJ9cUkugyk2nuhbv3+mJvpLYYt+0+USMxE+oj+ey/lJEnhZw75x/OMcQ==}
 
@@ -3852,6 +3935,10 @@ packages:
     resolution: {integrity: sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
+  eslint-visitor-keys@4.2.1:
+    resolution: {integrity: sha512-Uhdk5sfqcee/9H/rCOJikYz67o0a2Tw2hGRPOG2Y1R2dg7brRe1uG0yaNQDHu+TO/uQPF/5eCapvYSmHUjt7JQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
   eslint-visitor-keys@5.0.1:
     resolution: {integrity: sha512-tD40eHxA35h0PEIZNeIjkHoDR4YjjJp34biM0mDvplBe//mB+IHCqHDGV7pxF+7MklTvighcCPPZC7ynWyjdTA==}
     engines: {node: ^20.19.0 || ^22.13.0 || >=24}
@@ -3865,6 +3952,10 @@ packages:
     peerDependenciesMeta:
       jiti:
         optional: true
+
+  espree@10.4.0:
+    resolution: {integrity: sha512-j6PAQ2uUr79PZhBjP5C5fhl8e39FmRnOjsD5lGnWrFU8i2G776tBK7+nP8KuQUTTyAZUwfQqXAgrVH5MbH9CYQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   espree@11.2.0:
     resolution: {integrity: sha512-7p3DrVEIopW1B1avAGLuCSh1jubc01H2JHc8B4qqGblmg5gI9yumBgACjWo4JlIc04ufug4xJ3SQI8HkS/Rgzw==}
@@ -4065,8 +4156,17 @@ packages:
   fast-levenshtein@2.0.6:
     resolution: {integrity: sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==}
 
+  fast-string-truncated-width@3.0.3:
+    resolution: {integrity: sha512-0jjjIEL6+0jag3l2XWWizO64/aZVtpiGE3t0Zgqxv0DPuxiMjvB3M24fCyhZUO4KomJQPj3LTSUnDP3GpdwC0g==}
+
+  fast-string-width@3.0.2:
+    resolution: {integrity: sha512-gX8LrtNEI5hq8DVUfRQMbr5lpaS4nMIWV+7XEbXk2b8kiQIizgnlr12B4dA3ZEx3308ze0O4Q1R+cHts8kyUJg==}
+
   fast-uri@3.1.8:
     resolution: {integrity: sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==}
+
+  fast-wrap-ansi@0.2.2:
+    resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
 
   fastq@1.20.3:
     resolution: {integrity: sha512-XKv5nnLs6nLF71NgiKJLIZFLkPyIEuOselLG7ujZnGrRfQK8HpvY+WqKhAJUAdLomwVHErVS4LfxFlPq0/FTAw==}
@@ -7160,6 +7260,18 @@ snapshots:
       hashery: 1.5.1
       keyv: 5.6.0
 
+  '@clack/core@1.5.1':
+    dependencies:
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
+  '@clack/prompts@1.8.1':
+    dependencies:
+      '@clack/core': 1.5.1
+      fast-string-width: 3.0.2
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
   '@dotenvx/dotenvx@1.75.1':
     dependencies:
       '@dotenvx/primitives': 0.8.0
@@ -9188,6 +9300,16 @@ snapshots:
       react: 19.2.3
       react-dom: 19.2.3(react@19.2.3)
 
+  '@stylistic/eslint-plugin@5.10.0(eslint@10.12.0(jiti@1.21.7)(supports-color@8.1.1))':
+    dependencies:
+      '@eslint-community/eslint-utils': 4.10.1(eslint@10.12.0(jiti@1.21.7)(supports-color@8.1.1))
+      '@typescript-eslint/types': 8.71.1
+      eslint: 10.12.0(jiti@1.21.7)(supports-color@8.1.1)
+      eslint-visitor-keys: 4.2.1
+      espree: 10.4.0
+      estraverse: 5.3.0
+      picomatch: 4.0.7
+
   '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.8.1
@@ -9858,6 +9980,8 @@ snapshots:
 
   commander@14.0.3: {}
 
+  commander@15.0.0: {}
+
   commander@2.20.3: {}
 
   commander@4.1.1: {}
@@ -10179,6 +10303,8 @@ snapshots:
 
   eslint-visitor-keys@3.4.3: {}
 
+  eslint-visitor-keys@4.2.1: {}
+
   eslint-visitor-keys@5.0.1: {}
 
   eslint@10.12.0(jiti@1.21.7)(supports-color@8.1.1):
@@ -10217,6 +10343,12 @@ snapshots:
       jiti: 1.21.7
     transitivePeerDependencies:
       - supports-color
+
+  espree@10.4.0:
+    dependencies:
+      acorn: 8.19.0
+      acorn-jsx: 5.3.2(acorn@8.19.0)
+      eslint-visitor-keys: 4.2.1
 
   espree@11.2.0:
     dependencies:
@@ -10481,7 +10613,17 @@ snapshots:
 
   fast-levenshtein@2.0.6: {}
 
+  fast-string-truncated-width@3.0.3: {}
+
+  fast-string-width@3.0.2:
+    dependencies:
+      fast-string-truncated-width: 3.0.3
+
   fast-uri@3.1.8: {}
+
+  fast-wrap-ansi@0.2.2:
+    dependencies:
+      fast-string-width: 3.0.2
 
   fastq@1.20.3:
     dependencies:

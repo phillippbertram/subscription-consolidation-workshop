@@ -11,6 +11,7 @@ export function readLogLevel(
   if (!Object.hasOwn(levels, value)) {
     throw new Error('LOG_LEVEL must be debug, info, warn, error, or silent.');
   }
+
   return value as LogLevel;
 }
 

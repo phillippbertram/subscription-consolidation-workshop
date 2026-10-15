@@ -1,8 +1,9 @@
+import { GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import {
-  GetSecretValueCommand,
-  SecretsManagerClient,
-} from '@aws-sdk/client-secrets-manager';
-import { SQSClient } from '@aws-sdk/client-sqs';
+  createSqsClient,
+  createSecretsManagerClient,
+  LOCAL_SQS_ENDPOINT,
+} from '@premiumpass/aws-clients';
 import { z } from 'zod';
 import { readDatabaseConfig } from '@premiumpass/persistence';
 
@@ -15,14 +16,17 @@ export type WorkerCredentials = z.infer<typeof credentialsSchema>;
 export function readWorkerConfig(env: NodeJS.ProcessEnv, local: boolean) {
   const database = readDatabaseConfig(env, local);
   const queueUrl = env.SUBSCRIPTION_QUEUE_URL;
-  if (!queueUrl) throw new Error('SUBSCRIPTION_QUEUE_URL is required.');
+  if (!queueUrl) {
+    throw new Error('SUBSCRIPTION_QUEUE_URL is required.');
+  }
+
   const url = new URL(queueUrl);
   // Keep local queue delivery and persistence together; a half-local setup
   // could otherwise consume cloud work into the demo database.
   if (local) {
     if (
       !database.endpoint ||
-      url.origin !== 'http://127.0.0.1:9324' ||
+      url.origin !== LOCAL_SQS_ENDPOINT ||
       url.username ||
       url.password ||
       url.search ||
@@ -37,17 +41,8 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv, local: boolean) {
       'Lambda subscription worker requires an AWS HTTPS queue URL and no SQS_ENDPOINT.',
     );
   }
-  const sqs = new SQSClient({
-    maxAttempts: 2,
-    requestHandler: { connectionTimeout: 1_000, requestTimeout: 15_000 },
-    ...(local
-      ? {
-          endpoint: url.origin,
-          region: 'us-east-1',
-          credentials: { accessKeyId: 'local', secretAccessKey: 'local' },
-        }
-      : {}),
-  });
+
+  const sqs = createSqsClient({ local });
   return { database, queueUrl, sqs };
 }
 
@@ -61,20 +56,26 @@ export async function readWorkerCredentials(
       secretKey: env.STRIPE_SECRET_KEY,
       priceId: env.STRIPE_PRICE_ID,
     });
-    if (!parsed.success)
+    if (!parsed.success) {
       throw new Error(
         'Configure STRIPE_SECRET_KEY (test mode) and STRIPE_PRICE_ID in services/subscription-worker/.env.',
       );
+    }
+
     return parsed.data;
   }
+
   // Reuse secrets across warm invocations, but bound the cache lifetime so
   // later invocations can pick up rotation without a code deployment.
-  if (cached && cached.expiresAt > Date.now()) return cached.value;
-  if (!env.STRIPE_SECRET_ARN) throw new Error('STRIPE_SECRET_ARN is required.');
-  const client = new SecretsManagerClient({
-    maxAttempts: 2,
-    requestHandler: { connectionTimeout: 1_000, requestTimeout: 3_000 },
-  });
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  if (!env.STRIPE_SECRET_ARN) {
+    throw new Error('STRIPE_SECRET_ARN is required.');
+  }
+
+  const client = createSecretsManagerClient();
   try {
     const result = await client.send(
       new GetSecretValueCommand({ SecretId: env.STRIPE_SECRET_ARN }),
@@ -82,8 +83,10 @@ export async function readWorkerCredentials(
     const parsed = credentialsSchema.safeParse(
       JSON.parse(result.SecretString ?? '{}'),
     );
-    if (!parsed.success)
+    if (!parsed.success) {
       throw new Error('Invalid Stripe secret configuration.');
+    }
+
     cached = { value: parsed.data, expiresAt: Date.now() + 300_000 };
     return parsed.data;
   } finally {

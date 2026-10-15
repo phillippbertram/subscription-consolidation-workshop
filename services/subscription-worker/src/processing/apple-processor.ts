@@ -14,8 +14,10 @@ export class AppleSubscriptionProcessor {
 
   async process(job: AppleJob) {
     for (let attempt = 0; attempt < 3; attempt++) {
-      if (await this.store.isAppleProcessed(job))
+      if (await this.store.isAppleProcessed(job)) {
         return { outcome: 'duplicate' };
+      }
+
       // Load the revision BEFORE fetching Apple state, including after conflicts.
       const aggregate = await this.store.load(job.userId);
       const now = this.now();
@@ -44,12 +46,18 @@ export class AppleSubscriptionProcessor {
           revision: aggregate.revision + 1,
         };
       } catch (error) {
-        if (await this.store.isAppleProcessed(job))
+        if (await this.store.isAppleProcessed(job)) {
           return { outcome: 'duplicate' };
-        if (!(error instanceof RevisionConflict)) throw error;
+        }
+
+        if (!(error instanceof RevisionConflict)) {
+          throw error;
+        }
+
         await setTimeout(25 + Math.random() * 75);
       }
     }
+
     throw new ProcessingError('concurrency_retry_exhausted');
   }
 }

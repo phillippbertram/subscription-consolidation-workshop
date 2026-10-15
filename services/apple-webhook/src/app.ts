@@ -23,28 +23,39 @@ export function createAppleWebhookApp(
     c.json({ status: 'ok', appleEnabled: Boolean(settings) }),
   );
   app.post('/v1/webhooks/apple', async (c) => {
-    if (!settings || !verifier)
+    if (!settings || !verifier) {
       return c.json({ error: 'apple_not_configured' }, 503);
+    }
+
     const body = z
       .object({ signedPayload: z.string().min(1).max(250_000) })
       .strict()
       .safeParse(await c.req.json<unknown>().catch(() => null));
-    if (!body.success) return c.json({ error: 'invalid_notification' }, 400);
+    if (!body.success) {
+      return c.json({ error: 'invalid_notification' }, 400);
+    }
+
     const correlationId = randomUUID();
     let job: AppleJob;
     try {
       const notification = await verifier.verifyAndDecodeNotification(
         body.data.signedPayload,
       );
-      if (notification.notificationType === 'TEST')
+      if (notification.notificationType === 'TEST') {
         return c.json({ received: true, test: true });
-      if (!notification.data?.signedTransactionInfo)
+      }
+
+      if (!notification.data?.signedTransactionInfo) {
         return c.json({ received: true, ignored: true });
+      }
+
       const transaction = await verifier.verifyAndDecodeTransaction(
         notification.data.signedTransactionInfo,
       );
-      if (transaction.productId !== settings.productId)
+      if (transaction.productId !== settings.productId) {
         return c.json({ received: true, ignored: true });
+      }
+
       job = appleJobSchema.parse({
         provider: 'apple',
         environment: 'Sandbox',
@@ -66,6 +77,7 @@ export function createAppleWebhookApp(
         retry ? 503 : 400,
       );
     }
+
     try {
       await enqueue(job);
       log.info({

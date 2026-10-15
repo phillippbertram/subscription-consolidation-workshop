@@ -10,7 +10,7 @@ import {
 } from '@premiumpass/billing-contracts';
 
 // Stripe is the caller, so its signature replaces the user JWT boundary.
-// This app deliberately avoids the BFF user-auth middleware and body logger.
+// This app deliberately avoids the API user-auth middleware and body logger.
 export function createWebhookApp(
   signingSecret: string,
   enqueue: (job: StripeJob) => Promise<void>,
@@ -21,7 +21,10 @@ export function createWebhookApp(
   app.post('/v1/webhooks/stripe', async (c) => {
     const correlationId = randomUUID();
     const signature = c.req.header('stripe-signature');
-    if (!signature) return c.json({ error: 'invalid_signature' }, 400);
+    if (!signature) {
+      return c.json({ error: 'invalid_signature' }, 400);
+    }
+
     let event: Stripe.Event;
     try {
       const raw = Buffer.from(await c.req.arrayBuffer());
@@ -35,10 +38,15 @@ export function createWebhookApp(
       });
       return c.json({ error: 'invalid_signature' }, 400);
     }
-    if (event.livemode !== false || event.account)
+
+    if (event.livemode !== false || event.account) {
       return c.json({ error: 'unsupported_account' }, 400);
-    if (!eventTypes.some((type) => type === event.type))
+    }
+
+    if (!eventTypes.some((type) => type === event.type)) {
       return c.json({ received: true, ignored: true });
+    }
+
     // Queue references and trace metadata only. Fetching current provider state
     // later prevents delayed webhooks from applying stale subscription payloads.
     const parsed = jobSchema.safeParse({
@@ -49,7 +57,10 @@ export function createWebhookApp(
       receivedAt: new Date().toISOString(),
       correlationId,
     });
-    if (!parsed.success) return c.json({ error: 'invalid_event' }, 400);
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_event' }, 400);
+    }
+
     try {
       // Await acceptance before 200, otherwise a crash could lose the event.
       // Losing the HTTP response after acceptance can duplicate it, which is safe.

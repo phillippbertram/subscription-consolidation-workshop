@@ -28,5 +28,6 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
       })),
     };
   }
+
   return { batchItemFailures };
 }

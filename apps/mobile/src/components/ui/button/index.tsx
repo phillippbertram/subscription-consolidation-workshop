@@ -9,6 +9,7 @@ import {
 } from '@gluestack-ui/utils/nativewind-utils';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { UIIcon } from '@gluestack-ui/core/icon/creator';
+
 const SCOPE = 'BUTTON';
 const Root = withStyleContext(Pressable, SCOPE);
 const UIButton = createButton({

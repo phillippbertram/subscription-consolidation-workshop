@@ -17,6 +17,7 @@ Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISION
 - Cloud deployments, Auth0/Stripe changes, and paid resources must be covered by the current request. Local implementation, manual checks, and CDK synthesis require no additional confirmation.
 - Do not independently expand scope to real store purchases, additional products, complex platform abstractions, or production operation.
 - Use English throughout the project: code, identifiers, comments, runtime messages, configuration examples, documentation, and task records. Keep existing technical identifiers and product names where appropriate.
+- Always use braces for conditionals and loops. Separate logical phases with blank lines; keep related declarations, calls, and results together when they form one logical step. Prefer clear names and focused functions over decorative section comments. Run `pnpm format` to apply ESLint structure fixes and Prettier, then `pnpm check` to verify the result. Do not disable style rules to avoid formatting a file.
 
 ## Architecture rules
 

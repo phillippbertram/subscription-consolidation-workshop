@@ -1,7 +1,10 @@
-import type { Profile } from '../api-models';
-import type { AccountState } from '../hooks/use-account';
-import { AccountDetails, type SessionProfile } from './account-details';
-import { SubscriptionStatus } from './subscription-status';
+import type { UserProfile } from '@premiumpass/api-contracts';
+import type { AccountState } from '../features/account/use-account';
+import {
+  AccountDetails,
+  type SessionProfile,
+} from '../features/account/account-details';
+import { SubscriptionStatus } from '../features/subscriptions/subscription-status';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -19,12 +22,12 @@ interface Props {
   signedIn?: boolean;
   loading?: boolean;
   userId?: string | undefined;
-  profile?: Profile | undefined;
+  profile?: UserProfile | undefined;
   identity?: SessionProfile | undefined;
   accountState?: AccountState;
   onRefresh?: () => void;
   pending?: boolean;
-  expired?: boolean;
+  canStartNewAttempt?: boolean;
   message?: string;
   onLogin?: () => void;
   onLogout?: () => void;
@@ -33,6 +36,10 @@ interface Props {
 }
 
 export function DemoLayout(props: Props) {
+  const showOffer =
+    !props.signedIn ||
+    (props.accountState?.status === 'success' &&
+      props.accountState.entitlements.tier === 'free');
   const result = new URLSearchParams(window.location.search).get('checkout');
   const returnMessage =
     result === 'success'
@@ -78,7 +85,13 @@ export function DemoLayout(props: Props) {
             </AlertDescription>
           </Alert>
         )}
-        <div className="grid gap-6 md:grid-cols-2">
+        {props.signedIn && props.accountState && props.onRefresh && (
+          <SubscriptionStatus
+            state={props.accountState}
+            onRefresh={props.onRefresh}
+          />
+        )}
+        <div className={showOffer ? 'grid gap-6 md:grid-cols-2' : 'grid gap-6'}>
           <Card>
             <CardHeader>
               <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -119,50 +132,46 @@ export function DemoLayout(props: Props) {
               </Button>
             </CardFooter>
           </Card>
-          <Card className="border-primary/30 bg-primary/5">
-            <CardHeader>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-primary">
-                02 · Your plan
-              </p>
-              <div className="flex items-center justify-between gap-2">
-                <CardTitle>Premium Monthly</CardTitle>
-                <Badge>Monthly</Badge>
-              </div>
-              <CardDescription>
-                One recurring test subscription. The configured price appears
-                securely in Stripe Checkout.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1">
-              <ul className="space-y-3 text-sm">
-                <li>✓ Hosted Stripe checkout</li>
-                <li>✓ Linked to your PremiumPass account</li>
-                <li>✓ Safe retries with the same checkout attempt</li>
-              </ul>
-            </CardContent>
-            <CardFooter className="flex-col items-stretch gap-3">
-              <Button
-                disabled={!props.signedIn || !props.userId || props.pending}
-                onClick={props.onCheckout}
-              >
-                {props.pending
-                  ? 'Preparing checkout…'
-                  : 'Continue to test checkout →'}
-              </Button>
-              {props.expired && (
-                <Button variant="outline" onClick={props.onNewAttempt}>
-                  Start a new attempt
+          {showOffer && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardHeader>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-primary">
+                  02 · Available plan
+                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle>Premium Monthly</CardTitle>
+                  <Badge variant="outline">Monthly billing</Badge>
+                </div>
+                <CardDescription>
+                  Get Premium with a monthly test subscription. Review the price
+                  in Stripe Checkout before subscribing.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-1">
+                <ul className="space-y-3 text-sm">
+                  <li>✓ Hosted Stripe checkout</li>
+                  <li>✓ Linked to your PremiumPass account</li>
+                  <li>✓ Safe retries with the same checkout attempt</li>
+                </ul>
+              </CardContent>
+              <CardFooter className="flex-col items-stretch gap-3">
+                <Button
+                  disabled={!props.signedIn || !props.userId || props.pending}
+                  onClick={props.onCheckout}
+                >
+                  {props.pending
+                    ? 'Preparing checkout…'
+                    : 'Continue to test checkout →'}
                 </Button>
-              )}
-            </CardFooter>
-          </Card>
+                {props.canStartNewAttempt && (
+                  <Button variant="outline" onClick={props.onNewAttempt}>
+                    Start a new attempt
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          )}
         </div>
-        {props.signedIn && props.accountState && props.onRefresh && (
-          <SubscriptionStatus
-            state={props.accountState}
-            onRefresh={props.onRefresh}
-          />
-        )}
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Learning checkpoint · This step creates the customer and checkout
           session. The webhook and worker verify the subscription

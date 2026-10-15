@@ -10,6 +10,7 @@ function required(name: string): string {
       `${name} is required without surrounding whitespace. Configure infra/.env.`,
     );
   }
+
   return value;
 }
 
@@ -28,6 +29,7 @@ function main() {
   if (!/^\d{12}$/.test(account)) {
     throw new Error('AWS_ACCOUNT_ID must contain exactly 12 digits.');
   }
+
   if (!/^[a-z]{2}(?:-[a-z]+)+-\d+$/.test(region)) {
     throw new Error(
       'AWS_REGION must be an AWS region name, such as eu-central-1.',
@@ -51,15 +53,55 @@ function main() {
         'STRIPE_SECRET_ARN must reference a secret in the configured AWS account and region.',
       );
     }
+
+    const appleEnabled = process.env.APPLE_ENABLED ?? 'false';
+    if (!['true', 'false'].includes(appleEnabled)) {
+      throw new Error('APPLE_ENABLED must be true or false.');
+    }
+
+    cdkArgs.push('--parameters', `AppleEnabled=${appleEnabled}`);
+    if (appleEnabled === 'true') {
+      const bundleId = required('APPLE_BUNDLE_ID');
+      const productId = required('APPLE_PRODUCT_ID');
+      const appleSecretArn = required('APPLE_SECRET_ARN');
+      if (
+        !/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/.test(bundleId) ||
+        !/^[A-Za-z0-9._-]{1,255}$/.test(productId)
+      ) {
+        throw new Error('APPLE_BUNDLE_ID or APPLE_PRODUCT_ID is invalid.');
+      }
+
+      if (
+        !appleSecretArn.startsWith(
+          `arn:aws:secretsmanager:${region}:${account}:secret:`,
+        )
+      ) {
+        throw new Error(
+          'APPLE_SECRET_ARN must reference a secret in the configured AWS account and region.',
+        );
+      }
+
+      cdkArgs.push(
+        '--parameters',
+        `AppleBundleId=${bundleId}`,
+        '--parameters',
+        `AppleProductId=${productId}`,
+        '--parameters',
+        `AppleSecretArn=${appleSecretArn}`,
+      );
+    }
+
     // Match the CloudFormation parameter constraints before invoking CDK.
     if (!/^https:\/\/[a-zA-Z0-9.-]+\/$/.test(issuer)) {
       throw new Error(
         'AUTH0_ISSUER must be an HTTPS domain with a trailing slash.',
       );
     }
+
     if (!/^\S+$/.test(audience)) {
       throw new Error('AUTH0_AUDIENCE must not contain whitespace.');
     }
+
     cdkArgs.push(
       '--parameters',
       `Auth0Issuer=${issuer}`,
@@ -71,6 +113,7 @@ function main() {
       'cdk.out/deploy-outputs.json',
     );
   }
+
   const identityArgs = [
     'sts',
     'get-caller-identity',
@@ -116,17 +159,22 @@ function main() {
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'inherit'],
   });
-  if (identity.error) throw identity.error;
+  if (identity.error) {
+    throw identity.error;
+  }
+
   if (identity.status !== 0) {
     throw new Error(
       'AWS account lookup failed. Check the profile and its login session.',
     );
   }
+
   if (identity.stdout.trim() !== account) {
     throw new Error(
       'AWS profile resolves to a different account than AWS_ACCOUNT_ID. CDK was not started.',
     );
   }
+
   console.info(
     `Running ${mode} for PremiumPassDev in account ${account}, region ${region}, profile ${profile}.`,
   );
@@ -135,7 +183,10 @@ function main() {
     env,
     stdio: 'inherit',
   });
-  if (result.error) throw result.error;
+  if (result.error) {
+    throw result.error;
+  }
+
   process.exitCode = result.status ?? 1;
 }
 

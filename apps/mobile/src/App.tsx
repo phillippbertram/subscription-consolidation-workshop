@@ -27,6 +27,7 @@ function ConfiguredApp() {
       />
     );
   }
+
   return (
     <Auth0Provider domain={config.domain} clientId={config.clientId}>
       <AppContent config={config} />

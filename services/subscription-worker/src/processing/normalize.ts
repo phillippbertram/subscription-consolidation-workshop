@@ -57,7 +57,9 @@ export function normalizeSubscription(
     verifiedAt: now.toISOString(),
     revision: (previous?.revision ?? 0) + 1,
   });
-  if (previous && sameDomainState(previous, next))
+  if (previous && sameDomainState(previous, next)) {
     next.revision = previous.revision;
+  }
+
   return next;
 }

@@ -121,25 +121,20 @@ function SessionDetailsPanel() {
 }
 
 export function SessionCard() {
-  const { user } = useAuth0();
   const [expanded, setExpanded] = useState(false);
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state !== 'active') setExpanded(false);
+      if (state !== 'active') {
+        setExpanded(false);
+      }
     });
     return () => subscription.remove();
   }, []);
   return (
     <Card className="gap-4 rounded-2xl p-6">
-      <Text className="text-xl font-bold text-foreground">Auth0 session</Text>
-      <Text selectable className="text-foreground">
-        {user?.name ?? user?.nickname ?? 'Signed-in user'}
+      <Text className="text-base font-semibold text-foreground">
+        Auth0 session
       </Text>
-      {user?.email && (
-        <Text selectable className="text-sm text-muted-foreground">
-          {user.email}
-        </Text>
-      )}
       <Button variant="outline" onPress={() => setExpanded(!expanded)}>
         <ButtonText>
           {expanded ? 'Hide session details' : 'Show session details'}

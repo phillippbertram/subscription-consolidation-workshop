@@ -48,6 +48,7 @@ export function normalizeProviderStatus(
         return null;
     }
   }
+
   if (provider === 'apple') {
     switch (status) {
       case '1':
@@ -63,6 +64,7 @@ export function normalizeProviderStatus(
         return null;
     }
   }
+
   // The demo store adapters use the normalized vocabulary, not real store codes.
   switch (status) {
     case 'pending':
@@ -113,8 +115,12 @@ export function deriveEntitlements(
       });
       continue;
     }
+
     // accessUntil is a previously verified grant, never an unpaid billing period.
-    if (!accessUntil) continue;
+    if (!accessUntil) {
+      continue;
+    }
+
     const accessEnd = Date.parse(accessUntil);
     let validUntil = accessEnd;
     if (state === 'past_due') {
@@ -131,6 +137,7 @@ export function deriveEntitlements(
     } else if (state !== 'active' && state !== 'trialing') {
       continue;
     }
+
     if (Number.isFinite(validUntil) && now.getTime() < validUntil) {
       grants.push({
         provider,
@@ -140,6 +147,7 @@ export function deriveEntitlements(
       });
     }
   }
+
   grants.sort(
     (a, b) =>
       a.validUntil.localeCompare(b.validUntil) ||

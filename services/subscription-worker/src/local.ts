@@ -9,12 +9,14 @@ const log = createLogger(readLogLevel(process.env), 'premiumpass-worker');
 const { sqs, queueUrl, processor } = await workerRuntime(true);
 let stopping = false;
 const polling = new AbortController();
-for (const signal of ['SIGINT', 'SIGTERM'] as const)
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, () => {
     stopping = true;
     // Interrupt idle long polling, but let an in-flight job finish its transaction.
     polling.abort();
   });
+}
+
 log.info({ event: 'worker.started' });
 while (!stopping) {
   try {
@@ -41,9 +43,13 @@ while (!stopping) {
       }
     }
   } catch {
-    if (stopping) break;
+    if (stopping) {
+      break;
+    }
+
     log.error({ event: 'queue.unavailable' });
     await new Promise((resolve) => setTimeout(resolve, 1_000));
   }
 }
+
 sqs.destroy();

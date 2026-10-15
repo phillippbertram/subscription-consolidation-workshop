@@ -21,6 +21,7 @@ function Root() {
       />
     );
   }
+
   return (
     <Auth0Provider
       domain={config.domain}
@@ -43,7 +44,10 @@ function Root() {
 }
 
 const root = document.getElementById('root');
-if (!root) throw new Error('Missing application root.');
+if (!root) {
+  throw new Error('Missing application root.');
+}
+
 createRoot(root).render(
   <StrictMode>
     <Root />

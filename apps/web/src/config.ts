@@ -20,10 +20,12 @@ export function readWebConfig() {
       audience: import.meta.env.VITE_AUTH0_AUDIENCE as unknown,
       apiUrl: import.meta.env.VITE_API_URL as unknown,
     });
-  if (!values.success)
+  if (!values.success) {
     throw new Error(
       'Copy apps/web/.env.example to apps/web/.env and configure the Auth0 SPA client, audience, and API origin. Restart pnpm web:dev after editing it.',
     );
+  }
+
   const url = new URL(values.data.apiUrl);
   if (
     url.origin !== values.data.apiUrl ||
@@ -32,9 +34,11 @@ export function readWebConfig() {
         url.protocol === 'http:' &&
         ['localhost', '127.0.0.1'].includes(url.hostname)
       ))
-  )
+  ) {
     throw new Error(
       'VITE_API_URL must be an HTTPS or loopback HTTP origin without a trailing slash.',
     );
+  }
+
   return values.data;
 }

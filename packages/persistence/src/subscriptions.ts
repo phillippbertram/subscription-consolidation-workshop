@@ -38,10 +38,13 @@ export class DynamoDbSubscriptionStore implements SubscriptionStore {
         ) {
           throw new Error('Subscription ownership or key mismatch.');
         }
+
         subscriptions.push(subscription);
       }
+
       cursor = page.LastEvaluatedKey;
     } while (cursor);
+
     return subscriptions;
   }
 }

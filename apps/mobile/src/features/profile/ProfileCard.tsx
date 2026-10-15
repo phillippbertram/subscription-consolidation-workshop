@@ -1,4 +1,4 @@
-import type { UserProfile } from '../../api/api-client';
+import type { UserProfile } from '@premiumpass/api-contracts';
 import { Card } from '../../components/ui/card';
 import { Text } from '../../components/ui/text';
 

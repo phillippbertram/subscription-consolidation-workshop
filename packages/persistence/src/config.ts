@@ -1,4 +1,6 @@
-/** Validated database settings shared by the BFF and subscription worker. */
+import { LOCAL_DYNAMODB_ENDPOINT } from '@premiumpass/aws-clients';
+
+/** Validated database settings shared by the API and subscription worker. */
 export interface DatabaseConfig {
   tableName: string;
   /**
@@ -16,6 +18,7 @@ export function readDatabaseConfig(
   if (!tableName || !/^[a-zA-Z0-9_.-]{3,255}$/.test(tableName)) {
     throw new Error('DYNAMODB_TABLE_NAME must be a valid DynamoDB table name.');
   }
+
   const endpoint = env.DYNAMODB_ENDPOINT;
   if (endpoint !== undefined) {
     if (!allowLocalEndpoint) {
@@ -23,6 +26,7 @@ export function readDatabaseConfig(
         'DYNAMODB_ENDPOINT is only supported by the local server.',
       );
     }
+
     const url = new URL(endpoint);
     if (
       url.protocol !== 'http:' ||
@@ -33,7 +37,15 @@ export function readDatabaseConfig(
         'DYNAMODB_ENDPOINT must be a loopback HTTP origin without a trailing slash.',
       );
     }
+
     return { tableName, endpoint };
   }
+
   return { tableName };
 }
+
+/** Fixed Compose target for initialization and local administration. */
+export const LOCAL_DATABASE_CONFIG = {
+  tableName: 'premiumpass-local',
+  endpoint: LOCAL_DYNAMODB_ENDPOINT,
+} as const satisfies DatabaseConfig;

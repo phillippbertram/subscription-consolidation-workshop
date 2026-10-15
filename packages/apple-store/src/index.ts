@@ -33,15 +33,22 @@ export type AppleSettings = z.infer<typeof settingsSchema>;
 export function readAppleSettings(
   env: NodeJS.ProcessEnv,
 ): AppleSettings | undefined {
-  if (!env.APPLE_ENABLED || env.APPLE_ENABLED === 'false') return undefined;
-  if (env.APPLE_ENABLED !== 'true')
+  if (!env.APPLE_ENABLED || env.APPLE_ENABLED === 'false') {
+    return undefined;
+  }
+
+  if (env.APPLE_ENABLED !== 'true') {
     throw new Error('APPLE_ENABLED must be true or false.');
+  }
+
   const result = settingsSchema.safeParse({
     bundleId: env.APPLE_BUNDLE_ID,
     productId: env.APPLE_PRODUCT_ID,
   });
-  if (!result.success)
+  if (!result.success) {
     throw new Error('Configure APPLE_BUNDLE_ID and APPLE_PRODUCT_ID.');
+  }
+
   return result.data;
 }
 
@@ -54,6 +61,7 @@ export function createAppleVerifier(settings: AppleSettings) {
     settings.bundleId,
   );
 }
+
 export type AppleVerifier = ReturnType<typeof createAppleVerifier>;
 
 class SandboxClient extends AppStoreServerAPIClient {
@@ -78,42 +86,75 @@ class SandboxClient extends AppStoreServerAPIClient {
   }
 }
 
-export function createAppleClient(
-  settings: AppleSettings,
-  env: NodeJS.ProcessEnv,
-) {
-  const keyId = z
-    .string()
-    .regex(/^[A-Z0-9]{10}$/)
-    .safeParse(env.APPLE_IAP_KEY_ID);
-  const issuerId = z.uuid().safeParse(env.APPLE_IAP_ISSUER_ID);
-  const path = env.APPLE_IAP_PRIVATE_KEY_PATH;
-  if (!keyId.success || !issuerId.success || !path || !isAbsolute(path))
-    throw new Error(
-      'Configure APPLE_IAP_KEY_ID, APPLE_IAP_ISSUER_ID and an absolute APPLE_IAP_PRIVATE_KEY_PATH in services/subscription-worker/.env.',
-    );
-  let key: string;
+const credentialsSchema = z.object({
+  keyId: z.string().regex(/^[A-Z0-9]{10}$/),
+  issuerId: z.uuid(),
+  privateKey: z.string().min(1),
+});
+export type AppleCredentials = z.infer<typeof credentialsSchema>;
+
+export function parseAppleCredentials(value: unknown): AppleCredentials {
+  const result = credentialsSchema.safeParse(value);
+  if (!result.success) {
+    throw new Error('Invalid Apple In-App Purchase credentials.');
+  }
+
   try {
-    key = readFileSync(path, 'utf8');
-    const parsed = createPrivateKey(key);
+    const key = createPrivateKey(result.data.privateKey);
     if (
-      parsed.asymmetricKeyType !== 'ec' ||
-      parsed.asymmetricKeyDetails?.namedCurve !== 'prime256v1'
-    )
+      key.asymmetricKeyType !== 'ec' ||
+      key.asymmetricKeyDetails?.namedCurve !== 'prime256v1'
+    ) {
       throw new Error();
+    }
+  } catch {
+    throw new Error(
+      'Apple In-App Purchase credentials require a P-256 private key.',
+    );
+  }
+
+  return result.data;
+}
+
+export function readLocalAppleCredentials(
+  env: NodeJS.ProcessEnv,
+): AppleCredentials {
+  const path = env.APPLE_IAP_PRIVATE_KEY_PATH;
+  if (!path || !isAbsolute(path)) {
+    throw new Error(
+      'Configure an absolute APPLE_IAP_PRIVATE_KEY_PATH in services/subscription-worker/.env.',
+    );
+  }
+
+  let privateKey: string;
+  try {
+    privateKey = readFileSync(path, 'utf8');
   } catch {
     throw new Error(
       'APPLE_IAP_PRIVATE_KEY_PATH must point to a readable Apple P-256 .p8 private key.',
     );
   }
+
+  return parseAppleCredentials({
+    keyId: env.APPLE_IAP_KEY_ID,
+    issuerId: env.APPLE_IAP_ISSUER_ID,
+    privateKey,
+  });
+}
+
+export function createAppleClient(
+  settings: AppleSettings,
+  credentials: AppleCredentials,
+) {
   return new SandboxClient(
-    key,
-    keyId.data,
-    issuerId.data,
+    credentials.privateKey,
+    credentials.keyId,
+    credentials.issuerId,
     settings.bundleId,
     Environment.SANDBOX,
   );
 }
+
 export type AppleClient = Pick<
   AppStoreServerAPIClient,
   'getTransactionInfo' | 'getAllSubscriptionStatuses'
