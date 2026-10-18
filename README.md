@@ -1,114 +1,109 @@
 # PremiumPass
 
-PremiumPass is a hands-on subscription demo: sign in, buy a test subscription,
-and unlock synthetic score history. Web and Mobile share one backend account
-and the same Free/Premium access rules.
+**A hands-on workshop on subscription consolidation: sell one subscription on
+the web, iOS, and Android, and keep access correct everywhere.**
 
-Use your own **Auth0 tenant**, **Stripe test environment**, and optionally
-**Apple sandbox** and **AWS development account**. All application data is
-synthetic; this project is not a production payment service.
+![PremiumPass at a glance: users pay on the website with Stripe, in the iPhone app through the App Store, or in the Android app through Google Play. The backend translates every store, combines all purchases, and checks the clock, so every app gives the same answer to the question: is this user Premium right now?](docs/images/overview.svg)
 
-## What happens in the demo?
+PremiumPass is a small demo app. Users sign in, start on the **Free** plan, and
+unlock a (synthetic) score history with **Premium**. Wherever they paid, every
+app has to give the same answer to one question:
 
-1. Sign in through Auth0.
-2. See your account and current access in Web or Mobile.
-3. Buy through Stripe Checkout, Google Play license testing, or Apple Sandbox.
-4. The backend verifies the provider's state and updates your subscription.
-5. Refresh to see Premium access. Cancellation keeps access until its verified
-   boundary; another valid subscription can still grant access.
+> **Is this user Premium right now?**
 
-A successful checkout screen is not proof of Premium access. The backend makes
-that decision, including expiration checks on every protected request.
+Combining several payment providers into that one answer is called
+_subscription consolidation_. This repo shows how to do it, step by step, with
+readable code and exercises you can run locally. Under the hood:
+[Concepts](docs/CONCEPTS.md) explains the status translation, a worked example,
+and the glossary.
 
-```mermaid
----
-config:
-  theme: base
-  themeVariables:
-    fontFamily: Arial, Helvetica, sans-serif
-    fontSize: 14px
-    primaryTextColor: '#0f172a'
-    lineColor: '#64748b'
-    edgeLabelBackground: '#ffffff'
-    clusterBkg: '#f8fafc'
-    clusterBorder: '#cbd5e1'
-  flowchart:
-    curve: linear
-    nodeSpacing: 30
-    rankSpacing: 48
----
-flowchart LR
-    Clients["Web / Mobile"] <-->|"Login / API access token"| Auth0["Auth0"]
-    Clients -->|"Bearer token"| Backend["PremiumPass backend"]
-    Backend -->|"Profile / access"| Clients
-    Backend -.->|"Public signing keys (JWKS)"| Auth0
-    Clients -->|"Test purchase"| Providers["Stripe / Apple Sandbox / Google Play"]
-    Providers <-->|"Events / verification"| Backend
-    Backend --> Data[("Subscriptions and access")]
-    classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
-    classDef client fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1.5px,rx:12,ry:12
-    classDef identity fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px,rx:12,ry:12
-    classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
-    classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6,stroke-width:1.5px,rx:10,ry:10
-    classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534,stroke-width:1.5px
-    linkStyle default stroke:#64748b,stroke-width:1.5px
-    class Clients client
-    class Auth0 identity
-    class Backend service
-    class Providers queue
-    class Data data
+## See it in action
+
+![PremiumPass on the website and in the iOS app, before and after Premium: the same account first shows Free, then Premium with the unlocked score history and the grant that provides it](docs/images/web-mobile-free-premium.png)
+
+_Website and iOS app show the same answer, because both ask the backend, never the payment page._
+
+**Who it is for:** developers who add subscriptions to a web or mobile app, and
+anyone running a workshop on payments, webhooks, or reliable backend processing.
+
+**Built with:** TypeScript · Hono · React · Expo (React Native) · Auth0 ·
+DynamoDB · SQS · AWS CDK · Stripe, App Store, and Google Play test modes.
+
+## Why this is harder than it looks
+
+Each challenge is something you can trigger yourself in the demo.
+
+| Challenge                                                                            | How the demo solves it                         | Try it                                                    |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------- | --------------------------------------------------------- |
+| **Different languages:** Stripe says `past_due`, Apple `4`, Google `IN_GRACE_PERIOD` | Translate everything into one shared model     | [Exercise 3](docs/exercises/03-consolidation.md)          |
+| **A success page is not a payment:** the checkout redirect opens without paying      | Only verified provider state grants access     | [Exercise 2](docs/exercises/02-first-purchase.md)         |
+| **Purchases must reach the right user:** a restore on another account                | Bind every purchase to the internal user ID    | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
+| **Several sources at once:** Apple ends, Stripe is still paid                        | Access is the union of all valid grants        | [Exercise 3](docs/exercises/03-consolidation.md)          |
+| **Unreliable events:** webhooks arrive late, twice, or never                         | Idempotent processing and scheduled repair     | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
+| **Time matters:** a subscription ends without any notification                       | Every request compares the end time with _now_ | [Exercise 3](docs/exercises/03-consolidation.md)          |
+
+## Quick start
+
+You need Node and pnpm (versions in `.nvmrc` / `package.json`), Docker, a free
+[Auth0](https://auth0.com/) tenant, and a [Stripe](https://stripe.com/) account
+in test mode. No AWS account and no Xcode for the first steps.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm dev
 ```
 
-## Start here
-
-1. Read **[Concepts](docs/CONCEPTS.md)**: the idea in one picture, plus a glossary.
-2. Follow **[Getting started](docs/GETTING_STARTED.md)**: local website, Auth0
-   login, and your first Stripe test purchase, with a check after each step.
-3. Continue with the learning path below.
-
-The first path needs no AWS account or Xcode. Docker runs DynamoDB Local and
-ElasticMQ; the API, webhooks, worker, and website run on your computer.
-Auth0 and Stripe remain real external services in development/test mode.
+Before `pnpm dev` works, connect Auth0 and Stripe once:
+**[Getting started](docs/GETTING_STARTED.md)** walks you through it, with a check
+after each step, up to your first test purchase.
 
 ## Learning path
 
-Modules 1–6 run locally with Auth0, Stripe test mode, and Docker. Modules 7–8
-need store or AWS accounts for their optional parts. Each module has a short
-[exercise sheet](docs/exercises/README.md) with steps, code to read, and questions.
+Eight modules, each with a short [exercise sheet](docs/exercises/README.md):
+steps to try, code to read, and questions with answers. Modules 1–6 run fully
+locally; 7–8 need store or AWS accounts for their optional parts.
 
-| Module                    | You learn                                                     | Read                                                                                                  | Try                                                       |
-| ------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase           | [Auth0](docs/AUTH0_SETUP.md), [`auth.ts`](services/api/src/auth.ts)                                   | [Exercise 1](docs/exercises/01-login-and-tokens.md)       |
-| 2. First purchase         | Checkout, signed webhook, queue, worker verification          | [Payments](docs/PAYMENTS.md#payment-flow)                                                             | [Exercise 2](docs/exercises/02-first-purchase.md)         |
-| 3. Consolidation          | Translate provider states, combine grants, check time         | [Concepts](docs/CONCEPTS.md), [Access policy](docs/PAYMENTS.md#access-policy)                         | [Exercise 3](docs/exercises/03-consolidation.md)          |
-| 4. Reliability            | Duplicates, revisions, atomic commit, outbox, DLQ             | [Processing and retries](docs/PAYMENTS.md#processing-and-retries)                                     | [Exercise 4](docs/exercises/04-reliability.md)            |
-| 5. Repair missed updates  | Reconciliation and expiration                                 | [Reconciliation](docs/RECONCILIATION.md)                                                              | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
-| 6. Complimentary Premium  | Access without a purchase, audited and revocable              | [Complimentary access](docs/PAYMENTS.md#complimentary-access)                                         | [Exercise 6](docs/exercises/06-complimentary-premium.md)  |
-| 7. Native store purchases | Mobile login, Google Play / Apple purchase, ownership binding | [Mobile](apps/mobile/README.md), [Google Play](docs/GOOGLE_PLAY.md), [Apple](docs/APPLE_PURCHASES.md) | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
-| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks                | [Architecture](docs/ARCHITECTURE.md#aws-deployment-topology), [AWS](infra/README.md)                  | [Exercise 8](docs/exercises/08-aws.md)                    |
+| Module                    | You learn                                             | Exercise                                                  |
+| ------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
+| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase   | [Exercise 1](docs/exercises/01-login-and-tokens.md)       |
+| 2. First purchase         | Checkout, signed webhook, queue, worker verification  | [Exercise 2](docs/exercises/02-first-purchase.md)         |
+| 3. Consolidation          | Translate provider states, combine grants, check time | [Exercise 3](docs/exercises/03-consolidation.md)          |
+| 4. Reliability            | Duplicates, revisions, atomic commit, outbox          | [Exercise 4](docs/exercises/04-reliability.md)            |
+| 5. Repair missed updates  | Reconciliation and expiration                         | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
+| 6. Complimentary Premium  | Access without a purchase, audited and revocable      | [Exercise 6](docs/exercises/06-complimentary-premium.md)  |
+| 7. Native store purchases | Google Play / Apple purchase, ownership binding       | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
+| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks        | [Exercise 8](docs/exercises/08-aws.md)                    |
 
-Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove the environment.
+Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove everything.
 
-## Reference guides
+## What is inside
 
-| Topic                                                      | Guide                                                                      |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Terms and the core idea                                    | [Concepts](docs/CONCEPTS.md)                                               |
-| Components, data flow, and what runs where                 | [Architecture](docs/ARCHITECTURE.md)                                       |
-| Commands, logs, and local demo tools                       | [Development](docs/DEVELOPMENT.md)                                         |
-| Entities, relationships, database keys, and atomic updates | [Data model and ER diagrams](docs/DYNAMODB_DATA_MODEL.md#logical-er-model) |
-| Product boundaries and learning goals                      | [Project plan](PROJECT_PLAN.md)                                            |
-| Why the project uses these approaches                      | [Decisions](docs/DECISIONS.md)                                             |
+| Folder      | Contents                                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/`     | [Web](apps/web/README.md) (React), [Mobile](apps/mobile/README.md) (Expo), and the developer [CLI](apps/cli/README.md)                            |
+| `services/` | [API](services/api/README.md), one webhook per store, the [subscription worker](services/subscription-worker/README.md), and the outbox publisher |
+| `packages/` | Shared code; the access rules live in [`domain`](packages/domain/README.md)                                                                       |
+| `infra/`    | [AWS CDK stack](infra/README.md) for an optional cloud deployment                                                                                 |
 
-The workspace separates `apps/` (Web, Mobile, and the developer CLI), `services/` (executables),
-`packages/` (shared code), and `infra/` (CDK and local queue definitions).
-Each component README links to its code.
+| Guide                                     | Read it for                                               |
+| ----------------------------------------- | --------------------------------------------------------- |
+| [Concepts](docs/CONCEPTS.md)              | The core idea, the status translation table, the glossary |
+| [Architecture](docs/ARCHITECTURE.md)      | Components, data flow, and what runs locally vs. in AWS   |
+| [Payments](docs/PAYMENTS.md)              | Stripe flow, retries, and the exact access rules          |
+| [Reconciliation](docs/RECONCILIATION.md)  | How missed updates are repaired                           |
+| [Data model](docs/DYNAMODB_DATA_MODEL.md) | Records, keys, and atomic writes in one DynamoDB table    |
+| [Development](docs/DEVELOPMENT.md)        | Everyday commands, logs, and local demo tools             |
+| [Decisions](docs/DECISIONS.md)            | Why the project uses these approaches                     |
 
-## Project status
+## What this is not
 
-Guides explain how the system works. Which parts are implemented and verified,
-locally or in AWS, is recorded only in [TASKS](docs/TASKS.md).
+- **Not a production payment system.** Stripe test mode, Apple Sandbox, and
+  Google Play license tests only; all data is synthetic.
+- **Not a library.** It is readable example code with comments that explain the
+  _why_; copy ideas, not modules.
+- **Not finished everywhere.** Which parts are verified locally or in AWS is
+  tracked in [TASKS](docs/TASKS.md).
 
-For implementation work, read [AGENTS.md](AGENTS.md). Project text and code use
-English. The project has no automated test suite; verification uses formatting,
-lint, typechecking, builds, and targeted manual checks.
+Contributing or working with an AI agent? Read [AGENTS.md](AGENTS.md) first.
+Code and docs are in English. There is no automated test suite; changes are
+checked with formatting, linting, type checks, builds, and manual flows.

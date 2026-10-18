@@ -375,4 +375,6 @@ Three rules hold for every provider:
 Mermaid diagrams live in the Markdown files and define only the colors they use.
 The [SVG overview](images/architecture-overview.svg) embeds provider logos
 because Markdown renderers cannot load Mermaid icon packs; update it when a
-component's responsibility changes.
+component's responsibility changes. The non-technical
+[README overview](images/overview.svg) uses the same embedded logos; keep its
+three steps in line with [Concepts](CONCEPTS.md).
