@@ -82,6 +82,17 @@ may not require individual grants; do not change its policy for this demo.
    premiumpass://your-tenant.eu.auth0.com/ios/com.example.premiumpass/callback
    ```
 
+   For Android, set `ANDROID_PACKAGE_NAME` before prebuild and add the matching
+   URL to both lists as well, preserving the existing iOS entries:
+
+   ```text
+   premiumpass://your-tenant.eu.auth0.com/android/com.yourcompany.premiumpass/callback
+   ```
+
+   Replace the package placeholder with the exact installed package in lowercase.
+   The app uses the same Native application, PKCE flow, and SDK-owned secure
+   credentials on both platforms. No mobile client secret is needed.
+
 4. Copy the Native Client ID and domain into the [mobile configuration](../apps/mobile/README.md#configure-the-app).
    Keep the API audience unchanged. Preserve callbacks for other installed demo builds.
 

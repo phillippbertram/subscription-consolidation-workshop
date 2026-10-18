@@ -3,17 +3,20 @@
 **Premium starts after backend verification.** A redirect, client badge, or scope
 alone grants nothing. This is the central guide for Stripe test payments and
 shared access rules. Start with [Getting started](GETTING_STARTED.md); native
-purchases are in [Apple Sandbox](APPLE_PURCHASES.md).
+purchases are in [Apple Sandbox](APPLE_PURCHASES.md). Prepare the next Android
+extension with [Google Play test setup](GOOGLE_PLAY.md); its runtime integration
+and evidence are tracked in [P12](TASKS.md#p12-google-play-test-purchases).
 
 ## Payment flow
 
 ```mermaid
 sequenceDiagram
-    participant Web
-    participant API
+    participant Web as Web<br/>@premiumpass/web
+    participant API as API<br/>@premiumpass/api
     participant Stripe
-    participant Ingress as Webhook / queue
-    participant Worker
+    participant Ingress as Stripe webhook<br/>@premiumpass/stripe-webhook
+    participant Queue as SQS / ElasticMQ
+    participant Worker as Subscription worker<br/>@premiumpass/subscription-worker
     participant DB as DynamoDB
     Web->>API: Authenticated checkout attempt
     API->>Stripe: Create owned customer/session
@@ -21,8 +24,10 @@ sequenceDiagram
     Web->>Stripe: Complete test payment
     Stripe-->>Web: Return to website
     Stripe->>Ingress: Signed event
+    Ingress->>Queue: Queue verified references
+    Queue-->>Ingress: Accepted
     Ingress-->>Stripe: 200 after queue acceptance
-    Ingress->>Worker: Deliver references
+    Queue->>Worker: Deliver references
     Worker->>Stripe: Verify current state and paid periods
     Worker->>DB: Atomic subscription and access commit
     Web->>API: Refresh account
@@ -143,6 +148,11 @@ stored entitlement snapshot. Only `premium_monthly` grants `score_history`.
 | Provider outage                                              | Existing boundaries remain; no extension                                                                       |
 
 Boundaries are exclusive (`now < validUntil`); retries never restart grace.
+Google's `IN_GRACE_PERIOD` maps to `past_due`, with its provider-verified
+`expiryTime` stored directly in `accessUntil`; no extra grace is added.
+Google `CANCELED` maps to active with renewal disabled until that expiry;
+`ON_HOLD`/`PAUSED` map to paused and grant no Google access. The raw Google state
+is retained for consistency checks. [Google flow](GOOGLE_PLAY.md#7-enable-local-processing).
 All valid grants are combined: ending Apple cannot remove valid Stripe access.
 `effectiveUntil` is the next reevaluation boundary, not necessarily the end of
 all Premium access. Stripe custom cancellation dates can shorten a paid period;
@@ -178,7 +188,7 @@ body to the work queue, and delete the DLQ copy only after successful send.
 
 ## Register the cloud webhook
 
-Cloud billing initiation is not wired; cloud notifications need matching owners
+Cloud Stripe billing initiation is not wired; cloud notifications need matching owners
 in the AWS table. Local records are not copied to AWS.
 
 1. In the intended AWS account/region, create a Secrets Manager JSON secret with

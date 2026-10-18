@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 890" role="img" aria-labelledby="title description">
+  <title id="title">PremiumPass architecture overview</title>
+  <desc id="description">Web and Mobile obtain access tokens from Auth0. The API verifies tokens with public signing keys and serves stored access. Verified Stripe, Apple, and Google notifications and client sync feed a queue. The worker verifies fresh provider state and commits subscriptions, access, completion, and outbox atomically. Optional Google reconciliation enqueues known-token refreshes. Detailed runtime boundaries are documented separately.</desc>
+  <metadata>Brand paths embedded from the Iconify Logos collection: apple, auth0-icon, google-icon, stripe. Source: https://github.com/iconify/icon-sets/blob/master/json/logos.json . Retrieved 2026-10-18. Brand artwork belongs to its respective owners. This SVG has no external image/font dependencies. Edit the SVG directly; keep the component responsibilities aligned with ARCHITECTURE.md.</metadata>
+  <defs>
+    <marker id="slate-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker>
+    <marker id="orange-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#ea580c"/></marker>
+  </defs>
+  <rect width="1440" height="890" rx="24" fill="#ffffff"/>
+
+<text x="56" y="66" font-family="Arial, Helvetica, sans-serif" font-size="32" fill="#0f172a" font-weight="700" text-anchor="start">PremiumPass</text>
+<text x="56" y="96" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#475569" font-weight="400" text-anchor="start">Identity, verified purchases, and shared Premium access</text>
+<rect x="1170" y="40" width="214" height="38" rx="19" fill="#f1f5f9" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="1277" y="65" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="700" text-anchor="middle">SYSTEM OVERVIEW</text>
+<rect x="56" y="140" width="340" height="148" rx="16" fill="#eff6ff" stroke="#bfdbfe" stroke-width="1.5"/>
+<text x="80" y="168" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1d4ed8" font-weight="700" text-anchor="start">CLIENTS</text>
+<rect x="82" y="185" width="44" height="30" rx="5" fill="none" stroke="#2563eb" stroke-width="2"/><path d="M82 194H126" stroke="#2563eb" stroke-width="2"/><rect x="143" y="177" width="21" height="38" rx="5" fill="none" stroke="#2563eb" stroke-width="2"/>
+<text x="188" y="207" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1e3a8a" font-weight="700" text-anchor="start">Web + Mobile</text>
+<text x="80" y="254" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#1e40af" font-weight="400" text-anchor="start">Profile · purchases · current access</text>
+<rect x="460" y="140" width="300" height="148" rx="16" fill="#fff7ed" stroke="#fed7aa" stroke-width="1.5"/>
+<svg x="484" y="166" width="35" height="39" viewBox="0 0 256 285" aria-hidden="true"><path d="M220.412 0h-92.415l28.562 89.006h92.416l-74.77 53.077l28.57 89.511c48.128-35.06 63.854-88.12 46.208-142.588zM7.018 89.006h92.416L127.997 0H35.589zc-17.655 54.468-1.92 107.529 46.207 142.588l28.563-89.51zm46.208 142.588l74.77 52.97l74.77-52.97l-74.77-53.847z"/></svg>
+<text x="534" y="196" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#9a3412" font-weight="700" text-anchor="start">Auth0</text>
+<text x="484" y="232" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#9a3412" font-weight="400" text-anchor="start">Login + API access tokens</text>
+<text x="484" y="258" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#9a3412" font-weight="400" text-anchor="start">Credentials stay with Auth0</text>
+<rect x="830" y="140" width="554" height="148" rx="16" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="854" y="168" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#475569" font-weight="700" text-anchor="start">TEST PURCHASE PROVIDERS</text>
+<rect x="850" y="184" width="152" height="85" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="1019" y="184" width="152" height="85" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<rect x="1188" y="184" width="152" height="85" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<svg x="881" y="196" width="90" height="37" viewBox="0 0 512 214" aria-hidden="true"><path fill="#635bff" d="M512 110.08c0-36.409-17.636-65.138-51.342-65.138c-33.85 0-54.33 28.73-54.33 64.854c0 42.808 24.179 64.426 58.88 64.426c16.925 0 29.725-3.84 39.396-9.244v-28.445c-9.67 4.836-20.764 7.823-34.844 7.823c-13.796 0-26.027-4.836-27.591-21.618h69.547c0-1.85.284-9.245.284-12.658m-70.258-13.511c0-16.071 9.814-22.756 18.774-22.756c8.675 0 17.92 6.685 17.92 22.756zm-90.31-51.627c-13.939 0-22.899 6.542-27.876 11.094l-1.85-8.818h-31.288v165.83l35.555-7.537l.143-40.249c5.12 3.698 12.657 8.96 25.173 8.96c25.458 0 48.64-20.48 48.64-65.564c-.142-41.245-23.609-63.716-48.498-63.716m-8.534 97.991c-8.391 0-13.37-2.986-16.782-6.684l-.143-52.765c3.698-4.124 8.818-6.968 16.925-6.968c12.942 0 21.902 14.506 21.902 33.137c0 19.058-8.818 33.28-21.902 33.28M241.493 36.551l35.698-7.68V0l-35.698 7.538zm0 10.809h35.698v124.444h-35.698zm-38.257 10.524L200.96 47.36h-30.72v124.444h35.556V87.467c8.39-10.951 22.613-8.96 27.022-7.396V47.36c-4.551-1.707-21.191-4.836-29.582 10.524m-71.112-41.386l-34.702 7.395l-.142 113.92c0 21.05 15.787 36.551 36.836 36.551c11.662 0 20.195-2.133 24.888-4.693V140.8c-4.55 1.849-27.022 8.391-27.022-12.658V77.653h27.022V47.36h-27.022zM35.982 83.484c0-5.546 4.551-7.68 12.09-7.68c10.808 0 24.461 3.272 35.27 9.103V51.484c-11.804-4.693-23.466-6.542-35.27-6.542C19.2 44.942 0 60.018 0 85.192c0 39.252 54.044 32.995 54.044 49.92c0 6.541-5.688 8.675-13.653 8.675c-11.804 0-26.88-4.836-38.827-11.378v33.849c13.227 5.689 26.596 8.106 38.827 8.106c29.582 0 49.92-14.648 49.92-40.106c-.142-42.382-54.329-34.845-54.329-50.774"/></svg>
+<svg x="1082" y="195" width="26" height="32" viewBox="0 0 256 315" aria-hidden="true"><path d="M213.803 167.03c.442 47.58 41.74 63.413 42.197 63.615c-.35 1.116-6.599 22.563-21.757 44.716c-13.104 19.153-26.705 38.235-48.13 38.63c-21.05.388-27.82-12.483-51.888-12.483c-24.061 0-31.582 12.088-51.51 12.871c-20.68.783-36.428-20.71-49.64-39.793c-27-39.033-47.633-110.3-19.928-158.406c13.763-23.89 38.36-39.017 65.056-39.405c20.307-.387 39.475 13.662 51.889 13.662c12.406 0 35.699-16.895 60.186-14.414c10.25.427 39.026 4.14 57.503 31.186c-1.49.923-34.335 20.044-33.978 59.822M174.24 50.199c10.98-13.29 18.369-31.79 16.353-50.199c-15.826.636-34.962 10.546-46.314 23.828c-10.173 11.763-19.082 30.589-16.678 48.633c17.64 1.365 35.66-8.964 46.64-22.262"/></svg>
+<svg x="1247" y="194" width="32" height="33" viewBox="0 0 256 262" aria-hidden="true"><path fill="#4285f4" d="M255.878 133.451c0-10.734-.871-18.567-2.756-26.69H130.55v48.448h71.947c-1.45 12.04-9.283 30.172-26.69 42.356l-.244 1.622l38.755 30.023l2.685.268c24.659-22.774 38.875-56.282 38.875-96.027"/><path fill="#34a853" d="M130.55 261.1c35.248 0 64.839-11.605 86.453-31.622l-41.196-31.913c-11.024 7.688-25.82 13.055-45.257 13.055c-34.523 0-63.824-22.773-74.269-54.25l-1.531.13l-40.298 31.187l-.527 1.465C35.393 231.798 79.49 261.1 130.55 261.1"/><path fill="#fbbc05" d="M56.281 156.37c-2.756-8.123-4.351-16.827-4.351-25.82c0-8.994 1.595-17.697 4.206-25.82l-.073-1.73L15.26 71.312l-1.335.635C5.077 89.644 0 109.517 0 130.55s5.077 40.905 13.925 58.602z"/><path fill="#eb4335" d="M130.55 50.479c24.514 0 41.05 10.589 50.479 19.438l36.844-35.974C195.245 12.91 165.798 0 130.55 0C79.49 0 35.393 29.301 13.925 71.947l42.211 32.783c10.59-31.477 39.891-54.251 74.414-54.251"/></svg>
+<text x="926" y="253" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#4338ca" font-weight="600" text-anchor="middle">Stripe test</text>
+<text x="1095" y="253" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#27272a" font-weight="600" text-anchor="middle">Apple Sandbox</text>
+<text x="1264" y="253" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#174ea6" font-weight="600" text-anchor="middle">Google Play tests</text>
+<rect x="56" y="354" width="1328" height="464" rx="20" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="80" y="391" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0f172a" font-weight="700" text-anchor="start">PREMIUMPASS BACKEND</text>
+<text x="1358" y="391" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#64748b" font-weight="400" text-anchor="end">Local services · prepared AWS adapters</text>
+<path d="M207 140V116H1107V140" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="946" y="107" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="500" text-anchor="middle">Test purchase / store UI</text>
+<path d="M396 194H460" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="428" y="183" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="500" text-anchor="middle">Login</text>
+<path d="M460 250H396" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="428" y="239" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="500" text-anchor="middle">Tokens</text>
+<path d="M207 288V421" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="220" y="334" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1d4ed8" font-weight="600" text-anchor="start">Bearer token</text>
+<path d="M1107 288V316H532V421" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<rect x="841" y="303" width="184" height="24" rx="5" fill="#ffffff" stroke="#ffffff" stroke-width="1.5"/>
+<text x="933" y="320" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#475569" font-weight="500" text-anchor="middle">Provider notifications</text>
+<path d="M610 288V337H298V421" fill="none" stroke="#ea580c" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#orange-arrow)" stroke-dasharray="6 6"/>
+<rect x="364" y="325" width="216" height="24" rx="5" fill="#ffffff" stroke="#ffffff" stroke-width="1.5"/>
+<text x="472" y="342" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#9a3412" font-weight="500" text-anchor="middle">Public signing keys (JWKS)</text>
+<path d="M328 509H367V681H432" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<rect x="327" y="578" width="80" height="40" rx="5" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<text x="367" y="594" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="500" text-anchor="middle">Client sync</text>
+<text x="367" y="611" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="500" text-anchor="middle">references</text>
+<path d="M532 547V626" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="546" y="592" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="400" text-anchor="start">Verified ingress</text>
+<path d="M632 681H730" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="681" y="668" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5b21b6" font-weight="600" text-anchor="middle">Jobs</text>
+<path d="M980 681H1080" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="1030" y="654" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#166534" font-weight="600" text-anchor="middle">Atomic</text>
+<text x="1030" y="670" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#166534" font-weight="600" text-anchor="middle">commit</text>
+<path d="M1210 626V547" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<text x="1225" y="591" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#475569" font-weight="400" text-anchor="start">Pending changes</text>
+<path d="M730 487H682V607H596V626" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<rect x="649" y="566" width="68" height="22" rx="5" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<text x="683" y="582" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#5b21b6" font-weight="500" text-anchor="middle">Refresh</text>
+<path d="M207 547V789H1210V736" fill="none" stroke="#64748b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" marker-end="url(#slate-arrow)"/>
+<rect x="488" y="777" width="336" height="24" rx="5" fill="#f8fafc" stroke="#f8fafc" stroke-width="1.5"/>
+<text x="656" y="795" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#166534" font-weight="500" text-anchor="middle">Profile and access reads</text>
+<rect x="86" y="421" width="242" height="126" rx="16" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="106" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#115e59" font-weight="700" text-anchor="start">API</text>
+<text x="106" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">JWT + scopes + ownership</text>
+<text x="106" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Profile, billing sync, access</text>
+<rect x="432" y="421" width="200" height="126" rx="16" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="452" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#115e59" font-weight="700" text-anchor="start">Webhooks</text>
+<text x="452" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Verify provider identity</text>
+<text x="452" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Queue references only</text>
+<rect x="730" y="421" width="250" height="126" rx="16" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="750" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#5b21b6" font-weight="700" text-anchor="start">Google reconciliation</text>
+<text x="750" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Known-token refresh jobs</text>
+<text x="750" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Five-minute opt-in schedule</text>
+<rect x="1080" y="421" width="260" height="126" rx="16" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="1100" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#115e59" font-weight="700" text-anchor="start">Outbox publisher</text>
+<text x="1100" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Announce committed changes</text>
+<text x="1100" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Local downstream demo</text>
+<rect x="432" y="626" width="200" height="110" rx="16" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="452" y="659" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#5b21b6" font-weight="700" text-anchor="start">Work queue</text>
+<text x="452" y="687" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">ElasticMQ / Amazon SQS</text>
+<text x="452" y="710" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Accepted work is pending</text>
+<rect x="730" y="626" width="250" height="110" rx="16" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
+<text x="750" y="659" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#115e59" font-weight="700" text-anchor="start">Subscription worker</text>
+<text x="750" y="687" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Fresh provider verification</text>
+<text x="750" y="710" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Persist, then finish / ack</text>
+<rect x="1080" y="626" width="260" height="110" rx="16" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="1100" y="659" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#166534" font-weight="700" text-anchor="start">DynamoDB</text>
+<text x="1100" y="687" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#166534" font-weight="400" text-anchor="start">Subscriptions + access</text>
+<text x="1100" y="710" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#166534" font-weight="400" text-anchor="start">Completion markers + outbox</text>
+<text x="56" y="855" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#64748b" font-weight="400" text-anchor="start">Conceptual responsibilities · runtime details, optional paths, and live verification status are documented below.</text>
+</svg>

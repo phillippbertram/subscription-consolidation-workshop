@@ -20,13 +20,17 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P06 | Stripe purchase and reliable processing    | P02, P03, P05                        | partial  |
 | P07 | Apple sandbox and Google mocks             | P04, P05, P06 local processing       | partial  |
 | P08 | Outbox publisher and EventBridge           | P06                                  | partial  |
-| P09 | Reconciliation and expiration              | P07, P08                             | partial  |
-| P10 | Operations and final demo                  | P04, P06–P09                         | open     |
-| P11 | Self-service subscription cancellation     | P06; P07 for stores                  | partial  |
+| P09 | Reconciliation and expiration              | P07, P08; P12 for real Google        | partial  |
+| P10 | Operations and final demo                  | P04, P06–P09, P12, P13               | open     |
+| P11 | Self-service subscription cancellation     | P06; P07 for Apple; P12 for Google   | partial  |
+| P12 | Google Play test purchases                 | P04, P05, P06 local processing       | partial  |
+| P13 | Admin-granted complimentary Premium        | P02, P03 local, P05                  | open     |
 
-**Current focus:** P09 local reconciliation and expiration, including Apple.
-The P07 real purchase/restore milestone still needs Apple account/key and device
-evidence. AWS deployment and verification remain a separately authorized path.
+**Current focus:** P12 real Google Play license-test purchases, starting with
+Play Console preparation and the Android build. Apple provider/device checks in
+P07/P09 are deferred due to account issues (user decision, October 18). Existing
+Apple code and prior evidence remain; no Apple acceptance is waived or marked
+complete. AWS deployment and verification remain a separately authorized path.
 
 ## P00 Prepare the project for agents
 
@@ -55,6 +59,32 @@ evidence. AWS deployment and verification remain a separately authorized path.
   removed passed; executable code and types are unchanged from the starting
   working tree. The Web bundle-size warning remains. No new automated tests,
   device runs, provider requests, or AWS verification were needed or performed.
+
+- **Architecture/data diagrams, October 18:** added explicit Auth0 login/token
+  exchange and API JWKS retrieval to the overview, local, and AWS diagrams.
+  Replaced the data-model flowchart with logical ER views for identity/profile,
+  subscriptions, owner bindings, current access, processing/outbox, checkout,
+  and local mock source records. Explained cardinalities, optional records,
+  embedded grants, historical outbox revisions, and record-family navigation;
+  planned admin grants remain outside the implemented model. These are logical
+  relations in one table, not additional tables or database foreign keys.
+  Five Mermaid diagrams parsed/rendered; the ER views and AWS/Auth0 topology were
+  visually inspected against the persistence/authentication code. `pnpm format`,
+  `pnpm check`, Markdown formatting, 100 relative links/anchors, and diff checks
+  passed (existing Web bundle-size warning). Documentation only; no runtime,
+  infrastructure, tenant, or deployment changes.
+
+- **Architecture presentation, October 18:** styled overview/local/AWS Mermaid
+  diagrams with an explicit base theme, role/provider fill and text colors,
+  storage/queue shapes, and neutral runtime containers. Added a self-contained
+  conceptual SVG overview with embedded Apple, Google, Auth0, and Stripe logos;
+  detailed wiring remains in Mermaid. Documented renderer-dependent icon packs,
+  logo sources, and the SVG maintenance boundary. All five Mermaid diagrams
+  parsed/rendered; SVG and AWS colors were visually inspected. A source comparison
+  confirmed all existing Mermaid nodes, labels, and connections were preserved.
+  SVG XML/reference checks, Markdown formatting, 101 relative links/anchors,
+  scoped diff checks, and `pnpm format` / `pnpm check` passed; the known Web
+  bundle-size warning remains. No runtime, cloud, or tenant changes were made.
 
 ## P01 Local HTTP skeleton
 
@@ -210,9 +240,10 @@ evidence. AWS deployment and verification remain a separately authorized path.
   and deployed IAM/delivery remain unverified; no automated tests were added.
 - **Outstanding local/device:** configure own key/product/bundle and Native scopes,
   rebuild/install, then verify real purchase, restore, management, renewal,
-  cancellation/expiry, override and signed tunnel delivery. Real Google billing is
-  outside scope; independent local Google mock state and
-  suppressed-event processing are implemented with P09.
+  cancellation/expiry, override and signed tunnel delivery. Apple provider/device
+  verification is deferred due to account issues. Real Google license-test billing
+  is now tracked in P12; independent local Google mock state and suppressed-event
+  processing are implemented with P09.
 - **Outstanding cloud:** deploy with a real secret, register the sandbox URL,
   verify signed delivery/IAM/worker/access; wire authenticated cloud Apple
   config/sync/completion separately. [Apple checks](APPLE_PURCHASES.md#manual-device-checks).
@@ -324,11 +355,39 @@ evidence. AWS deployment and verification remain a separately authorized path.
   warning), new-guide Markdown formatting, CLI help, 192 relative links/anchors,
   and diff checks passed. This documentation update changes no runtime behavior
   or acceptance status; no provider, device, or AWS flows were rerun.
-- **Outstanding:** real Apple Sandbox reconciliation, cloud scheduling/IAM/deployment,
+- **Cloud Google preparation, October 18:** a five-minute EventBridge rule and
+  separate discovery Lambda use the existing Google opt-in (disabled by default).
+  Paginated reads of known package-scoped token-owner records produce stable
+  per-run Google refresh jobs; the existing worker performs provider verification,
+  atomic commit, and acknowledgement. Discovery has conditional Scan/queue-send
+  permissions, no database writes or provider credentials. IAM-authorized preview
+  lists references only; partial failures/time-budget exhaustion fail visibly and
+  retry with the same scheduled ID. Delivery and execution retries have a separate
+  retained failure queue. This small-demo scan intentionally has no durable cursor
+  or discovery index. No deployment or account changes were performed.
+- **Cloud Google verification, October 18:** twelve isolated manual scenario
+  groups exercised the actual discovery and worker Lambda entries using disposable
+  DynamoDB Local/ElasticMQ resources and substituted Google/Secrets Manager
+  responses. Covered disabled/config rejection, empty/multiple/empty-filtered
+  pages, package isolation, zero-effect preview, queue acceptance/partial failure,
+  missing receipts, stable retry/new-run IDs, malformed references, time-budget
+  exhaustion, storage/provider outages, wrong owners, fresh state after discovery,
+  missed cancellation/renewal/expiry repair, and other-provider preservation.
+  Disposable resources were removed. CDK inspection preserved all 41 existing
+  resource IDs/types and unchanged table/queue definitions and retention; new
+  schedule state, conditional Scan/send IAM, separate failure destinations, and
+  concurrency/timeout/retry limits were checked. Live scheduler delivery, deployed
+  IAM, provider/device behavior, and latency remain unverified. `pnpm format`,
+  `pnpm check`, `pnpm infra:synth`, Markdown formatting, 165 relative links/anchors,
+  and diff checks passed; the known Web bundle-size warning remains. No automated
+  tests, deployments, real AWS/Google requests, or device checks were added.
+- **Outstanding:** real Apple Sandbox reconciliation, other-provider cloud
+  scheduling, deployed Google schedule/IAM/queue/worker evidence,
   a real missed-initial-webhook Stripe purchase exercise and measured seven-minute
   latency. Provider failures must never erase existing verified state.
-- **Next step:** once the own Apple key/product and device are available, verify
-  Sandbox renewal/expiration repair and record the provider/device evidence.
+- **Next step:** exercise a real missed Google lifecycle notification through the
+  P12 setup and record repair timing, preserving the local mock exercise. Apple Sandbox
+  renewal/expiration repair remains deferred until account access is restored.
 
 ## P10 Operations and final demo
 
@@ -355,6 +414,230 @@ evidence. AWS deployment and verification remain a separately authorized path.
 - **Outstanding:** real Stripe test cancellation through webhook/expiry, cloud
   billing/deployment, and complete Apple/Google lifecycle evidence. Existing
   real test subscriptions were not canceled during these checks.
+
+## P12 Google Play test purchases
+
+- **Scope:** one auto-renewing monthly Premium subscription, real Google Play
+  license-test instruments, and a local backend with optional AWS protected API,
+  notification, worker, and known-token cloud reconciliation code preparation.
+  Retain Google mocks for isolated exercises. Production
+  purchases/release and actual AWS deployment are not included.
+- **Acceptance:** Android build/install and real Auth0 login; purchase/restore
+  assigned only to the verified internal owner; server verification of package,
+  product/base plan, test-purchase status, current state, and expiry. Pending
+  purchases grant nothing. Persist subscription/grants/completion/outbox atomically
+  before backend acknowledgement; durable retries close the commit/acknowledgement
+  crash window without duplicate effects. No store secrets or purchase tokens in
+  client configuration/logs.
+- **Lifecycle acceptance:** authenticated Pub/Sub RTDN ingress, queue-before-HTTP
+  acknowledgement, current provider-state reads, duplicate/delayed/concurrent
+  events, cancellation/expiry/grace/account hold, and missed-event reconciliation.
+  Cancellation preserves verified paid access; another valid provider grant
+  survives. Store purchase acknowledgement is separate from Pub/Sub delivery
+  acknowledgement. Record real provider/device evidence for each exercised flow.
+- **Implemented, October 18:** documented [Google Play setup](GOOGLE_PLAY.md),
+  recommended product/base-plan IDs, internal track and separate license testing,
+  API service-account permissions, and RTDN preparation. Updated the confirmed
+  direction and project scope to prioritize Google while deferring Apple checks.
+  This is preparation only; no Google runtime integration or account setup has
+  been performed in this task.
+- **Verified, October 18:** checked setup against official Google documentation
+  and the existing mobile configuration/contracts. `pnpm format`, `pnpm check`
+  (including the existing iOS JavaScript export), edited-file Markdown formatting,
+  86 relative links/anchors, and diff whitespace checks passed. The existing Web
+  bundle-size warning remains. No Android build/device run, Play Console or Cloud
+  mutation, real Google request/purchase, or AWS deployment was performed.
+- **Local implementation, October 18:** added a dedicated Google adapter with
+  explicit service-account credentials and fixed Developer API endpoints;
+  test-only product/base-plan/owner/expiry validation; authenticated local API
+  config/sync/completion; Android native purchase/Restore/management and foreground
+  recovery through typed client methods. All-provider persistence atomically
+  commits immutable token ownership, state/access, processing intent, and outbox;
+  backend acknowledgement and conditional completion follow the commit and resume
+  safely on retry. Public records use token digests, and billing logs omit payloads.
+  A separate local port-3004 ingress verifies Google's Pub/Sub identity, expected
+  subscription and package, then enqueues stable message IDs before HTTP success.
+  Known-token reconciliation uses `--provider google`; the initial cloud worker
+  rejected Google jobs before the later AWS preparation below. Local mock behavior remains separate. Linked replacement tokens and offers
+  are explicitly unsupported rather than granting multiple independent lineages.
+- **Android preparation, October 18:** added package/version settings, a pinned
+  Google Play IAP store, SDK/JDK diagnostics, Android prebuild/development commands,
+  and signed/unsigned AAB commands. Generated release signing removes the debug-key
+  fallback and requires private upload-key settings for signed builds. Workspace
+  checks now export both iOS and Android JavaScript. Added configuration examples
+  and Android Auth0 callback instructions; no tenant or Console changes performed.
+- **Manual local evidence, October 18:** disposable DynamoDB Local/ElasticMQ and
+  isolated Google provider/certificate responses covered 20 scenario groups:
+  commit-before-acknowledgement and failed acknowledgement recovery, duplicates,
+  concurrent refreshes, wrong and immutable owners, production/product/base-plan/
+  expiry/linked-token rejection, provider outage, cancellation, exact grace/expiry,
+  account hold preserving Stripe, pending-payment denial, zero-write discovery,
+  queued repair/repeat, real Google-library signature/audience/email validation,
+  authenticated RTDN/queue failure, signed-JWT API scope/input/owner-only polling,
+  lost commit/completion responses, lazy credentials, cloud job rejection, and
+  actual Google-client endpoint/error handling with substituted SDK responses.
+  Disposable resources were removed. This is not real Google API or device evidence.
+- **Code/documentation checks, October 18:** `pnpm format`, `pnpm check`
+  (formatting, lint, types, backend/Web builds, iOS and Android JavaScript export),
+  edited Markdown formatting, 176 relative links/anchors, CLI help, log-payload
+  omission, and diff whitespace checks passed. The existing Web bundle-size
+  warning remains. Android prebuild generated the Auth0 callback, pinned Play
+  store, and release-signing configuration; the upload command rejected the
+  placeholder package. No automated test suite was added.
+- **Native build limit, October 18:** attempted an unsigned release AAB with
+  Android Studio's JDK 21 and SDK 36. Gradle plugins compiled, but the required
+  NDK 27.1.12297006 was absent; installation/download did not complete. The AAB
+  build and download attempts were stopped, and the isolated Gradle cache has no
+  running daemons. `mobile:android:doctor` now checks complete SDK/NDK/CMake
+  component files before building. No finished native APK/AAB, device rendering,
+  or signed-upload verification is claimed. Complete the SDK Manager installation
+  before rerunning the native build.
+- **Outstanding:** final package/version/upload identity and account/product/tester/
+  service-account/RTDN configuration; complete NDK installation/native build,
+  signed Play upload and real Android
+  login/purchase/Restore/management, renewal/expiry/grace/hold, and missed-event
+  reconciliation with measured timings. No real Google purchases, external account
+  mutations, AWS deployment, commits, or pushes were performed.
+- **AWS code preparation, October 18:** added an API Gateway Google POST route and
+  Lambda adapter using the same authenticated Pub/Sub ingress. CDK configuration
+  is default-off and validates opt-in package/secret/push settings; deploy dry runs
+  check account/region and public identifiers. Ingress has queue-send permission,
+  no database or secret access. Enabled cloud workers load a dedicated Google
+  service-account JSON secret; credentials and SDK sources refresh after a
+  five-minute cache. Conditional IAM covers only the required secret and Google/
+  common transaction key families, with completion updates limited to Google
+  event keys. At this stage, protected cloud purchase sync/polling and reconciliation
+  scheduling remained unwired. No deployment or Google account mutation performed.
+- **AWS preparation verification, October 18:** `pnpm format`, `pnpm check`, and
+  `pnpm infra:synth` passed. Template inspection confirmed the Google route,
+  default-off parameters/rule, queue-only ingress, conditional worker secret/data
+  IAM, Google-event-only completion updates, and URL output. Isolated baseline
+  synthesis confirmed all 32 existing resource logical IDs/types and unchanged
+  table/queue definitions and retention. No resources were deployed.
+  Seven synthetic deploy dry runs covered disabled/enabled settings and missing
+  secret, wrong-account ARN, invalid audience/email/subscription rejection before
+  AWS requests. Eight isolated cloud scenario groups covered five-minute secret/
+  source refresh, safe expired-secret failure, disabled mode, local/cloud queue
+  separation, real JWT verification through the Lambda/base64 adapter, stable
+  event IDs, queue-failure retries, TEST non-effects, and the actual worker Lambda
+  with partial-batch failures, commit-before-acknowledgement, duplicate recovery,
+  and wrong-owner rejection. Its DynamoDB calls were routed to a disposable local
+  table; Google, SQS, Secrets Manager, and certificates used isolated responses.
+  Twenty local Google scenario groups also passed. Temporary tables/queue were
+  removed. Markdown formatting and 126 relative links/anchors passed; the existing
+  Web bundle-size warning remains. No real AWS/Google requests, account changes,
+  device purchases, commits, or pushes were performed.
+- **Protected cloud API preparation, October 18:** the API Lambda now composes
+  Google config, purchase/Restore sync, and completion polling through the same
+  Auth0/user/scope middleware and strict contracts as the local API. The server
+  derives ownership from verified identity, returns 202 only after queue acceptance,
+  and reports completion only for the owner's durably finished client operation.
+  Missing/unfinished/other-owner operations all remain pending. Conditional CDK
+  IAM adds queue-send and Google-marker reads only; the API receives no Google
+  private key or new provider/completion write permissions. Cloud startup rejects
+  local endpoint overrides. Oversized Google sync requests now return structured
+  413 responses rather than the generic 500 error. At this stage, cloud scheduling
+  and all live/device evidence remained outstanding; nothing was deployed.
+- **Protected cloud API verification, October 18:** ten manual scenario groups
+  exercised the actual API and worker Lambda entries with real RS256 validation
+  against isolated JWKS responses and a disposable DynamoDB Local table. Covered
+  token/scope/machine rejection before persistence, strict input/size limits,
+  stable identities, queue-failure handling, base64 proxy requests, owner-only
+  polling, commit/acknowledgement retry, Restore, wrong-owner rejection, duplicate
+  non-effects, and default-off behavior. Google, Secrets Manager, and SQS responses
+  were isolated; twenty local Google regression groups also passed. Temporary
+  table/queue resources were removed. Template inspection retained all 40 existing
+  resource IDs/types and unchanged table/queue definitions/retention, adding only
+  the conditional API policy. `pnpm format`, `pnpm check`, and `pnpm infra:synth`
+  passed; documentation formatting/links were checked. The known Web bundle-size
+  warning remains. No deployment, real AWS/Google calls, or Android checks occurred.
+- **Cloud reconciliation preparation, October 18:** known-token discovery,
+  schedule, conditional IAM, and a separate failure queue are prepared under
+  [P09](#p09-reconciliation-and-expiration). Local CLI behavior and mock exercises
+  remain separate. No deployment or real Google lifecycle evidence is implied.
+- **Next step:** configure the private Android and Google settings, produce/upload
+  the signed AAB, activate the base plan, and run the real license-test checklist
+  in [Google Play setup](GOOGLE_PLAY.md#ready-for-the-first-integration-run).
+
+## P13 Admin-granted complimentary Premium
+
+- **Scope:** allow administrators to grant, inspect, and revoke Premium for an
+  existing internal user without a purchase, provider account, or subscription.
+  Use a restricted background administration path; no additional admin UI.
+  Support explicit expiry or access until revoked, shared by Web and Mobile.
+- **Acceptance:** persist a distinct admin grant with stable ID, owner, expiry
+  (if any), and audit history recording actor, timestamp, and reason for each
+  change. Enforce administrative authorization separately from ordinary user
+  scopes; reject unauthorized operations and unknown users. Normal Auth0 login
+  and API scope requirements continue to apply to recipients.
+- **Access and consistency:** combine admin and verified provider grants through
+  the central entitlement policy. Expiry/revocation of one source preserves
+  every other valid grant; reconciliation never overwrites admin grants.
+  Persist grant changes, entitlement state, audit history, and outbox entries
+  atomically with concurrency guards and repeat-safe operations. API reads must
+  enforce expiry even without a scheduled update.
+- **Manual verification:** grant access to a synthetic user with no purchase;
+  verify the same Premium features in Web and Mobile and unchanged access for
+  another user. Exercise timed expiry, access until revoked, repeat operations,
+  unauthorized requests, concurrent provider updates, and revocation/expiry in
+  both overlap directions. Show the source as complimentary access without
+  inventing a paid subscription or exposing purchase-management actions for it.
+- **Planned, October 18:** requirement added only. Existing local subscription
+  overrides and seeded provider mocks do not satisfy this task.
+- **Next step:** define the smallest privileged administration interface and
+  extend the domain/storage contracts for independent admin grants; update the
+  owning Payments, DynamoDB, and Development guides with the implementation.
+  Any cloud administration remains subject to separate deployment authorization.
+
+## Maintenance verification
+
+- **Worker provider structure, October 18:** grouped Stripe, Apple, Google Play,
+  and Google mocks under separate `providers/` folders. Stripe owns its contracts
+  and normalization; shared aggregate/error types, domain-change detection, atomic
+  persistence, and expiration remain in `processing/`. Apple/Google processors
+  explicitly separate access commits from durable provider completion. Runtime,
+  CLI, and reconciliation imports follow the new structure.
+- **Verified locally:** `pnpm format`, `pnpm check`, and disposable DynamoDB Local/
+  ElasticMQ exercises passed: Stripe paid-invoice verification, Apple finish
+  failure/retry, duplicate and unchanged refreshes, wrong-owner rejection,
+  revision conflicts, concurrent provider updates, due access boundaries, local
+  mock/expiration dispatch, and rejection of local jobs by the cloud adapter.
+  Reran 20 Google scenario groups with isolated provider/certificate responses,
+  including acknowledgement recovery and queued reconciliation. Disposable
+  tables/queue were removed; no automated test suite was added. Real provider,
+  device, and deployed AWS acceptance remains outstanding in the existing tasks.
+
+- **Provider persistence split, October 18:** moved Stripe, Apple, Google Play,
+  and Google mock ownership checks, subscription writes, processing markers, and
+  completion updates into their respective `providers/*/store.ts`. The shared
+  DynamoDB store owns consistent reads, aggregate loading, single-subscription
+  replacement, and the atomic revision/profile/access/outbox transaction.
+  Runtime and local Stripe reconciliation compose the appropriate provider store.
+- **Split verification:** `pnpm format` and `pnpm check` passed. Compared captured
+  DynamoDB requests with the pre-split implementation: Stripe/Apple/Google commits
+  with and without outbox entries, Apple/Google completion updates, and Google
+  mock source/marker reads and commits were identical. Disposable DynamoDB Local/
+  ElasticMQ reruns passed Stripe/Apple ownership, duplicate, conflict, concurrent
+  grant preservation, finish retry, and due-expiry flows; 20 Google scenario groups;
+  and credential-free mock/expiration runtime dispatch. Temporary tables/queue
+  were removed. These checks use isolated provider responses; real provider,
+  device, and deployed AWS acceptance remains unchanged.
+
+- **Provider construction factories, October 18:** moved SDK/source/store/processor
+  construction into each provider's `factory.ts`. The runtime keeps a short typed
+  switch, shared connection/configuration reuse, and Apple's local-only
+  reconciliation guard. Google retains a lazy source per runtime and validates
+  settings on every selection; Stripe/Apple credential caches are unchanged.
+  Mock/expiration factories reject cloud jobs without loading provider credentials.
+- **Factory verification:** `pnpm format`, `pnpm check`, and disposable manual
+  checks passed. Synthetic keys and isolated Secrets Manager/processor responses
+  exercised construction, explicit configuration errors, lazy Google creation,
+  per-runtime source reuse, separate cloud credential caches, matching provider
+  dispatch, and rejection of local jobs/Apple reconciliation before secret reads.
+  Actual mock/expiration dispatch ran against a disposable DynamoDB Local table,
+  including duplicate/revoked mock access; the table and synthetic key files were
+  removed. No automated test suite was added. These checks did not include real
+  provider requests, native builds, or AWS deployment.
 
 ## Manual scenario index
 

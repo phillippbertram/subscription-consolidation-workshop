@@ -3,23 +3,132 @@
 One table holds identities, subscriptions, and processing records. Start with
 [architecture](ARCHITECTURE.md); [Payments](PAYMENTS.md) explains the access rules.
 
-## Relationships
+## Logical ER model
+
+These are logical record types in **one DynamoDB table**, not SQL tables or
+database-enforced foreign keys. `||` means exactly one, `o|` zero or one, and
+`o{` zero or many. Lines describe relationships, not the order of writes.
+Selected fields explain each record; the sections below contain full key layouts.
+
+### Account, access, and processing
 
 ```mermaid
-flowchart LR
-    Identity["Verified issuer + subject"] --> Map["IDENTITY / MAP"]
-    Map --> User["USER / PROFILE"]
-    User --> Customer["Stripe customer mappings"]
-    User --> Subs["SUB records across providers"]
-    Owner["Provider subscription OWNER"] --> Subs
-    Subs --> Snapshot["ENTITLEMENTS revision"]
-    Snapshot --> Event["PROCESSED marker"]
-    Snapshot --> Outbox["Pending OUTBOX event"]
+erDiagram
+    IDENTITY_MAP ||--|| USER_PROFILE : resolves_to
+    USER_PROFILE ||--o{ SUBSCRIPTION : owns
+    USER_PROFILE ||--o| ENTITLEMENT_SNAPSHOT : has_current
+    USER_PROFILE ||--o{ PROVIDER_SUBSCRIPTION_OWNER : owns
+    SUBSCRIPTION ||..o| PROVIDER_SUBSCRIPTION_OWNER : protected_by
+    USER_PROFILE ||--o{ PROCESSING_MARKER : has_processed
+    USER_PROFILE ||--o{ OUTBOX_EVENT : has_change_history
+
+    IDENTITY_MAP {
+        string issuer
+        string subject
+        uuid userId
+    }
+    USER_PROFILE {
+        uuid userId
+        string identityHash
+        datetime createdAt
+    }
+    SUBSCRIPTION {
+        string provider
+        string providerSubscriptionId
+        string state
+        datetime accessUntil "nullable"
+    }
+    ENTITLEMENT_SNAPSHOT {
+        int revision "aggregate revision"
+        string tier
+        datetime effectiveUntil "nullable"
+        object grants "embedded array"
+    }
+    PROVIDER_SUBSCRIPTION_OWNER {
+        uuid userId
+        string customerId "Stripe only"
+        string purchaseToken "Google only; private"
+    }
+    PROCESSING_MARKER {
+        uuid userId
+        uuid correlationId "provider jobs"
+        datetime processedAt
+    }
+    OUTBOX_EVENT {
+        string domainEventId "userId and aggregate revision"
+        int revision
+        string status "pending or sent"
+    }
 ```
 
-The last three records participate in the worker transaction; arrows show
-relationships, not separate sequential writes. API access is recalculated from
-subscriptions and current time, so an old snapshot cannot extend access.
+Auth0 stores login credentials externally. Only after token verification does
+the API map the exact issuer/subject pair to a profile. The current application
+creates one mapping/profile pair; it does not merge identities by email. See
+[authentication flow](ARCHITECTURE.md#aws-deployment-topology).
+
+A profile can exist before billing or the first entitlement snapshot. It can
+own several subscriptions, including expired ones and overlapping providers.
+Verified provider processing creates the immutable owner binding; local demo
+subscriptions can exist without one. Processing markers belong to the user;
+their provider-specific references and finish/acknowledgement fields are below.
+
+The worker atomically saves subscription, owner binding, current snapshot, marker,
+and an outbox event when access/domain state changes. A snapshot's `grants` array
+is embedded derived data. Outbox records retain their own revision and access
+snapshot; they do not point to an immutable historical `ENTITLEMENTS` row.
+API access is recalculated from subscriptions and current time, so an old snapshot
+cannot extend access. A scope alone never grants Premium.
+
+### Checkout and local mock extensions
+
+```mermaid
+erDiagram
+    USER_PROFILE ||--o| STRIPE_CUSTOMER_MAPPING : reserves_or_binds
+    STRIPE_CUSTOMER_MAPPING ||--o{ CHECKOUT_REQUEST : used_by
+    USER_PROFILE ||--o{ CHECKOUT_REQUEST : starts
+    USER_PROFILE ||--o| ACTIVE_CHECKOUT : has_pointer
+    ACTIVE_CHECKOUT o|--|| CHECKOUT_REQUEST : selects
+    USER_PROFILE ||--o{ GOOGLE_MOCK_SOURCE : has_local_source
+
+    STRIPE_CUSTOMER_MAPPING {
+        uuid userId
+        string customerId "optional until resolved"
+        uuid requestId "customer creation intent"
+    }
+    CHECKOUT_REQUEST {
+        uuid userId
+        uuid requestId
+        string sessionId "optional until resolved"
+        number expiresAt "Unix seconds"
+    }
+    ACTIVE_CHECKOUT {
+        uuid userId
+        uuid requestId
+    }
+    GOOGLE_MOCK_SOURCE {
+        string subscriptionId
+        string status
+        int revision "independent source revision"
+    }
+```
+
+The logical Stripe customer mapping uses forward/reverse records after binding.
+Customer creation and checkout session references can remain unresolved; an active
+pointer selects a stored request and is not proof of payment. A checkout request
+does not directly create a subscription: verified worker processing does that.
+Google mock source rows are local-only inputs; their derived subscriptions and
+immutable owners use the core model above. Complimentary admin grants are planned
+in [P13](TASKS.md#p13-admin-granted-complimentary-premium) and have no stored record
+type yet.
+
+| Logical record                                | DynamoDB record family / details                                                                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity map / profile                        | [`IDENTITY#H / MAP`, `USER#U / PROFILE`](#identity-and-profile)                                                                                           |
+| Subscription                                  | [`USER#U / SUB#provider#reference`](#subscriptions)                                                                                                       |
+| Entitlement snapshot / outbox / Stripe marker | [`ENTITLEMENTS`, `OUTBOX#U:R`, `EVENT#stripe#E`](#subscription-processing-records)                                                                        |
+| Provider owner / store marker                 | [Stripe](#subscription-processing-records), [Apple](#apple-sandbox-records), [Google](#google-play-records), [Google mock](#local-reconciliation-records) |
+| Stripe customer / checkout request / pointer  | [`CUSTOMER#stripe`, `CHECKOUT#U#Q`, `CHECKOUT#ACTIVE`](#stripe-customer-and-checkout-records)                                                             |
+| Google mock source / local expiration marker  | [`MOCK#google#USER#U`, `EVENT#local_expiration#E`](#local-reconciliation-records)                                                                         |
 
 ## Table structure
 
@@ -142,6 +251,34 @@ access. A conditional `UpdateItem` records `finishedAt` only after Apple finish
 succeeds; it does not change grants, revisions, or outbox. Owner-only API polling
 reports completion only then. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
 
+## Google Play records
+
+`G` below is `<packageName>:<sha256(purchaseToken)>`. Raw tokens never appear in
+the public subscription view or outbox. Unlike the digest, a purchase token is
+private backend data and must not be logged or placed in client configuration.
+
+| PK / SK                                | Purpose                                                                                         |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `USER#U` / `SUB#google#G`              | Normalized, test-verified subscription; safe digest reference                                   |
+| `PROVIDER#google#SUB#G` / `OWNER`      | Immutable `userId`, package name, private purchase token for future provider refresh            |
+| `EVENT#google#<eventId>` / `PROCESSED` | User, digest reference, event type, `needsAcknowledgement`, commit time, optional `completedAt` |
+
+The owner binding, subscription, aggregate revision/access, processing marker,
+and changed-state outbox commit atomically through the same all-provider path.
+Only then does the worker acknowledge Google and conditionally save `completedAt`.
+A lost response repeats provider verification/acknowledgement without replaying
+the domain commit. API operation polling requires both the owner and recorded
+completion. Notifications derive the owner from Google's verified account UUID;
+client jobs additionally require a match with the authenticated user's UUID.
+Local and cloud API polling use a strongly consistent marker read and require
+`eventType=client.sync`. Conditional cloud API IAM adds only `GetItem` for
+`EVENT#google#*`; marker completion and provider-owner writes belong to the worker.
+
+Reconciliation reads the private owner/token record with a consistent read and
+validates its owner, package, and hash against the stored subscription. Tokens
+are retained so missed updates can be checked; token retirement and encrypted
+production storage/lifecycle are outside the local demo.
+
 ## Local reconciliation records
 
 | PK / SK                                               | Fields and role                                                                                                             |
@@ -174,6 +311,7 @@ Processing markers and outbox records have no automatic cleanup or TTL.
 | Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                                                            |
 | Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                                                                |
 | Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query` |
+| Cloud Google reconciliation discovery                | Paginated consistent `Scan` filtered to package-scoped Google owner records; project owner UUID, private token, package and keys; enqueue refresh only  |
 | Local outbox discovery                               | Paginated consistent `Scan` filtered by `OUTBOX#`, `EVENT`, and pending status; reads the whole table                                                   |
 | Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance                                                             |
 | Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows                                                       |
@@ -182,10 +320,18 @@ User-facing flows use no table scan. Local outbox discovery scans the small demo
 table without an index; filters do not reduce read capacity. Local Stripe
 reconciliation discovers provider subscriptions through the stored customer and
 reuses processing. The local five-minute reconciliation watcher also scans
-profiles; a cloud scheduler and production-scale discovery indexes are not wired.
+profiles. Cloud Google discovery scans known owner records, without a new record
+type, cursor, or database writes; run/job IDs travel in the schedule event and
+queue. Its scan filter does not enforce an IAM key boundary. Production-scale
+indexes/resumable discovery and other providers' cloud schedules are not wired.
 Direct DynamoDB Admin edits bypass these guarantees.
 
 Sources: [user store](../services/api/src/dynamodb-users.ts),
 [checkout store](../services/api/src/billing/dynamodb-billing.ts),
 [subscription reads](../packages/persistence/src/subscriptions.ts),
-[processing store](../services/subscription-worker/src/processing/dynamodb-processing.ts).
+[shared processing transaction](../packages/subscription-processing/src/processing/dynamodb-processing.ts),
+[Stripe persistence](../packages/subscription-processing/src/providers/stripe/store.ts),
+[Apple persistence](../packages/subscription-processing/src/providers/apple/store.ts),
+[Google persistence](../packages/subscription-processing/src/providers/google/store.ts),
+[Google discovery reads](../packages/subscription-processing/src/providers/google/reconciliation-store.ts),
+and [Google mock persistence](../packages/subscription-processing/src/providers/google-mock/store.ts).

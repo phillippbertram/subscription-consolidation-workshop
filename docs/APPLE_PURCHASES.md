@@ -76,11 +76,11 @@ delivery order is not guaranteed, and the worker never waits for both.
 
 ```mermaid
 sequenceDiagram
-    participant App as iPhone app
+    participant App as Mobile (iPhone)<br/>@premiumpass/mobile
     participant Apple as App Store
-    participant API as PremiumPass API
-    participant Webhook as Apple webhook
-    participant Queue
+    participant API as API<br/>@premiumpass/api
+    participant Webhook as Apple webhook<br/>@premiumpass/apple-webhook
+    participant Queue as SQS / ElasticMQ
     App->>API: Get product and appAccountToken
     API-->>App: Sandbox config
     App->>Apple: Purchase through StoreKit
@@ -104,7 +104,7 @@ acceptance, while the app polls its own API operation until `finishedAt` is save
 
 ```mermaid
 sequenceDiagram
-    participant Worker as Subscription worker
+    participant Worker as Subscription worker<br/>@premiumpass/subscription-worker
     participant AppleAPI as App Store Server API
     participant DB as DynamoDB
     Worker->>AppleAPI: Get Transaction Info
@@ -140,9 +140,9 @@ lifecycle changes to the separate local notification service.
 ```mermaid
 flowchart LR
     Apple["Apple Sandbox"] -->|"HTTPS notification"| Tunnel["ngrok"]
-    Tunnel --> Ingress["Apple webhook :3003"]
+    Tunnel --> Ingress["Apple webhook :3003<br/>@premiumpass/apple-webhook"]
     Ingress -->|"Verified references"| Queue["ElasticMQ"]
-    Queue --> Worker["Subscription worker"]
+    Queue --> Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
     Worker --> DB["DynamoDB Local"]
 ```
 
@@ -237,8 +237,8 @@ With the [worker's Apple configuration](#enable-local-processing) in place,
 run a preview, then enqueue a refresh:
 
 ```sh
-pnpm reconcile --user <internal-user-id> --provider apple --dry-run
-pnpm reconcile --user <internal-user-id> --provider apple
+pnpm subscription:reconcile --user <internal-user-id> --provider apple --dry-run
+pnpm subscription:reconcile --user <internal-user-id> --provider apple
 ```
 
 Keep `pnpm dev:worker` running for queued work. Configured commands call the real
