@@ -73,18 +73,19 @@ Auth0 and Stripe remain real external services in development/test mode.
 ## Learning path
 
 Modules 1–6 run locally with Auth0, Stripe test mode, and Docker. Modules 7–8
-need store or AWS accounts. `T…` IDs refer to manual exercises in the linked guides.
+need store or AWS accounts for their optional parts. Each module has a short
+[exercise sheet](docs/exercises/README.md) with steps, code to read, and questions.
 
-| Module                    | You learn                                                     | Read                                                                                                  | Try                                                                                   |
-| ------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase           | [Auth0](docs/AUTH0_SETUP.md), [`auth.ts`](services/api/src/auth.ts)                                   | [T01–T03, T05](docs/AUTH0_SETUP.md#manual-verification)                               |
-| 2. First purchase         | Checkout, signed webhook, queue, worker verification          | [Payments](docs/PAYMENTS.md#payment-flow)                                                             | [T06–T09](docs/PAYMENTS.md#manual-checks)                                             |
-| 3. Consolidation          | Translate provider states, combine grants, check time         | [Concepts](docs/CONCEPTS.md), [Access policy](docs/PAYMENTS.md#access-policy)                         | [T04, T22](docs/PAYMENTS.md#manual-checks)                                            |
-| 4. Reliability            | Duplicates, revisions, atomic commit, outbox, DLQ             | [Processing and retries](docs/PAYMENTS.md#processing-and-retries)                                     | [T10–T18](docs/PAYMENTS.md#manual-checks), [outbox](docs/DEVELOPMENT.md#local-outbox) |
-| 5. Repair missed updates  | Reconciliation and expiration                                 | [Reconciliation](docs/RECONCILIATION.md)                                                              | [T20–T21](docs/DEVELOPMENT.md#local-reconciliation-and-expiration)                    |
-| 6. Complimentary Premium  | Access without a purchase, audited and revocable              | [Complimentary access](docs/PAYMENTS.md#complimentary-access)                                         | [CLI commands](docs/DEVELOPMENT.md#complimentary-premium)                             |
-| 7. Native store purchases | Mobile login, Google Play / Apple purchase, ownership binding | [Mobile](apps/mobile/README.md), [Google Play](docs/GOOGLE_PLAY.md), [Apple](docs/APPLE_PURCHASES.md) | [Apple device checks](docs/APPLE_PURCHASES.md#manual-device-checks)                   |
-| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks                | [Architecture](docs/ARCHITECTURE.md#aws-deployment-topology), [AWS](infra/README.md)                  | [Deployed checks](infra/README.md#verify-the-deployed-path)                           |
+| Module                    | You learn                                                     | Read                                                                                                  | Try                                                       |
+| ------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase           | [Auth0](docs/AUTH0_SETUP.md), [`auth.ts`](services/api/src/auth.ts)                                   | [Exercise 1](docs/exercises/01-login-and-tokens.md)       |
+| 2. First purchase         | Checkout, signed webhook, queue, worker verification          | [Payments](docs/PAYMENTS.md#payment-flow)                                                             | [Exercise 2](docs/exercises/02-first-purchase.md)         |
+| 3. Consolidation          | Translate provider states, combine grants, check time         | [Concepts](docs/CONCEPTS.md), [Access policy](docs/PAYMENTS.md#access-policy)                         | [Exercise 3](docs/exercises/03-consolidation.md)          |
+| 4. Reliability            | Duplicates, revisions, atomic commit, outbox, DLQ             | [Processing and retries](docs/PAYMENTS.md#processing-and-retries)                                     | [Exercise 4](docs/exercises/04-reliability.md)            |
+| 5. Repair missed updates  | Reconciliation and expiration                                 | [Reconciliation](docs/RECONCILIATION.md)                                                              | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
+| 6. Complimentary Premium  | Access without a purchase, audited and revocable              | [Complimentary access](docs/PAYMENTS.md#complimentary-access)                                         | [Exercise 6](docs/exercises/06-complimentary-premium.md)  |
+| 7. Native store purchases | Mobile login, Google Play / Apple purchase, ownership binding | [Mobile](apps/mobile/README.md), [Google Play](docs/GOOGLE_PLAY.md), [Apple](docs/APPLE_PURCHASES.md) | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
+| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks                | [Architecture](docs/ARCHITECTURE.md#aws-deployment-topology), [AWS](infra/README.md)                  | [Exercise 8](docs/exercises/08-aws.md)                    |
 
 Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove the environment.
 
