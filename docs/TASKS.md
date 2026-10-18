@@ -2,8 +2,8 @@
 
 The sole source of implementation status. [Project plan](../PROJECT_PLAN.md)
 defines scope; [Decisions](DECISIONS.md) records choices. Each task lists what
-counts as done, what exists, and what is still open. Dated, detailed evidence is
-kept in the [evidence log](history/EVIDENCE_LOG.md).
+counts as done, what exists, and what is still open. Older, detailed
+verification notes remain available in the Git history of this file.
 
 ## Status and sequence
 
@@ -39,7 +39,7 @@ complete. AWS deployment and verification remain a separately authorized path.
   decisions distinct from proposals, no secrets or invented commands.
 - **Done:** agent rules, local-first setup and topic guides, cleanup guidance,
   architecture/data diagrams, concept page, learning path, and code written as
-  workshop material. [Evidence](history/EVIDENCE_LOG.md#p00-prepare-the-project-for-agents).
+  workshop material.
 
 ## P01 Local HTTP skeleton
 
@@ -47,7 +47,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   errors, checks/build, and importable Lambda handler without an open HTTP port.
 - **Done:** Hono local/Lambda entries, pnpm workspace, shared HTTP/queue
   contracts, AWS factories, client feature folders, and a separate CLI workspace.
-  [Evidence](history/EVIDENCE_LOG.md#p01-local-http-skeleton).
 
 ## P02 Backend Auth0 token verification
 
@@ -56,7 +55,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   logs or runtime authentication bypass; direct handler requests are protected.
 - **Done:** `jose` verification with a fixed JWKS URL, scope checks, and safe
   outage behavior, verified with isolated keys.
-  [Evidence](history/EVIDENCE_LOG.md#p02-backend-auth0-token-verification).
 - **Limit:** isolated token fixtures are not tenant or cloud verification.
 
 ## P03 Small AWS stack and user persistence
@@ -66,7 +64,7 @@ complete. AWS deployment and verification remain a separately authorized path.
   user IDs, and recorded account/region/stack evidence.
 - **Done:** CDK stack, local Compose database, idempotent initialization,
   account-checked deploy/bootstrap wrappers with dry runs; concurrent first
-  logins create one identity. [Evidence](history/EVIDENCE_LOG.md#p03-small-aws-stack-and-user-persistence).
+  logins create one identity.
 - **Open:** real STS/bootstrap/deployment, API Gateway/IAM enforcement, and
   deployed requests for two real Auth0 demo users. [AWS procedure](../infra/README.md).
 
@@ -76,7 +74,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   distinct users, visible network/auth failures, and SDK-owned credentials.
 - **Done:** real Auth0 login and profile on the iOS Simulator; physical iPhone
   sign-in confirmed by the user; LAN access checked.
-  [Evidence](history/EVIDENCE_LOG.md#p04-mobile-login-through-to-the-users-profile).
 - **Follow-up:** authenticated profile/logout on a physical iPhone, Android, and
   AWS not yet confirmed. [Mobile checks](../apps/mobile/README.md#manual-checks).
 
@@ -86,7 +83,7 @@ complete. AWS deployment and verification remain a separately authorized path.
   period-end cancellation, bounded grace, unknown mappings and multiple providers;
   [T04/T22](PAYMENTS.md#manual-checks) through the API.
 - **Done:** pure rules in the domain package; T22 switched 200 to 403 exactly at
-  expiry without a write. [Evidence](history/EVIDENCE_LOG.md#p05-subscription-and-entitlement-domain-rules).
+  expiry without a write.
 
 ## P06 Stripe purchase and reliable processing
 
@@ -96,7 +93,6 @@ complete. AWS deployment and verification remain a separately authorized path.
 - **Done:** owned checkout with idempotent attempts, signature-verified webhook,
   worker with paid-period verification, atomic commit, retry/DLQ configuration.
   A real Stripe test purchase (October 10) produced Premium in Web and iOS.
-  [Evidence](history/EVIDENCE_LOG.md#p06-stripe-purchase-and-reliable-processing).
 - **Open:** real cancellation/renewal/failed-payment and delayed-event scenarios;
   cloud billing secret/IAM/CORS; deployed SQS/DLQ/redrive; the 30-second target.
 
@@ -111,7 +107,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   immutable owner binding, sync polling, notification ingress, backend finish
   after commit, Google mocks; default-off AWS notification wiring. Verified with
   isolated provider responses only.
-  [Evidence](history/EVIDENCE_LOG.md#p07-apple-sandbox-and-google-mocks).
 - **Open (deferred, account issues):** real purchase, restore, management,
   renewal, expiry, and signed tunnel delivery on a device. Cloud: deploy with a
   real secret, register the URL, and wire cloud Apple sync.
@@ -127,7 +122,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   must not depend on consumer success.
 - **Done:** local publisher and log consumer over ElasticMQ, stable domain IDs,
   per-entry acceptance, EventBridge SDK adapter.
-  [Evidence](history/EVIDENCE_LOG.md#p08-outbox-publisher-and-eventbridge).
 - **Open:** cloud bus/rule runtime, delivery versus execution failure handling,
   deployment/IAM, and a live EventBridge trace.
 
@@ -143,7 +137,6 @@ complete. AWS deployment and verification remain a separately authorized path.
 - **Done:** local watcher for Stripe, Apple, Google, mock, and expiration jobs;
   real Stripe test-mode preview and repair; default-off shared cloud schedule with
   one discovery Lambda per provider.
-  [Evidence](history/EVIDENCE_LOG.md#p09-reconciliation-and-expiration).
 - **Open:** real Apple Sandbox reconciliation, deployed schedule/IAM evidence, a
   real missed-initial-webhook Stripe exercise, and measured seven-minute latency.
 - **Next step:** repair a real missed Google lifecycle notification through P12
@@ -166,7 +159,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   preserved, and lifecycle/failure/duplicate scenarios in test/sandbox environments.
 - **Done:** local Stripe period-end cancellation with Web confirmation and
   ownership checks; Apple and Google native management.
-  [Evidence](history/EVIDENCE_LOG.md#p11-self-service-subscription-cancellation).
 - **Open:** a real Stripe test cancellation through webhook and expiry, cloud
   billing, and complete Apple/Google lifecycle evidence.
 
@@ -194,7 +186,6 @@ complete. AWS deployment and verification remain a separately authorized path.
   completion polling, Android purchase/restore/management, authenticated RTDN
   ingress, known-token reconciliation, and default-off AWS wiring including the
   protected API. Verified with isolated Google responses only.
-  [Evidence](history/EVIDENCE_LOG.md#p12-google-play-test-purchases).
 - **Blocked:** the native build needs NDK 27.1.12297006, which was not installed.
 - **Open:** private package/upload identity, account/product/tester/RTDN setup,
   native build, signed Play upload, real Android purchase/restore/management,
@@ -224,15 +215,8 @@ complete. AWS deployment and verification remain a separately authorized path.
 - **Done:** `pnpm cli premium grant|revoke|list` on the fixed local database,
   required reason and OS actor, atomic grant/audit/snapshot/outbox writes, shared
   processing package; verified against a disposable local database.
-  [Evidence](history/EVIDENCE_LOG.md#p13-admin-granted-complimentary-premium).
 - **Open:** end-to-end refresh and visual checks in the authenticated Web app and
   on a mobile simulator/device.
-
-## Maintenance
-
-Structural refactorings without status changes (provider folders, stores,
-factories, CLI workspace, configuration isolation, workshop readability) are
-recorded under [maintenance verification](history/EVIDENCE_LOG.md#maintenance-verification).
 
 ## Manual scenario index
 
@@ -246,8 +230,7 @@ recorded under [maintenance verification](history/EVIDENCE_LOG.md#maintenance-ve
 ## Handoff format
 
 Update the task here in a few lines: **done, open, next step**, and change its
-status only when its acceptance is met. Add the dated details (exact commands,
-manual outcomes, limits) to the [evidence log](history/EVIDENCE_LOG.md), never
+status only when its acceptance is met. Name what was actually checked, never
 full logs or secrets. Keep local, device, provider, and live AWS evidence
 distinct. A document or successful build is not evidence that an external
 integration ran.

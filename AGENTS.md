@@ -59,7 +59,7 @@ The pnpm workspace contains the Hono API. `pnpm check` runs formatting checks, l
 
 ## Handoffs and documentation maintenance
 
-Maintain implementation task status exclusively in `docs/TASKS.md`, kept short: done, open, next step. Record dated, detailed verification evidence in `docs/history/EVIDENCE_LOG.md`. Mark a task complete only when its acceptance criteria are met. For partial progress, state exactly which verification is missing.
+Maintain implementation task status exclusively in `docs/TASKS.md`, kept short: done, open, next step. Mark a task complete only when its acceptance criteria are met. For partial progress, state exactly which verification is missing.
 
 Update the smallest relevant set of documents: setup in `docs/GETTING_STARTED.md`, commands in `docs/DEVELOPMENT.md`, decisions in `docs/DECISIONS.md`, and technical behavior in the owning architecture, payment, or data-model guide. Keep goals and scope in the project plan. Repetition does not turn a recommendation into a confirmed decision.
 

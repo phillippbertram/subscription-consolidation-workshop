@@ -1,8 +1,7 @@
 # Decisions
 
 Confirmed direction and short rationale. This is not an implementation history;
-status belongs in [TASKS](TASKS.md), detailed evidence in its
-[evidence log](history/EVIDENCE_LOG.md).
+status belongs in [TASKS](TASKS.md).
 
 ## Agreed direction
 

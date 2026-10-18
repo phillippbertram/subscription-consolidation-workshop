@@ -17,12 +17,12 @@ Start locally with [Getting started](../docs/GETTING_STARTED.md); see
 | Logs                    | CloudWatch, seven-day retention                                                                                                   |
 | Secrets                 | Existing Secrets Manager references; no values embedded in CDK                                                                    |
 
-| Role     | May                                                                     | May not                                  |
-| -------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| API      | Read/write identity and profile records; query a user's subscriptions  | Read provider keys                        |
-| Webhooks | Send to the queue (Stripe also reads its signing secret)                | Touch DynamoDB; read Apple/Google keys    |
-| Worker   | Read provider keys; write user, provider-owner, marker, outbox records  | Write identity mappings                   |
-| Google   | Extra API/worker rights only with `GoogleEnabled=true`                  | Anything while Google is disabled         |
+| Role     | May                                                                    | May not                                |
+| -------- | ---------------------------------------------------------------------- | -------------------------------------- |
+| API      | Read/write identity and profile records; query a user's subscriptions  | Read provider keys                     |
+| Webhooks | Send to the queue (Stripe also reads its signing secret)               | Touch DynamoDB; read Apple/Google keys |
+| Worker   | Read provider keys; write user, provider-owner, marker, outbox records | Write identity mappings                |
+| Google   | Extra API/worker rights only with `GoogleEnabled=true`                 | Anything while Google is disabled      |
 
 Key-prefix conditions limit record families, not individual users: `USER#*`
 also covers profiles and subscriptions, so the code still enforces ownership
@@ -131,7 +131,7 @@ template does not establish deployed IAM, event delivery, or purchases.
   owned records separately. Local database mappings are not copied to AWS.
 - T16/T17: force a disposable job to fail, inspect its DLQ entry, fix the cause,
   and redrive it. Preserve event identity; do not purge to hide failures.
-- Record what you verified in [TASKS](../docs/TASKS.md) and its evidence log.
+- Record what you verified in [TASKS](../docs/TASKS.md).
 
 ### Cloud reconciliation
 
