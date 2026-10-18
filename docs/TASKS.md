@@ -107,6 +107,8 @@ complete. AWS deployment and verification remain a separately authorized path.
   immutable owner binding, sync polling, notification ingress, backend finish
   after commit, Google mocks; default-off AWS notification wiring. Verified with
   isolated provider responses only.
+- **Refactor:** Apple/Google purchase hooks use local reducers in provider folders;
+  native purchase/restore regression checks remain open.
 - **Open (deferred, account issues):** real purchase, restore, management,
   renewal, expiry, and signed tunnel delivery on a device. Cloud: deploy with a
   real secret, register the URL, and wire cloud Apple sync.

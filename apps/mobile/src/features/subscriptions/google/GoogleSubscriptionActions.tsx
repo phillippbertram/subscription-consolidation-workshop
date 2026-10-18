@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Platform, View } from 'react-native';
 import type { SubscriptionOverview } from '@premiumpass/api-contracts';
-import { Text } from '../../components/ui/text';
-import { Button, ButtonText } from '../../components/ui/button';
-import { ErrorMessage } from '../../components/ErrorMessage';
+import { Text } from '../../../components/ui/text';
+import { Button, ButtonText } from '../../../components/ui/button';
+import { ErrorMessage } from '../../../components/ErrorMessage';
 import { useGooglePurchase } from './use-google-purchase';
 
 interface Props {

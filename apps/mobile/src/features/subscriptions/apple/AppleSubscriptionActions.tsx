@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { Platform, Switch, View } from 'react-native';
 import type { SubscriptionOverview } from '@premiumpass/api-contracts';
-import { Text } from '../../components/ui/text';
-import { Button, ButtonText } from '../../components/ui/button';
-import { ErrorMessage } from '../../components/ErrorMessage';
+import { Text } from '../../../components/ui/text';
+import { Button, ButtonText } from '../../../components/ui/button';
+import { ErrorMessage } from '../../../components/ErrorMessage';
 import { useApplePurchase } from './use-apple-purchase';
 
 interface AppleSubscriptionActionsProps {

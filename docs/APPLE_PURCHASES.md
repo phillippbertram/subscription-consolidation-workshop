@@ -6,6 +6,57 @@ Connect resources, and a Sandbox Apple Account. Complete the
 [mobile configuration](../apps/mobile/README.md#configure-the-app) first; prepare
 the resources below before the signed iPhone build.
 
+## How a purchase works
+
+Three parties take part: the **app** shows Apple's purchase sheet, the **App
+Store** takes the payment, and the **backend** decides about Premium.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgb(239, 246, 255) iPhone
+        participant App as PremiumPass app
+    end
+    box rgb(244, 244, 245) Apple
+        participant Store as App Store
+    end
+    box rgb(240, 253, 250) PremiumPass
+        participant Backend as Backend
+    end
+    App->>Backend: Which product? Who am I?
+    Backend-->>App: Product ID + appAccountToken (= your user ID)
+    App->>Store: Buy, with the appAccountToken attached
+    Store-->>App: Signed transaction, token included
+    App->>Backend: Please check this transaction
+    Backend->>Store: Fetch the signed transaction and current status
+    Note over Backend: Check signature, product, Sandbox,<br/>and that the token is this user
+    Backend->>Backend: Save Premium in one atomic write
+    Backend->>Store: Finish the transaction
+    App->>Backend: Done yet?
+    Backend-->>App: Completed, show Premium
+```
+
+| Who     | Does                                                                    | Never does                                   |
+| ------- | ----------------------------------------------------------------------- | -------------------------------------------- |
+| App     | Fetch config, open the purchase sheet, send the transaction ID, wait    | Grant Premium or finish the transaction      |
+| Backend | Verify with Apple, check the owner, save access, finish the transaction | Trust what the app says without asking Apple |
+
+**What is the `appAccountToken` for?** Apple lets an app attach one UUID to a
+purchase, and signs it into the transaction. We use the internal user ID. That
+way the backend can prove which PremiumPass account bought the subscription,
+even when the purchase arrives later through a notification or a restore. If
+the token belongs to a different user, the purchase is rejected.
+
+**How is a transaction completed?** StoreKit keeps every transaction
+_unfinished_ until someone finishes it, and delivers unfinished ones again on
+the next app start. Here only the backend finishes it, and only after Premium is
+saved (step 8, Apple's Finish Transaction API). If anything fails before that,
+Apple simply delivers the transaction again; nothing is lost and nothing is
+granted twice.
+
+**Later changes** such as renewals or cancellations arrive as signed App Store
+Server Notifications and go through steps 6–8 without the app.
+
 ## Prepare your Apple resources
 
 | Step | Create or configure                                                                     | Keep for configuration                                             |

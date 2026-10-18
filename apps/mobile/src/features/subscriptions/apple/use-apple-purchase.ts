@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useReducer } from 'react';
 import { AppState } from 'react-native';
 import {
   useIAP,
@@ -9,13 +9,14 @@ import {
   showManageSubscriptionsIOS,
   type Purchase,
 } from 'expo-iap';
-import type {
-  AppleConfig,
-  SubscriptionOverview,
-} from '@premiumpass/api-contracts';
-import { ApiError, type ApiClient } from '../../api/api-client';
-import { useApiClient } from '../../api/use-api-client';
-import { canPurchasePremium } from './subscription-presentation';
+import type { SubscriptionOverview } from '@premiumpass/api-contracts';
+import { ApiError, type ApiClient } from '../../../api/api-client';
+import { useApiClient } from '../../../api/use-api-client';
+import { canPurchasePremium } from '../subscription-presentation';
+import {
+  applePurchaseReducer,
+  initialApplePurchaseState,
+} from './apple-purchase-state';
 
 class PurchaseSyncError extends Error {}
 
@@ -39,12 +40,12 @@ export function useApplePurchase({
   onVerified: () => void;
 }) {
   const api = useApiClient();
-  const [config, setConfig] = useState<AppleConfig>();
-  const [busy, setBusy] = useState(false);
-  const [nativeAction, setNativeAction] = useState(false);
-  const [allowDuplicatePurchase, setAllowDuplicatePurchase] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(
+    applePurchaseReducer,
+    initialApplePurchaseState,
+  );
+  const { config, busy, nativeAction, allowDuplicatePurchase, message, error } =
+    state;
   // Aborted on unmount: late async results must not update a closed screen.
   const lifetime = useRef(new AbortController());
   // One verification per transaction, even if StoreKit reports it twice.
@@ -96,14 +97,12 @@ export function useApplePurchase({
         }
 
         if (!signal.aborted) {
-          setBusy(true);
-          setError(null);
-          setMessage('Verifying your purchase…');
+          dispatch({ type: 'verificationStarted' });
         }
 
         await synchronizeApplePurchase(api, purchase.id, signal);
         if (!signal.aborted) {
-          setMessage('Purchase synchronized.');
+          dispatch({ type: 'verificationSucceeded' });
           onVerifiedRef.current();
         }
       };
@@ -111,19 +110,20 @@ export function useApplePurchase({
       const task = work()
         .catch((failure: unknown) => {
           if (!signal.aborted) {
-            setMessage(null);
-            setError(
-              failure instanceof ApiError ||
+            dispatch({
+              type: 'verificationFailed',
+              error:
+                failure instanceof ApiError ||
                 failure instanceof PurchaseSyncError
-                ? failure.message
-                : 'Unable to verify your purchase. Please retry.',
-            );
+                  ? failure.message
+                  : 'Unable to verify your purchase. Please retry.',
+            });
           }
         })
         .finally(() => {
           pending.current.delete(purchase.id);
           if (!signal.aborted && pending.current.size === 0) {
-            setBusy(false);
+            dispatch({ type: 'verificationsSettled' });
           }
         });
       pending.current.set(purchase.id, task);
@@ -141,19 +141,16 @@ export function useApplePurchase({
         return;
       }
 
-      setBusy(false);
-      setMessage(null);
-      setError(
-        failure.code === ErrorCode.UserCancelled
-          ? null
-          : 'Apple could not complete the purchase. Please retry.',
-      );
+      dispatch({
+        type:
+          failure.code === ErrorCode.UserCancelled
+            ? 'purchaseCancelled'
+            : 'purchaseFailed',
+      });
     },
     onError: () => {
       if (!lifetime.current.signal.aborted) {
-        setError(
-          'Cannot connect to the App Store. Check your sandbox account and retry.',
-        );
+        dispatch({ type: 'connectionFailed' });
       }
     },
   });
@@ -174,7 +171,7 @@ export function useApplePurchase({
           return;
         }
 
-        setConfig(settings);
+        dispatch({ type: 'configLoaded', config: settings });
         await fetchProducts({ skus: [settings.productId], type: 'subs' });
         const unfinished = await getPendingTransactionsIOS();
         if (!controller.signal.aborted) {
@@ -184,11 +181,13 @@ export function useApplePurchase({
         }
       } catch (failure) {
         if (!controller.signal.aborted) {
-          setError(
-            failure instanceof ApiError
-              ? failure.message
-              : 'Apple purchases are unavailable. Check the local Apple configuration and reload the app.',
-          );
+          dispatch({
+            type: 'configurationFailed',
+            error:
+              failure instanceof ApiError
+                ? failure.message
+                : 'Apple purchases are unavailable. Check the local Apple configuration and reload the app.',
+          });
         }
       }
     })();
@@ -242,9 +241,7 @@ export function useApplePurchase({
       return;
     }
 
-    setBusy(true);
-    setError(null);
-    setMessage(null);
+    dispatch({ type: 'checkoutStarted' });
     try {
       // Recheck the backend before opening StoreKit, including purchases made on the web.
       const [current, latest] = await Promise.all([
@@ -267,8 +264,7 @@ export function useApplePurchase({
         !purchaseAllowed.current ||
         (!canPurchasePremium(latest) && !mayOverride)
       ) {
-        setBusy(false);
-        setMessage('Your subscription status changed. Refreshing your access.');
+        dispatch({ type: 'eligibilityChanged' });
         onVerifiedRef.current();
         return;
       }
@@ -286,18 +282,13 @@ export function useApplePurchase({
       });
     } catch {
       if (!lifetime.current.signal.aborted) {
-        setBusy(false);
-        setError(
-          'Unable to start the purchase. Check your session and sandbox account.',
-        );
+        dispatch({ type: 'checkoutFailed' });
       }
     }
   }
 
   async function restore() {
-    setNativeAction(true);
-    setError(null);
-    setMessage('Restoring purchases…');
+    dispatch({ type: 'restoreStarted' });
     try {
       await syncIOS();
       const items = [
@@ -316,7 +307,7 @@ export function useApplePurchase({
         ).values(),
       ];
       if (!relevant.length) {
-        setMessage('No purchases found for this Apple account.');
+        dispatch({ type: 'restoreEmpty' });
       }
 
       for (const purchase of relevant) {
@@ -324,14 +315,11 @@ export function useApplePurchase({
       }
     } catch {
       if (!lifetime.current.signal.aborted) {
-        setMessage(null);
-        setError(
-          'Unable to restore purchases. Check your sandbox account and retry.',
-        );
+        dispatch({ type: 'restoreFailed' });
       }
     } finally {
       if (!lifetime.current.signal.aborted) {
-        setNativeAction(false);
+        dispatch({ type: 'nativeActionFinished' });
       }
     }
   }
@@ -344,9 +332,7 @@ export function useApplePurchase({
     const appleSubscriptions = overview.subscriptions.filter(
       (subscription) => subscription.provider === 'apple',
     );
-    setNativeAction(true);
-    setError(null);
-    setMessage(null);
+    dispatch({ type: 'managementStarted' });
     const signal = lifetime.current.signal;
     try {
       await showManageSubscriptionsIOS();
@@ -354,7 +340,7 @@ export function useApplePurchase({
         return;
       }
 
-      setMessage('Updating your subscription…');
+      dispatch({ type: 'managementRefreshStarted' });
       // A renewal setting can change without a new transaction. Refresh each known lineage.
       for (const subscription of appleSubscriptions) {
         const transactionId = /^Sandbox:([0-9]{1,64})$/.exec(
@@ -366,18 +352,15 @@ export function useApplePurchase({
       }
 
       if (!signal.aborted) {
-        setMessage('Subscription updated.');
+        dispatch({ type: 'managementSucceeded' });
       }
     } catch {
       if (!signal.aborted) {
-        setMessage(null);
-        setError(
-          'Unable to open or refresh Apple subscription management. Please retry.',
-        );
+        dispatch({ type: 'managementFailed' });
       }
     } finally {
       if (!signal.aborted) {
-        setNativeAction(false);
+        dispatch({ type: 'nativeActionFinished' });
         onVerifiedRef.current();
       }
     }
@@ -395,7 +378,9 @@ export function useApplePurchase({
     sandboxOverride,
     canManage,
     allowDuplicatePurchase,
-    setAllowDuplicatePurchase,
+    setAllowDuplicatePurchase: (allowed: boolean) => {
+      dispatch({ type: 'duplicatePurchaseChanged', allowed });
+    },
     buy,
     restore,
     manage,

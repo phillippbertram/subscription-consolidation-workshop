@@ -121,6 +121,11 @@ hidden until the backend confirms the current state, including while offline.
 StoreKit synchronization/polling stays in the purchase feature; its listener
 stays mounted during dashboard refreshes and modal changes.
 
+Within `src/features/subscriptions/`, `apple/` and `google/` each own their
+store UI, purchase hook, and local reducer. Hooks handle native/API effects;
+reducers group UI changes into named transitions. Shared subscription display
+and purchase eligibility remain in the parent folder.
+
 ## Manual checks
 
 - Sign in as A, refresh/restart, and confirm stable identity; sign in as B and

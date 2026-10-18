@@ -20,8 +20,8 @@ Where to look:
 
 - [`services/api/src/routes/apple.ts`](../../services/api/src/routes/apple.ts) and
   [`routes/google.ts`](../../services/api/src/routes/google.ts): the config each app requests.
-- [`use-apple-purchase.ts`](../../apps/mobile/src/features/subscriptions/use-apple-purchase.ts) and
-  [`use-google-purchase.ts`](../../apps/mobile/src/features/subscriptions/use-google-purchase.ts): the app side.
+- [`use-apple-purchase.ts`](../../apps/mobile/src/features/subscriptions/apple/use-apple-purchase.ts) and
+  [`use-google-purchase.ts`](../../apps/mobile/src/features/subscriptions/google/use-google-purchase.ts): the app side.
 - [`apple/processor.ts`](../../packages/subscription-processing/src/providers/apple/processor.ts) and
   [`google/processor.ts`](../../packages/subscription-processing/src/providers/google/processor.ts): the worker side.
 

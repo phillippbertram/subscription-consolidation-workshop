@@ -8,6 +8,59 @@ Google account.
 Use your own development accounts, synthetic application data, and Google's test
 payment instruments. Do not make production purchases.
 
+## How a purchase works
+
+Three parties take part: the **app** shows Google Play's purchase sheet,
+**Google Play** takes the payment, and the **backend** decides about Premium.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgb(239, 246, 255) Android phone
+        participant App as PremiumPass app
+    end
+    box rgb(232, 240, 254) Google
+        participant Play as Google Play
+    end
+    box rgb(240, 253, 250) PremiumPass
+        participant Backend as Backend
+    end
+    App->>Backend: Which product? Who am I?
+    Backend-->>App: Product, base plan + obfuscatedAccountId (= your user ID)
+    App->>Play: Buy, with the obfuscatedAccountId attached
+    Play-->>App: Purchase token
+    App->>Backend: Please check this purchase token
+    Backend->>Play: Read the purchase with the Developer API
+    Note over Backend: Check owner, product, test purchase,<br/>and expiry
+    Backend->>Backend: Save Premium in one atomic write
+    Backend->>Play: Acknowledge the purchase
+    App->>Backend: Done yet?
+    Backend-->>App: Completed, show Premium
+```
+
+| Who     | Does                                                                 | Never does                                    |
+| ------- | -------------------------------------------------------------------- | --------------------------------------------- |
+| App     | Fetch config, open the purchase sheet, send the purchase token, wait | Grant Premium or acknowledge the purchase     |
+| Backend | Verify with Google, check the owner, save access, acknowledge        | Trust what the app says without asking Google |
+
+**What is the `obfuscatedAccountId` for?** It is Google's equivalent of Apple's
+`appAccountToken`: the app attaches our internal user ID to the purchase, and
+Google returns it as `obfuscatedExternalAccountId` when the backend reads the
+purchase. That proves which PremiumPass account bought the subscription, also
+for a restore or a notification that arrives later. A different ID means the
+purchase is rejected.
+
+**How is a purchase completed?** Google requires every new purchase to be
+_acknowledged_; otherwise it refunds the purchase automatically (after about
+three minutes for license testers, three days in production). Here only the
+backend acknowledges, and only after Premium is saved (step 8). If anything
+fails before that, a retry or Restore picks the purchase up again, and the
+saved completion marker prevents a second grant.
+
+**Later changes** such as renewals, cancellations, or account holds arrive as
+Real-time developer notifications (Pub/Sub) and go through steps 6–8 without
+the app.
+
 ## Setup order
 
 | When                     | Action                                                                                | Ready when                                                           |
@@ -215,26 +268,12 @@ Then:
    permission from the [authenticated-push guide](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions)
    and keep the wrapped payload format.
 
-### What happens during a purchase
+### Purchase flow details
 
-```mermaid
-sequenceDiagram
-    participant App as Android app
-    participant API
-    participant Google as Google Play
-    participant Worker
-    App->>API: GET /v1/billing/google/config
-    API-->>App: product, base plan, obfuscatedAccountId
-    App->>Google: Purchase with obfuscatedAccountId
-    Google-->>App: Purchase token
-    App->>API: POST /v1/billing/google/sync (token)
-    API-->>App: operationId (pending)
-    API->>Worker: Queue job
-    Worker->>Google: Read subscription state
-    Worker->>Worker: Verify owner, product, expiry, then commit atomically
-    Worker->>Google: Acknowledge purchase
-    App->>API: Poll /sync/:operationId until completed
-```
+The overview is in [How a purchase works](#how-a-purchase-works). Locally the
+app calls `GET /v1/billing/google/config`, then `POST /v1/billing/google/sync`
+with the token, and polls `/sync/:operationId`; the API only queues the job, and
+the subscription worker does the Google calls.
 
 - The `obfuscatedAccountId` is our internal user ID. Only Google's API response
   proves ownership, never the app's claim.

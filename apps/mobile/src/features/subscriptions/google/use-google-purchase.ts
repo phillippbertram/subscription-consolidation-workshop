@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useReducer } from 'react';
 import { AppState } from 'react-native';
 import {
   ErrorCode,
@@ -7,13 +7,14 @@ import {
   deepLinkToSubscriptions,
   type Purchase,
 } from 'expo-iap';
-import type {
-  GoogleConfig,
-  SubscriptionOverview,
-} from '@premiumpass/api-contracts';
-import type { ApiClient } from '../../api/api-client';
-import { useApiClient } from '../../api/use-api-client';
-import { canPurchasePremium } from './subscription-presentation';
+import type { SubscriptionOverview } from '@premiumpass/api-contracts';
+import type { ApiClient } from '../../../api/api-client';
+import { useApiClient } from '../../../api/use-api-client';
+import { canPurchasePremium } from '../subscription-presentation';
+import {
+  googlePurchaseReducer,
+  initialGooglePurchaseState,
+} from './google-purchase-state';
 
 class GoogleUiError extends Error {}
 
@@ -37,10 +38,11 @@ export function useGooglePurchase({
   onVerified: () => void;
 }) {
   const api = useApiClient();
-  const [config, setConfig] = useState<GoogleConfig>();
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [state, dispatch] = useReducer(
+    googlePurchaseReducer,
+    initialGooglePurchaseState,
+  );
+  const { config, busy, message, error } = state;
   // Aborted on unmount: late async results must not update a closed screen.
   const lifetime = useRef(new AbortController());
   // One verification per purchase token, even if Play reports it twice.
@@ -61,10 +63,7 @@ export function useGooglePurchase({
       }
 
       if (purchase.purchaseState === 'pending') {
-        setBusy(false);
-        setMessage(
-          'Payment is pending. Premium starts only after backend verification.',
-        );
+        dispatch({ type: 'paymentPending' });
         return Promise.resolve();
       }
 
@@ -111,29 +110,28 @@ export function useGooglePurchase({
           return;
         }
 
-        setBusy(true);
-        setError(null);
-        setMessage('Verifying your Google Play test purchase…');
+        dispatch({ type: 'verificationStarted' });
         if (await synchronizeGooglePurchase(api, token, signal)) {
-          setMessage('Google Play purchase synchronized.');
+          dispatch({ type: 'verificationSucceeded' });
           verifiedCallback.current();
         }
       })()
         .catch((failure: unknown) => {
           if (!signal.aborted) {
-            setMessage(null);
             // Do not display raw native/provider errors containing purchase payloads.
-            setError(
-              failure instanceof GoogleUiError
-                ? failure.message
-                : 'Unable to verify this purchase. Check the signed-in account and backend, then restore to retry.',
-            );
+            dispatch({
+              type: 'verificationFailed',
+              error:
+                failure instanceof GoogleUiError
+                  ? failure.message
+                  : 'Unable to verify this purchase. Check the signed-in account and backend, then restore to retry.',
+            });
           }
         })
         .finally(() => {
           pending.current.delete(token);
           if (!signal.aborted && pending.current.size === 0) {
-            setBusy(false);
+            dispatch({ type: 'verificationsSettled' });
           }
         });
       pending.current.set(token, task);
@@ -148,20 +146,17 @@ export function useGooglePurchase({
     },
     onPurchaseError: (failure) => {
       if (!lifetime.current.signal.aborted) {
-        setBusy(false);
-        setMessage(null);
-        setError(
-          failure.code === ErrorCode.UserCancelled
-            ? null
-            : 'Google Play could not complete the purchase. Check your license tester account and retry.',
-        );
+        dispatch({
+          type:
+            failure.code === ErrorCode.UserCancelled
+              ? 'purchaseCancelled'
+              : 'purchaseFailed',
+        });
       }
     },
     onError: () => {
       if (!lifetime.current.signal.aborted) {
-        setError(
-          'Cannot connect to Google Play. Use a Play-enabled device and retry.',
-        );
+        dispatch({ type: 'connectionFailed' });
       }
     },
   });
@@ -180,7 +175,7 @@ export function useGooglePurchase({
       }
     } catch {
       if (!signal.aborted) {
-        setError('Unable to restore Google Play purchases. Please retry.');
+        dispatch({ type: 'restoreFailed' });
       }
     }
   }, [verify]);
@@ -202,16 +197,14 @@ export function useGooglePurchase({
           return;
         }
 
-        setConfig(settings);
+        dispatch({ type: 'configLoaded', config: settings });
         await fetchProducts({ skus: [settings.productId], type: 'subs' });
         if (!controller.signal.aborted) {
           await restore();
         }
       } catch {
         if (!controller.signal.aborted) {
-          setError(
-            'Google Play purchases are unavailable. Check the local Google configuration.',
-          );
+          dispatch({ type: 'configurationFailed' });
         }
       }
     })();
@@ -248,8 +241,7 @@ export function useGooglePurchase({
       return;
     }
 
-    setBusy(true);
-    setError(null);
+    dispatch({ type: 'checkoutStarted' });
     try {
       // The account ID travels with the purchase; the backend compares it with
       // Google's verified response before granting anything.
@@ -267,8 +259,7 @@ export function useGooglePurchase({
       });
     } catch {
       if (!lifetime.current.signal.aborted) {
-        setBusy(false);
-        setError('Unable to open Google Play checkout. Please retry.');
+        dispatch({ type: 'checkoutFailed' });
       }
     }
   }
@@ -285,7 +276,7 @@ export function useGooglePurchase({
       });
     } catch {
       if (!lifetime.current.signal.aborted) {
-        setError('Unable to open Google Play subscription management.');
+        dispatch({ type: 'managementFailed' });
       }
     }
   }
