@@ -6,40 +6,67 @@ subscriptions in DynamoDB. [Product overview](../README.md) · [Setup](GETTING_S
 
 ## Responsibilities
 
-| Layer                       | Responsibility                                                                         | Start reading                                                                                                                                                                                                                                                              |
-| --------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Clients                     | Login, display backend access, initiate purchases                                      | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                                                                                                                                                           |
-| API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, initiate local billing | [API](../services/api/README.md)                                                                                                                                                                                                                                           |
-| Webhooks                    | Verify provider signatures and enqueue references                                      | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md)                                                                                                                                                                               |
-| Worker                      | Verify current provider state/ownership; persist atomically                            | [Worker](../services/subscription-worker/README.md)                                                                                                                                                                                                                        |
-| Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                 | [Outbox](../services/outbox-publisher/README.md)                                                                                                                                                                                                                           |
-| Shared packages             | Domain rules, persistence, contracts, SDK construction, logging                        | [Domain](../packages/domain/src/subscriptions.ts), [HTTP contracts](../packages/api-contracts/README.md), [queue contracts](../packages/billing-contracts/README.md), [AWS clients](../packages/aws-clients/README.md), [Apple adapter](../packages/apple-store/README.md) |
+| Layer                       | Responsibility                                                                         | Start reading                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Clients                     | Login, display backend access, initiate purchases                                      | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                             |
+| API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, initiate local billing | [API](../services/api/README.md)                                                             |
+| Webhooks                    | Verify provider signatures and enqueue references                                      | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md) |
+| Worker                      | Verify current provider state/ownership; persist atomically                            | [Worker](../services/subscription-worker/README.md)                                          |
+| Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                 | [Outbox](../services/outbox-publisher/README.md)                                             |
 
 Hono belongs to HTTP services. Domain code receives ordinary values and a clock,
 not HTTP contexts. Each executable owns its configuration and local/Lambda entry
 points; services do not import other services.
 
+## Shared packages
+
+These libraries are imported by apps and services; they are not separate running
+processes. Workspace names come from each package's `package.json`.
+
+| Workspace package                                                           | Responsibility                                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| [`@premiumpass/api-contracts`](../packages/api-contracts/README.md)         | Shared HTTP request/response schemas and types for API, Web, and Mobile |
+| [`@premiumpass/billing-contracts`](../packages/billing-contracts/README.md) | Provider event allowlist and queue job schemas/types                    |
+| [`@premiumpass/domain`](../packages/domain/src/subscriptions.ts)            | Subscription and access rules across providers                          |
+| [`@premiumpass/persistence`](../packages/persistence/src/index.ts)          | DynamoDB subscription storage and database configuration                |
+| [`@premiumpass/aws-clients`](../packages/aws-clients/README.md)             | AWS SDK client construction for local and cloud use                     |
+| [`@premiumpass/apple-store`](../packages/apple-store/README.md)             | Apple Sandbox configuration, API client, and signed-data verification   |
+| [`@premiumpass/logging`](../packages/logging/src/index.ts)                  | Shared structured logging and log-level configuration                   |
+
 ## Local development topology
+
+App and service labels include their exact workspace names. Ports and Lambda
+labels distinguish how the same services run locally and in AWS.
 
 ```mermaid
 flowchart TB
-    Clients["Web :5173 / Simulator / iPhone"] -->|"Login"| Auth0["Auth0"]
-    Providers["Stripe test / Apple Sandbox"] --> Forward["Stripe CLI / ngrok"]
+    Web["Web :5173<br/>@premiumpass/web"] -->|"Login"| Auth0["Auth0"]
+    Mobile["Mobile: Simulator / iPhone<br/>@premiumpass/mobile"] -->|"Login"| Auth0
+    Stripe["Stripe test"] --> StripeCLI["Stripe CLI"]
+    Apple["Apple Sandbox"] --> Ngrok["ngrok"]
     subgraph Host["Local backend"]
-        API["API :3000"]
-        Hooks["Stripe webhook :3002 / Apple webhook :3003"]
+        API["API :3000<br/>@premiumpass/api"]
+        StripeHook["Stripe webhook :3002<br/>@premiumpass/stripe-webhook"]
+        AppleHook["Apple webhook :3003<br/>@premiumpass/apple-webhook"]
         Queue["ElasticMQ and DLQ"]
-        Worker["Worker: verify providers"]
+        Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
         DB["DynamoDB Local"]
         API -->|"Read access"| DB
         API -->|"Apple sync"| Queue
-        Hooks --> Queue --> Worker -->|"Atomic writes"| DB
-        DB -->|"Pending outbox"| Publisher["Outbox publisher"]
-        Publisher --> Events["Separate ElasticMQ event queue"] --> Consumer["Log consumer"]
+        StripeHook --> Queue
+        AppleHook --> Queue
+        Queue --> Worker -->|"Atomic writes"| DB
+        DB -->|"Pending outbox"| Publisher["Outbox publisher<br/>@premiumpass/outbox-publisher"]
+        Publisher --> Events["Separate ElasticMQ event queue"] --> Consumer["Log consumer<br/>@premiumpass/outbox-publisher"]
     end
-    Clients -->|"Loopback / LAN"| API
-    Forward --> Hooks
+    Web -->|"Loopback"| API
+    Mobile -->|"Loopback / LAN"| API
+    StripeCLI --> StripeHook
+    Ngrok --> AppleHook
 ```
+
+Publisher and log consumer are separate processes from the same
+`@premiumpass/outbox-publisher` workspace package.
 
 `pnpm dev` starts the five app processes and Docker/table initialization.
 Stripe CLI, Mobile, ngrok, the optional outbox publisher/log consumer, and the
@@ -52,31 +79,38 @@ services; application code runs on the host. [Commands](DEVELOPMENT.md#run-and-c
 
 ```mermaid
 flowchart TB
-    Clients["Clients with Auth0 tokens"] --> Gateway
-    Providers["Stripe test / Apple Sandbox events"] --> Gateway
+    Web["Web<br/>@premiumpass/web"] -->|"Auth0 token"| Gateway
+    Mobile["Mobile<br/>@premiumpass/mobile"] -->|"Auth0 token"| Gateway
+    Stripe["Stripe test events"] --> Gateway
+    Apple["Apple Sandbox events"] --> Gateway
     subgraph AWS["AWS development"]
         Gateway["API Gateway HTTP API"]
-        API["API Lambda"]
-        Hooks["Stripe / Apple webhook Lambdas"]
+        API["API Lambda<br/>@premiumpass/api"]
+        StripeHook["Stripe webhook Lambda<br/>@premiumpass/stripe-webhook"]
+        AppleHook["Apple webhook Lambda<br/>@premiumpass/apple-webhook"]
         Queue["SQS"]
-        Worker["Worker: verify providers"]
+        Worker["Subscription worker Lambda<br/>@premiumpass/subscription-worker"]
         DB["DynamoDB"]
         DLQ["DLQ"]
         Secrets["Existing Secrets Manager secrets"]
         Gateway -->|"Default route"| API
-        Gateway -->|"Explicit webhook routes"| Hooks
-        Hooks --> Queue --> Worker --> DB
+        Gateway -->|"/v1/webhooks/stripe"| StripeHook
+        Gateway -->|"/v1/webhooks/apple"| AppleHook
+        StripeHook --> Queue
+        AppleHook --> Queue
+        Queue --> Worker --> DB
         API --> DB
         Queue -.->|"Repeated failures"| DLQ
-        Secrets -->|"Stripe only"| Hooks
+        Secrets -->|"Stripe signing secret"| StripeHook
         Secrets --> Worker
     end
 ```
 
-The backend verifies Auth0; Gateway has no JWT/Lambda authorizer. Webhook routes
-verify their own signatures. Apple is disabled by default. The grouped webhook box contains two independent Lambdas. Only the worker reads
-the Apple private key; the Stripe webhook reads its signing secret. Lambda logs
-go to CloudWatch.
+The CDK workspace [`@premiumpass/infra`](../infra/README.md) defines the AWS
+resources. The backend verifies Auth0; Gateway has no JWT/Lambda authorizer.
+Webhook routes verify their own signatures. Apple is disabled by default. Only
+the worker reads the Apple private key; the Stripe webhook reads its signing
+secret. Lambda logs go to CloudWatch.
 
 Cloud checkout/cancellation, browser CORS, and authenticated Apple synchronization
 are not fully wired. This topology shows notification processing, not complete

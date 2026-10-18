@@ -46,7 +46,6 @@ iteration. Android verification is optional and must not be inferred from iOS.
 | Event consumer       | Trace stable event IDs; distinguish EventBridge delivery failures from asynchronous Lambda execution failures                                                                         |
 | Reconciliation       | Every five minutes plus manual runs; paginate known customers/subscriptions, discover missed Stripe subscriptions, refresh Apple/Google state, enqueue through the existing processor |
 | Expiration           | Reevaluate due grants; synchronous API expiry checks already protect access independently                                                                                             |
-| CI/CD                | Reuse local checks; GitHub Actions OIDC to one development stage; record actual live smoke evidence                                                                                   |
 
 Reconciliation must not treat provider errors as deletion. A run uses stable job
 IDs within that run; later runs can reverify. Record failures and discrepancies.
@@ -63,7 +62,7 @@ missed initial webhook. Unmapped external purchases are not automatically assign
    cancellation, expiry, grace, ownership rejection, and overlapping grants.
 4. Show duplicate/delayed/concurrent processing, a DLQ failure and redrive, outbox
    crash recovery, and repair of a suppressed event by reconciliation.
-5. Verify the deployed development stack and CI/OIDC flow; record platform,
+5. Verify the deployed development stack; record platform,
    date, working state, exact checks, remaining gaps, and no secrets/full tokens.
 
 Target healthy-dependency demo latency: Premium within **30 seconds** of a

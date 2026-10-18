@@ -21,7 +21,7 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P07 | Apple sandbox and Google mocks             | P04, P05, P06 local processing       | partial  |
 | P08 | Outbox publisher and EventBridge           | P06                                  | partial  |
 | P09 | Reconciliation and expiration              | P07, P08                             | partial  |
-| P10 | CI/CD, operations, and final demo          | P04, P06–P09                         | open     |
+| P10 | Operations and final demo                  | P04, P06–P09                         | open     |
 | P11 | Self-service subscription cancellation     | P06; P07 for stores                  | partial  |
 
 **Current focus:** P09 local reconciliation and expiration, including Apple.
@@ -330,14 +330,14 @@ evidence. AWS deployment and verification remain a separately authorized path.
 - **Next step:** once the own Apple key/product and device are available, verify
   Sandbox renewal/expiration repair and record the provider/device evidence.
 
-## P10 CI/CD, operations, and final demo
+## P10 Operations and final demo
 
-- **Scope:** checks in GitHub Actions, OIDC development deployment, observable
-  failures and manual smoke requests using the actual repository/account context.
+- **Scope:** manual development deployment, observable failures, and manual smoke
+  requests using the actual account context.
 - **Acceptance:** satisfy the [final demonstration](../PROJECT_PLAN.md#acceptance-and-final-demonstration),
-  T01–T22, CI, authorized deployment, DLQ/redrive, outbox and reconciliation.
+  T01–T22, authorized deployment, DLQ/redrive, outbox and reconciliation.
   Record date, platform, working state, results and unresolved gaps.
-- **Status:** no CI/OIDC/live demo evidence. Cleanup documentation alone does not
+- **Status:** no live demo evidence. Cleanup documentation alone does not
   complete this task. No production release or automatic destructive cleanup.
 
 ## P11 Self-service subscription cancellation

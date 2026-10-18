@@ -2,7 +2,7 @@
 
 ## Getting started
 
-This repository contains a hands-on learning project for React Native, Auth0, and an AWS subscription platform. Work in the `schufa-lab` repository; the product name is PremiumPass. Use synthetic data and Stripe test mode only.
+This repository contains PremiumPass, a hands-on learning project for React Native, Auth0, and an AWS subscription platform. Use synthetic data and Stripe test mode only.
 
 Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISIONS.md) and the assigned task in [docs/TASKS.md](docs/TASKS.md). Then read only the relevant sections of [PROJECT_PLAN.md](PROJECT_PLAN.md). Inspect the existing implementation and `git status --short` before making changes.
 

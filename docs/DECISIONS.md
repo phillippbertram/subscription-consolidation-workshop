@@ -47,7 +47,6 @@ are in [ARCHITECTURE](ARCHITECTURE.md); external setup is in the provider guides
 
 - Select and authorize the actual AWS development account/profile/region before
   live work; examples do not select an account.
-- Choose the remote repository and OIDC trust context when implementing P10.
 - Evaluate additional platforms, routing/caching libraries, or production billing
   concerns only when a new task requires them.
 

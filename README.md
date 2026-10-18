@@ -77,8 +77,8 @@ Start with the architecture guide; each component README links to its code.
 
 [TASKS.md](docs/TASKS.md) is the sole implementation-status and verification
 record. It distinguishes local checks, device evidence, and live AWS/provider
-flows. Google provider mocks, outbox publication, scheduled reconciliation, and
-CI/CD are tracked there; diagrams do not imply those features are complete.
+flows. Google provider mocks, outbox publication, and scheduled reconciliation
+are tracked there; diagrams do not imply those features are complete.
 
 For implementation work, read [AGENTS.md](AGENTS.md). Project text and code use
 English. The project has no automated test suite; verification uses formatting,
