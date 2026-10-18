@@ -120,17 +120,19 @@ sequenceDiagram
     Worker->>Worker: Acknowledge queue job
 ```
 
-The app never calls `finishTransaction`; automatic StoreKit finishing stays off.
-The worker uses Apple's [Finish Transaction API](https://developer.apple.com/documentation/appstoreserverapi/finish-transaction)
-only after the database commit. Failed finishes retry from the stored marker
-([recovery details](#processing-and-ownership)). Closing the app does not stop an
-already queued operation.
-Restore and unfinished-transaction recovery reuse this path. A polling timeout
-does not cancel processing; restore or reopen to check again. **Manage Apple
-subscription** opens Apple's native sheet and synchronizes known subscriptions
-when it closes. Existing Premium normally hides a new purchase. The development
-Sandbox override in Developer tools permits deliberate duplicate-purchase
-exercises; it never bypasses server ownership or signature checks.
+- **Only the backend finishes.** The app never calls `finishTransaction`, and
+  automatic StoreKit finishing stays off. The worker calls Apple's
+  [Finish Transaction API](https://developer.apple.com/documentation/appstoreserverapi/finish-transaction)
+  after the database commit; failures retry from the stored marker
+  ([recovery](#processing-and-ownership)).
+- **One path for everything.** Restore and unfinished-transaction recovery reuse
+  the same sync. Closing the app or a polling timeout does not cancel queued
+  work; restore or reopen to check again.
+- **Manage Apple subscription** opens Apple's native sheet and refreshes known
+  subscriptions when it closes.
+- **Duplicate exercises:** existing Premium normally hides a new purchase. The
+  development-only Sandbox switch in Developer tools allows a second purchase;
+  it never bypasses server ownership or signature checks.
 
 ## Receive Apple notifications through ngrok
 
@@ -204,13 +206,14 @@ flowchart LR
 
 ## Processing and ownership
 
-The worker verifies Sandbox, bundle, product, signed state, and `appAccountToken`.
-`Sandbox:<originalTransactionId>` is permanently bound to one internal user;
-restoring with another Auth0 identity cannot transfer it. A transaction commits
-ownership, subscription, all-provider entitlements, processing marker, and any
-outbox change together. The marker stores the exact verified `finishTransactionId`;
-notification jobs carry the signed transaction ID, not just the subscription lineage.
-Conflicts reload current state; duplicates do not extend access.
+- **Verification:** Sandbox environment, bundle, product, signed state, and
+  `appAccountToken` (our internal user ID).
+- **Ownership:** `Sandbox:<originalTransactionId>` is bound to one internal user
+  forever; restoring with another Auth0 identity cannot transfer it.
+- **One transaction:** ownership, subscription, all-provider entitlements,
+  processing marker, and any outbox change commit together. The marker stores the
+  exact verified `finishTransactionId`.
+- **Concurrency:** conflicts reload current state; duplicates never extend access.
 
 | Interruption                                     | Recovery                                                          |
 | ------------------------------------------------ | ----------------------------------------------------------------- |
@@ -219,17 +222,15 @@ Conflicts reload current state; duplicates do not extend access.
 | Apple finished, but saving `finishedAt` failed   | Repeat the same Apple finish, then record success                 |
 | After `finishedAt`, before queue acknowledgement | A duplicate skips both domain writes and Apple finish             |
 
-Queue acknowledgement follows the persisted finish result. API polling remains
-`pending` until `finishedAt` exists, while access follows the already committed
-grant. Finish failures never roll back or extend access. Repeated failures reach
-the DLQ; fix the cause and redrive the original message. Local queue messages are
-volatile: keep ElasticMQ running during retries, or restore purchases to enqueue
-a new sync after a local queue reset. Earlier demo markers without a finish target
-are not migrated; use a new client sync/Restore for those purchases.
-
-Apple grace follows its signed boundary. Disabling renewal keeps access until
-verified expiry; expiration/revocation removes only this provider's grant.
-See [shared access policy](PAYMENTS.md#access-policy) and [Apple records](DYNAMODB_DATA_MODEL.md#apple-sandbox-records).
+- Access starts with the commit; API polling stays `pending` until `finishedAt`
+  is saved. A finish failure never rolls back or extends access.
+- Repeated failures reach the DLQ: fix the cause, then redrive the original message.
+- Local ElasticMQ messages are lost on restart. After a queue reset, restore
+  purchases to enqueue a new sync. Old demo markers without a finish target also
+  need a new sync/Restore.
+- Apple grace follows its signed boundary. Turning off renewal keeps access until
+  the verified expiry; expiry or revocation removes only the Apple grant.
+  [Access policy](PAYMENTS.md#access-policy) · [Apple records](DYNAMODB_DATA_MODEL.md#apple-sandbox-records).
 
 ## Local reconciliation
 
@@ -241,42 +242,37 @@ pnpm cli reconcile --user <internal-user-id> --provider apple --dry-run
 pnpm cli reconcile --user <internal-user-id> --provider apple
 ```
 
-Keep `pnpm dev:worker` running for queued work. Configured commands call the real
-Apple Sandbox API; database and queue remain local. For all-user runs, the watcher,
-preview, and diagnostics, see [Reconciliation](RECONCILIATION.md).
+- Keep `pnpm dev:worker` running. The commands call the real Apple Sandbox API;
+  database and queue stay local.
+- Discovery revisits stored `Sandbox:<originalTransactionId>` purchases with
+  [Get All Subscription Statuses](https://apple.github.io/app-store-server-library-node/classes/AppStoreServerAPIClient.html#getAllSubscriptionStatuses).
+  It cannot find a first purchase that never reached the database; use
+  purchase/Restore or a signed notification for that.
+- After the commit, the worker finishes the latest signed transaction through the
+  same [finish-retry path](#processing-and-ownership). A retry keeps that exact
+  target even if another renewal happens; the next run picks up the renewal.
 
-Discovery revisits only stored `Sandbox:<originalTransactionId>` lineages using
-[Get All Subscription Statuses](https://apple.github.io/app-store-server-library-node/classes/AppStoreServerAPIClient.html#getAllSubscriptionStatuses). It
-cannot find an initial purchase missing from the database; use purchase/Restore
-or a signed notification for that.
-
-After verification and commit, reconciliation finishes the latest signed
-transaction. A committed retry retains that exact target even if another renewal
-occurs; a new run can refresh that later renewal. This uses the same
-[finish-retry path](#processing-and-ownership) as notifications.
-
-## Cloud reconciliation
-
-The prepared [shared schedule](RECONCILIATION.md#cloud-reconciliation) supports
-`RECONCILIATION_APPLE_ENABLED=true` independently of Stripe/Google discovery and
-requires `APPLE_ENABLED=true`. Discovery scans verified Sandbox owner lineages;
-it has no Apple key or API calls. The cloud worker accepts these internal refresh
-jobs and uses current signed state, atomic commit, and the exact verified
-transaction's finish-retry path. Unknown first purchases still require client
-sync or a signed notification.
+All-user runs, the watcher, and diagnostics: [Reconciliation](RECONCILIATION.md).
 
 ## AWS notification processing
 
-Use the [AWS setup](../infra/README.md#deploy) with `APPLE_ENABLED=true`, your bundle
-and product IDs, and `APPLE_SECRET_ARN`. Create a separate Secrets Manager JSON
-secret with `keyId`, `issuerId`, and `privateKey` (complete P-256 PEM, with newlines
-encoded as `\n`). Only the worker reads it; the webhook needs no private key.
+The AWS stack processes Apple notifications, but has no app-to-API Apple sync:
+purchases from the app still need the local API
+([what runs where](ARCHITECTURE.md#what-runs-where)).
 
-Register **AppleWebhookUrl** instead of ngrok as the Sandbox URL. Verify TEST
-and lifecycle delivery separately. The signed account token must reference a
-profile in the AWS table; local users are not copied there. The AWS stack has no
-app-to-API Apple sync, so purchases from the app still need the local API (see
-[what runs where](ARCHITECTURE.md#what-runs-where)). Runtime secret caching lasts five minutes.
+1. Create a Secrets Manager JSON secret with `keyId`, `issuerId`, and
+   `privateKey` (complete P-256 PEM, newlines encoded as `\n`). Only the worker
+   reads it; the webhook needs no private key. Secrets are cached for five minutes.
+2. Follow the [AWS setup](../infra/README.md#deploy) with `APPLE_ENABLED=true`,
+   your bundle and product IDs, and `APPLE_SECRET_ARN`.
+3. Register the **AppleWebhookUrl** output instead of ngrok as the Sandbox URL.
+4. Verify TEST and lifecycle delivery separately. The signed account token must
+   match a profile in the AWS table; local users are not copied there.
+
+**Cloud reconciliation:** `RECONCILIATION_APPLE_ENABLED=true` (requires
+`APPLE_ENABLED=true`) adds Apple to the [shared schedule](RECONCILIATION.md#cloud-reconciliation).
+Discovery only scans known Sandbox purchases and has no Apple key; the worker
+verifies and finishes as above.
 
 ## Manual device checks
 

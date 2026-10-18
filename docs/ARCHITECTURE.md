@@ -53,7 +53,7 @@ processes. Workspace names come from each package's `package.json`.
 Labels include each process's workspace name and local port. The first picture
 shows requests and provider notifications; the second shows background work.
 
-### Requests and notifications
+### Local requests and notifications
 
 ```mermaid
 ---
@@ -117,7 +117,7 @@ flowchart TB
     style Host fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
 ```
 
-### Background work
+### Local background work
 
 ```mermaid
 ---
@@ -175,6 +175,12 @@ consumer are two processes from the same workspace package.
 
 ## AWS deployment topology
 
+The same processes run as Lambdas behind one API Gateway. The first picture
+shows requests and notifications; the second shows reconciliation and the
+failure queues.
+
+### AWS requests and notifications
+
 ```mermaid
 ---
 config:
@@ -193,48 +199,32 @@ config:
     rankSpacing: 48
 ---
 flowchart TB
-    Web["Web<br/>@premiumpass/web"] <-->|"Login / API access token"| Auth0["Auth0 tenant<br/>outside the AWS stack"]
-    Mobile["Mobile<br/>@premiumpass/mobile"] <-->|"Login / API access token"| Auth0
-    Web -->|"Bearer token"| Gateway
-    Mobile -->|"Bearer token"| Gateway
+    Web["Web"] <-->|"Login / API access token"| Auth0["Auth0 tenant"]
+    Mobile["Mobile"] <-->|"Login / API access token"| Auth0
     Stripe["Stripe test events"] --> Gateway
     Apple["Apple Sandbox events"] --> Gateway
-    Google["Google Play license tests"] --> PubSub["Authenticated Pub/Sub push"] --> Gateway
-    subgraph AWS["AWS development"]
+    Google["Google Play license tests"] --> PubSub["Pub/Sub push"] --> Gateway
+    Web & Mobile -->|"Bearer token"| Gateway
+    subgraph AWS["AWS development account"]
         Gateway["API Gateway HTTP API"]
-        API["API Lambda<br/>@premiumpass/api"]
-        StripeHook["Stripe webhook Lambda<br/>@premiumpass/stripe-webhook"]
-        AppleHook["Apple webhook Lambda<br/>@premiumpass/apple-webhook"]
-        GoogleHook["Google webhook Lambda<br/>@premiumpass/google-webhook"]
-        Queue[["SQS"]]
-        Worker["Subscription worker Lambda<br/>@premiumpass/subscription-worker"]
+        API["API Lambda"]
+        Hooks["Webhook Lambdas<br/>Stripe · Apple · Google"]
+        Queue[["SQS work queue"]]
+        DLQ["Worker DLQ"]
+        Worker["Subscription worker Lambda"]
         DB[("DynamoDB")]
-        DLQ["DLQ"]
-        Secrets["Existing Secrets Manager secrets"]
-        Gateway -->|"Default route (API)"| API
-        Gateway -->|"/v1/webhooks/stripe"| StripeHook
-        Gateway -->|"/v1/webhooks/apple"| AppleHook
-        Gateway -->|"/v1/webhooks/google"| GoogleHook
-        StripeHook --> Queue
-        AppleHook --> Queue
-        GoogleHook --> Queue
-        Queue --> Worker --> DB
-        API -->|"Google purchase / Restore sync"| Queue
-        API --> DB
-        Schedule["Amazon EventBridge rule<br/>Shared reconciliation · every five minutes"] -->|"Stripe opt-in"| StripeDiscovery["Stripe discovery Lambda<br/>customers + read-only API listing"]
-        Schedule -->|"Apple opt-in"| AppleDiscovery["Apple discovery Lambda<br/>known Sandbox lineages"]
-        Schedule -->|"Google opt-in"| GoogleDiscovery["Google discovery Lambda<br/>known token references"]
-        DB -->|"Customer / owner references"| StripeDiscovery & AppleDiscovery & GoogleDiscovery
-        StripeDiscovery & AppleDiscovery & GoogleDiscovery --> Queue
-        Schedule -.->|"Delivery failure"| ReconciliationDLQ["Reconciliation failure queue"]
-        StripeDiscovery & AppleDiscovery & GoogleDiscovery -.->|"Execution failure"| ReconciliationDLQ
+        Secrets["Secrets Manager"]
+        Gateway -->|"Default route"| API
+        Gateway -->|"/v1/webhooks/…"| Hooks
+        Hooks -->|"References only"| Queue
+        API -->|"Google sync"| Queue
+        API -->|"Read access"| DB
+        Queue --> Worker -->|"Atomic writes"| DB
         Queue -.->|"Repeated failures"| DLQ
-        Secrets -->|"Stripe signing secret"| StripeHook
-        Secrets --> Worker
-        Secrets -->|"Stripe test key only"| StripeDiscovery
+        Secrets -->|"Provider keys"| Worker
+        Secrets -->|"Stripe signing secret"| Hooks
     end
     API -.->|"Fetch JWKS"| Auth0
-    classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
     classDef client fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1.5px,rx:12,ry:12
     classDef identity fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px,rx:12,ry:12
     classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
@@ -246,18 +236,63 @@ flowchart TB
     classDef google fill:#e8f0fe,stroke:#4285f4,color:#174ea6,stroke-width:1.5px,rx:12,ry:12
     linkStyle default stroke:#64748b,stroke-width:1.5px
     class Web,Mobile client
-    class Auth0 identity
-    class API,StripeHook,AppleHook,GoogleHook,Worker service
+    class Auth0,Secrets identity
+    class Gateway,API,Hooks,Worker service
     class Queue queue
     class DB data
+    class DLQ failure
     class Stripe stripe
     class Apple apple
     class Google,PubSub google
-    class Gateway service
-    class StripeDiscovery,AppleDiscovery,GoogleDiscovery service
-    class Schedule queue
-    class DLQ,ReconciliationDLQ failure
-    class Secrets identity
+    style AWS fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
+```
+
+### AWS reconciliation and failure paths
+
+```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontFamily: Arial, Helvetica, sans-serif
+    fontSize: 14px
+    primaryTextColor: '#0f172a'
+    lineColor: '#64748b'
+    edgeLabelBackground: '#ffffff'
+    clusterBkg: '#f8fafc'
+    clusterBorder: '#cbd5e1'
+  flowchart:
+    curve: linear
+    nodeSpacing: 30
+    rankSpacing: 48
+---
+flowchart LR
+    Providers["Stripe API<br/>(listing only)"]
+    subgraph AWS["AWS development account"]
+        Schedule["EventBridge rule<br/>every 5 minutes"]
+        Discovery["Discovery Lambdas<br/>one per provider, each opt-in"]
+        DB[("DynamoDB")]
+        Queue[["SQS work queue"]]
+        Worker["Subscription worker"]
+        ReconDLQ["Reconciliation failure queue"]
+        Schedule --> Discovery
+        DB -->|"Known customers / owners"| Discovery
+        Discovery -->|"Refresh jobs"| Queue --> Worker --> DB
+        Schedule -.->|"Delivery failure"| ReconDLQ
+        Discovery -.->|"Execution failure"| ReconDLQ
+    end
+    Discovery <-->|"Stripe only"| Providers
+    classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
+    classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6,stroke-width:1.5px,rx:10,ry:10
+    classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534,stroke-width:1.5px
+    classDef failure fill:#fff1f2,stroke:#f43f5e,color:#9f1239,stroke-width:1.5px,rx:10,ry:10
+    classDef stripe fill:#635bff,stroke:#4f46e5,color:#ffffff,stroke-width:1.5px,rx:12,ry:12
+    linkStyle default stroke:#64748b,stroke-width:1.5px
+    class Discovery,Worker service
+    class Schedule,Queue queue
+    class DB data
+    class ReconDLQ failure
+    class Providers stripe
     style AWS fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
 ```
 

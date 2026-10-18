@@ -88,12 +88,12 @@ Verified provider processing creates the immutable owner binding; local demo
 subscriptions can exist without one. Processing markers belong to the user;
 their provider-specific references and finish/acknowledgement fields are below.
 
-The worker atomically saves subscription, owner binding, current snapshot, marker,
-and an outbox event when access/domain state changes. A snapshot's `grants` array
-is embedded derived data. Outbox records retain their own revision and access
-snapshot; they do not point to an immutable historical `ENTITLEMENTS` row.
-API access is recalculated from subscriptions, admin grants, and current time, so an old snapshot
-cannot extend access. A scope alone never grants Premium.
+- **One commit:** the worker saves subscription, owner binding, snapshot, marker,
+  and (only when access changed) an outbox event together.
+- **Snapshots are derived:** the `grants` array is a cached result. Each outbox
+  record keeps its own copy; there is no history of `ENTITLEMENTS` rows.
+- **The API recomputes:** access comes from subscriptions, admin grants, and the
+  current time, so an old snapshot can never extend access.
 
 ### Checkout and local mock extensions
 
@@ -128,13 +128,13 @@ erDiagram
     }
 ```
 
-The logical Stripe customer mapping uses forward/reverse records after binding.
-Customer creation and checkout session references can remain unresolved; an active
-pointer selects a stored request and is not proof of payment. A checkout request
-does not directly create a subscription: verified worker processing does that.
-Google mock source rows are local-only inputs; their derived subscriptions and
-immutable owners use the core model above. Complimentary admin grants use the
-independent [complimentary access records](#complimentary-access-records).
+- A Stripe customer mapping becomes a forward and a reverse record once bound.
+- Customer and checkout session IDs may stay unresolved for a while. The active
+  pointer selects a request; it is not proof of payment.
+- A checkout request never creates a subscription; only verified worker
+  processing does.
+- Google mock source rows are local-only inputs; their derived subscriptions use
+  the core model above. Admin grants: [complimentary access records](#complimentary-access-records).
 
 | Logical record                                | DynamoDB record family / details                                                                                                                          |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -163,11 +163,12 @@ Shorthand: `U` = internal UUID, `H` = SHA-256 of JSON `[issuer, subject]`,
 | `IDENTITY#H` / `MAP` | `issuer`, `subject`, `userId`         | Resolve exact verified Auth0 identity |
 | `USER#U` / `PROFILE` | `userId`, `identityHash`, `createdAt` | Stable internal profile               |
 
-Both records are created in one conditional transaction. Concurrent first
-requests converge by rereading the winning mapping. Existing inconsistent
-mappings fail; no fabricated profile or email-based linking is allowed.
-The hash is a lookup key, not encryption. Email, display name, and tokens are not
-stored. Changing the issuer creates a different identity even with the same subject.
+- Both records are created in one conditional transaction. Concurrent first
+  logins converge by rereading the winning mapping; inconsistent mappings fail.
+- No email-based linking: a different issuer means a different identity, even
+  with the same subject.
+- The hash is a lookup key, not encryption. Email, display name, and tokens are
+  not stored.
 
 ## Subscriptions
 
@@ -205,9 +206,9 @@ Synthetic document shape (timestamps illustrate a record, not current access):
 }
 ```
 
-Zod validates persisted fields/ownership before API responses. Unknown product
-or status strings remain visible but grant nothing; malformed records fail
-closed. Expired records remain stored; expiry is evaluated during reads.
+Zod validates every record before the API returns it. Unknown products or
+statuses stay visible but grant nothing; malformed records fail closed. Expired
+records stay stored; expiry is checked on every read.
 
 ## Complimentary access records
 
@@ -216,23 +217,19 @@ closed. Expired records remain stored; expiry is evaluated during reads.
 | `USER#U` / `ADMIN_GRANT#premium`   | `userId`, stable `grantId=premium`, `state`, nullable `expiresAt`, source `revision`, `createdAt`, `updatedAt`                                         |
 | `USER#U` / `ADMIN_AUDIT#requestId` | `requestId`, `userId`, `action`, OS `actor`, `reason`, requested `expiresAt`, `at`, `aggregateRevision`, `outcome`, full `before`/`after` grant values |
 
-The single grant is separate from `SUB#` records; it has no provider/product
-purchase reference. Revocation retains it and its history. Audit entries are
-append-only through the CLI and double as durable idempotency receipts; no TTL
-removes them. They are not tamper-proof against someone with local database
-access. Ordinary API responses expose only active grant ID/revision/expiry.
-
-The CLI transaction guards the profile and aggregate revision, writes the grant
-and audit receipt, recomputes the combined entitlement snapshot, and records
-outbox intent. Every provider commit loads and preserves this grant under the
-same aggregate guard. A no-op records its receipt without a grant rewrite or
-outbox event unless a time boundary is due. Replayed request IDs perform no writes.
-
-`grants` entries distinguish `source=provider` (provider/subscription reference,
-finite `validUntil`) from `source=admin` (`grantId`, nullable `validUntil`). Old
-pending outbox provider entries without `source` are still accepted by the
-publisher. Consistent `GetItem` reads the admin grant; a paginated user-partition
-query with prefix `ADMIN_AUDIT#` loads its audit history.
+- **Separate from purchases:** the grant is not a `SUB#` record and has no
+  provider or product reference. Revocation keeps the record and its history.
+- **Audit = idempotency receipt:** audit entries are append-only through the CLI
+  and have no TTL. A replayed request ID writes nothing. They are not tamper-proof
+  against someone with local database access.
+- **Same guard as providers:** the CLI transaction checks profile and aggregate
+  revision, then writes grant, receipt, snapshot, and outbox entry. Every provider
+  commit loads and preserves the grant.
+- **In the snapshot:** `grants` entries are `source=provider` (finite
+  `validUntil`) or `source=admin` (nullable `validUntil`). The publisher still
+  accepts older provider entries without `source`.
+- **Reads:** consistent `GetItem` for the grant; a paginated query on
+  `ADMIN_AUDIT#` for history. The user API shows only grant ID, revision, expiry.
 
 ## Stripe customer and checkout records
 
@@ -243,12 +240,13 @@ query with prefix `ADMIN_AUDIT#` loads its audit history.
 | `CHECKOUT#U#Q` / `REQUEST`             | Owner/request IDs, fingerprint, customer/price IDs, return URLs, `createdAt`, `expiresAt`, optional `sessionId` |
 | `USER#U` / `CHECKOUT#ACTIVE`           | `userId`, `requestId`                                                                                           |
 
-Creation intent is durable; forward/reverse customer mappings bind atomically.
-Checkout reservation compares the active pointer, and session attachment requires
-the same fingerprint. Missing provider references mean unresolved work, not
-permission to purchase again. These technical times use Unix seconds. Hosted
-checkout URLs, payment payloads, and emails are not persisted.
-[Recovery behavior](PAYMENTS.md#checkout-and-recovery).
+- The customer creation intent is stored first; forward and reverse mappings
+  then bind atomically.
+- A new checkout must compare the active pointer; attaching a session requires
+  the same request fingerprint.
+- A missing provider reference means unfinished work, not permission to buy again.
+- Times here are Unix seconds. Checkout URLs, payment payloads, and emails are
+  never stored. [Recovery behavior](PAYMENTS.md#checkout-and-recovery).
 
 ## Subscription processing records
 
@@ -259,20 +257,21 @@ checkout URLs, payment payloads, and emails are not persisted.
 | `EVENT#stripe#E` / `PROCESSED`    | Owner/event/type/correlation IDs, `processedAt`, outcome (`changed` or `verified`), aggregate revision                                  |
 | `OUTBOX#U:R` / `EVENT`            | Stable `domainEventId=U:R`, owner/revision, `SubscriptionChanged`, pending status, provider/correlation IDs, timestamp and entitlements |
 
-Writers read aggregate revision **before** subscriptions and provider state.
-The transaction checks that revision, profile, ownership, and absent completion
-marker before committing all records. A conflict reloads and recomputes.
-Separate consistent reads alone are not an atomic snapshot.
+**Writing:**
 
-A duplicate event makes no writes. An unchanged new verification updates the
-aggregate/verification metadata without another domain-change outbox event.
-Grant source revisions can therefore differ from the aggregate revision.
-The local publisher scans pending events and conditionally changes only their
-status to `sent`, adding `sentAt` and `publishedEventId` after transport acceptance.
-The stable `domainEventId` survives retries; the transport ID can change. A crash
-after acceptance but before the update can publish a duplicate. No subscription,
-aggregate, or completion marker changes during publication. Outbox records have
-no automatic TTL cleanup. [Publisher behavior](../services/outbox-publisher/README.md).
+1. Read the aggregate revision **before** subscriptions and provider state.
+2. Commit everything in one transaction that checks that revision, the profile,
+   ownership, and that no completion marker exists yet.
+3. On conflict, reload and recompute (see the shared retry loop).
+
+- A duplicate event writes nothing. A new verification without changes updates
+  the aggregate but adds no outbox event, so source and aggregate revisions differ.
+
+**Publishing:** the publisher scans pending outbox entries and, after the
+transport accepted one, conditionally sets `status=sent`, `sentAt`, and
+`publishedEventId`. The `domainEventId` stays stable across retries; a crash
+between acceptance and update can publish a duplicate. Publication never touches
+subscriptions or markers. There is no TTL cleanup. [Publisher](../services/outbox-publisher/README.md).
 
 ## Apple sandbox records
 
@@ -282,14 +281,16 @@ no automatic TTL cleanup. [Publisher behavior](../services/outbox-publisher/READ
 | `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` | Immutable internal owner                                                                              |
 | `EVENT#apple#Sandbox#<eventId>` / `PROCESSED`                  | User, submitted reference, verified `finishTransactionId`, type, `processedAt`, optional `finishedAt` |
 
-Client sync uses a generated operation UUID; notifications use Apple's verified
-notification UUID. Local reconciliation uses
-`reconcile_<run-uuid>_<originalTransactionId>` and stores the latest signed
-transaction ID as its finish target; the submitted reference is the known lineage.
-The processing marker and finish target commit atomically with
-access. A conditional `UpdateItem` records `finishedAt` only after Apple finish
-succeeds; it does not change grants, revisions, or outbox. Owner-only API polling
-reports completion only then. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+| Source         | Event ID                                       |
+| -------------- | ---------------------------------------------- |
+| Client sync    | Generated operation UUID                       |
+| Notification   | Apple's verified notification UUID             |
+| Reconciliation | `reconcile_<run-uuid>_<originalTransactionId>` |
+
+The marker and its finish target commit with access. After Apple confirms the
+finish, a conditional `UpdateItem` adds `finishedAt` (nothing else changes);
+only then does owner-only API polling report completion.
+[Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
 
 ## Google Play records
 
@@ -303,21 +304,18 @@ private backend data and must not be logged or placed in client configuration.
 | `PROVIDER#google#SUB#G` / `OWNER`      | Immutable `userId`, package name, private purchase token for future provider refresh            |
 | `EVENT#google#<eventId>` / `PROCESSED` | User, digest reference, event type, `needsAcknowledgement`, commit time, optional `completedAt` |
 
-The owner binding, subscription, aggregate revision/access, processing marker,
-and changed-state outbox commit atomically through the same all-provider path.
-Only then does the worker acknowledge Google and conditionally save `completedAt`.
-A lost response repeats provider verification/acknowledgement without replaying
-the domain commit. API operation polling requires both the owner and recorded
-completion. Notifications derive the owner from Google's verified account UUID;
-client jobs additionally require a match with the authenticated user's UUID.
-Local and cloud API polling use a strongly consistent marker read and require
-`eventType=client.sync`. Conditional cloud API IAM adds only `GetItem` for
-`EVENT#google#*`; marker completion and provider-owner writes belong to the worker.
-
-Reconciliation reads the private owner/token record with a consistent read and
-validates its owner, package, and hash against the stored subscription. Tokens
-are retained so missed updates can be checked; token retirement and encrypted
-production storage/lifecycle are outside the local demo.
+- **Commit, then acknowledge:** owner binding, subscription, access, marker, and
+  outbox commit together through the shared path. Only then does the worker
+  acknowledge Google and save `completedAt`. A retry repeats verification and
+  acknowledgement, never the domain commit.
+- **Owner:** notifications take it from Google's verified account UUID; client
+  jobs must also match the authenticated user.
+- **Polling:** a consistent marker read that requires the owner, `completedAt`,
+  and `eventType=client.sync`. In AWS the API may only `GetItem` on
+  `EVENT#google#*`; all writes belong to the worker.
+- **Reconciliation:** reads the private token record and checks owner, package,
+  and hash against the subscription. Tokens are kept for that purpose; token
+  retirement and encrypted production storage are outside the demo.
 
 ## Local reconciliation records
 
@@ -328,44 +326,37 @@ production storage/lifecycle are outside the local demo.
 | `EVENT#google_mock#E` / `PROCESSED`                   | Owner/subscription, correlation ID and completion time; atomic with derived `SUB`, entitlement snapshot and optional outbox |
 | `EVENT#local_expiration#E` / `PROCESSED`              | Owner and completion time; atomic with the recalculated snapshot and outbox                                                 |
 
-Google mock source changes require an existing profile and compare the source
-revision. They do not write derived `USER#U / SUB#google_mock#…` rows. Processing
-reads the aggregate revision before the source and guards both revisions plus
-ownership at commit. Source absence/errors never delete derived subscriptions.
-The old `demo-p05-*` seed records have no independent source and are not discovered
-as managed Google mocks. Local source records share this table for convenience;
-they remain a separate authority for the synthetic provider exercise.
-
-Stripe reconciliation uses existing customer mappings and processing markers.
-Its event ID is `reconcile_<run-uuid>_<subscription-id>`; a run retries with stable
-IDs, while later runs can reverify. Expiration uses `expire_<run-uuid>_<user-id>`.
-Processing markers and outbox records have no automatic cleanup or TTL.
+- **Mock source = fake provider:** source rows share the table for convenience but
+  act as a separate authority. Changing them needs an existing profile and the
+  current source revision; they never write the derived `SUB#google_mock#…` rows.
+- **Processing** reads the aggregate revision first and guards both revisions
+  plus ownership at commit. A missing or failing source never deletes anything.
+- Old `demo-p05-*` seed records have no source and are not treated as mocks.
+- **Event IDs:** Stripe `reconcile_<run-uuid>_<subscription-id>`, expiration
+  `expire_<run-uuid>_<user-id>`; stable within a run, new in the next.
+  Markers and outbox records have no TTL.
 
 ## Access patterns
 
-| Operation                                            | Pattern                                                                                                                                                                                                                         |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                                                                                                                                                |
-| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                                                                                                                                            |
-| Identity creation                                    | Conditional transaction for mapping + profile                                                                                                                                                                                   |
-| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                                                                                                                                    |
-| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                                                                                                                                        |
-| Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query`                                                                         |
-| Cloud reconciliation discovery                       | Paginated consistent `Scan` of Stripe customer mappings, Apple Sandbox owner lineages, or package-scoped Google token owners; Stripe also reads both customer mapping directions and stored subscriptions; enqueue refresh only |
-| Local outbox discovery                               | Paginated consistent `Scan` filtered by `OUTBOX#`, `EVENT`, and pending status; reads the whole table                                                                                                                           |
-| Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance                                                                                                                                     |
-| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows                                                                                                                               |
+| Operation                                            | Pattern                                                                                           |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                  |
+| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                              |
+| Identity creation                                    | Conditional transaction for mapping + profile                                                     |
+| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                      |
+| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                          |
+| Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then per-provider discovery                    |
+| Cloud reconciliation discovery                       | Paginated `Scan` of known owner records per provider; enqueue refresh only                        |
+| Local outbox discovery                               | Paginated `Scan` for pending `OUTBOX#` entries; reads the whole table                             |
+| Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance       |
+| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows |
 
-User-facing flows use no table scan. Local outbox discovery scans the small demo
-table without an index; filters do not reduce read capacity. Local Stripe
-reconciliation discovers provider subscriptions through the stored customer and
-reuses processing. The local five-minute reconciliation watcher also scans
-profiles. Cloud Stripe/Apple/Google discovery uses existing mappings/owners,
-without a new record type, cursor, or database writes; run/job IDs travel in the
-shared schedule event and queue. Scan filters do not enforce IAM key boundaries.
-Each provider has a separate opt-in and Lambda target. Production-scale indexes
-and resumable discovery remain outside the demo.
-Direct DynamoDB Admin edits bypass these guarantees.
+- **User requests never scan.** Only background discovery (reconciliation,
+  outbox) scans this small demo table; filters do not reduce read capacity and
+  are not IAM boundaries.
+- **Demo simplification:** a production system would add indexes and resumable
+  discovery instead of scans.
+- Direct edits in DynamoDB Admin bypass all of these guarantees.
 
 Sources: [user store](../services/api/src/dynamodb-users.ts),
 [checkout store](../services/api/src/billing/dynamodb-billing.ts),

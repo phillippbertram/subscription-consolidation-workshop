@@ -148,146 +148,149 @@ does not implement that mapping.
 
 ## 5. Prepare backend API access
 
-In your own Google Cloud development project, enable **Google Play Android
-Developer API** and create a dedicated backend service account. In Play Console,
-open **Users and permissions → Invite new users**, enter its service-account
-email, and restrict app access to PremiumPass. Grant Google's documented billing
-permissions: **View financial data, orders, and cancellation survey responses**
-and **Manage orders and subscriptions**. Do not grant developer-account admin
-access. Linking the developer account to a Cloud project through the older
-API-access workflow is no longer required.
-[Official API access setup](https://developers.google.com/android-publisher/getting_started).
+The backend needs its own Google identity to read purchase state.
 
-Credentials belong only on the backend. If using a downloaded JSON key for local
-development, keep it outside Git in an ignored/private location, never in mobile
-`EXPO_PUBLIC_*` values. Record only its local path for backend configuration. Do not
-paste the key into chat or documentation. The worker reads the file selected by
-`GOOGLE_PLAY_SERVICE_ACCOUNT_FILE`; it has no implicit ADC credential fallback.
+1. In your Google Cloud development project, enable **Google Play Android
+   Developer API** and create a dedicated backend service account.
+2. In Play Console, open **Users and permissions → Invite new users**, enter the
+   service-account email, and restrict app access to PremiumPass.
+3. Grant only **View financial data, orders, and cancellation survey responses**
+   and **Manage orders and subscriptions**, never developer-account admin access.
+   The older Cloud-project linking workflow is no longer required.
+   [Official API access setup](https://developers.google.com/android-publisher/getting_started).
 
-The backend verifies purchase tokens through `purchases.subscriptionsv2.get`,
-including product/base plan, expiry, account ownership, and the `testPurchase`
-marker. A client success callback cannot grant Premium. Pending purchases grant
-nothing. [Subscription response reference](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2).
+| Rule                     | Why                                                                                      |
+| ------------------------ | ---------------------------------------------------------------------------------------- |
+| Key stays on backend     | Keep a downloaded JSON key outside Git; never in `EXPO_PUBLIC_*`, chat, or documentation |
+| Explicit key file        | The worker reads `GOOGLE_PLAY_SERVICE_ACCOUNT_FILE`; there is no implicit ADC fallback   |
+| Server-side verification | `purchases.subscriptionsv2.get` checks product, base plan, expiry, owner, `testPurchase` |
+| Client callback ≠ access | A success callback or a pending purchase grants nothing                                  |
+
+[Subscription response reference](https://developers.google.com/android-publisher/api-ref/rest/v3/purchases.subscriptionsv2).
 
 ## 6. Prepare lifecycle notifications
 
-In the same development Cloud project, enable **Cloud Pub/Sub**, create a topic
-(suggested name: `premiumpass-play-rtdn`), and grant
-`google-play-developer-notifications@system.gserviceaccount.com` the **Pub/Sub
-Publisher** role on that topic. Create a subscription to retain/receive its
-messages. In the app's **Monetize → Monetization setup → Real-time developer
-notifications**, enter `projects/<project-id>/topics/premiumpass-play-rtdn`,
-enable subscription/voided-purchase notifications, save, and send a test message.
-[RTDN setup](https://developer.android.com/google/play/billing/getting-ready).
+Google reports renewals, cancellations, and expiry through **Real-time developer
+notifications (RTDN)** on Pub/Sub.
 
-A pull subscription can receive the setup test message before our receiver is
-ready. For the intended local HTTP integration, configure an authenticated push
-subscription only after its HTTPS receiver/tunnel exists. Select its push-auth
-service account and audience; the receiver must validate Google's JWT signature,
-issuer, audience, expiry, and expected verified service-account email. Google's
-publisher account above is distinct from the backend and push-auth identities.
-[Authenticated push setup](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
+1. In the same Cloud project, enable **Cloud Pub/Sub** and create a topic, for
+   example `premiumpass-play-rtdn`.
+2. Grant `google-play-developer-notifications@system.gserviceaccount.com` the
+   **Pub/Sub Publisher** role on that topic.
+3. Create a subscription. A pull subscription can receive the setup test message
+   before our receiver exists.
+4. In **Monetize → Monetization setup → Real-time developer notifications**,
+   enter `projects/<project-id>/topics/premiumpass-play-rtdn`, enable
+   subscription and voided-purchase notifications, save, and send a test message.
+   [RTDN setup](https://developer.android.com/google/play/billing/getting-ready).
+5. Once the HTTPS receiver from step 7 runs, switch to an **authenticated push**
+   subscription with its own push-auth service account and audience.
+   [Authenticated push setup](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
 
-Do not point Google at the existing Apple webhook: it verifies another protocol.
-Keep DynamoDB/ElasticMQ private. A test notification proves transport only; actual
-changes must trigger a fresh Google API read, then queue/worker processing. An AWS
-deployment is not required for the local path. Review Pub/Sub pricing before
-enabling resources; license-test purchases do not make Cloud resources free.
-[Pub/Sub pricing](https://cloud.google.com/pubsub/pricing).
+Three Google identities are involved and must stay separate: Google's publisher
+account, our backend service account, and the push-auth account.
+
+- The receiver validates Google's JWT signature, issuer, audience, expiry, and
+  the expected service-account email.
+- A notification only says "something changed": the worker always reads fresh
+  state from the Google API before writing.
+- Do not point Google at the Apple webhook, and keep DynamoDB/ElasticMQ private.
+- Pub/Sub can cost money even for license tests; check
+  [Pub/Sub pricing](https://cloud.google.com/pubsub/pricing) first.
 
 ## 7. Enable local processing
 
-In API and worker `.env` files, enable `GOOGLE_PLAY_ENABLED=true` and set the same
-`GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_PLAY_PRODUCT_ID`, and
-`GOOGLE_PLAY_BASE_PLAN_ID`. Only the worker receives
-`GOOGLE_PLAY_SERVICE_ACCOUNT_FILE`. Restart both services after configuration.
-No Google private key belongs in the app or ingress.
+| File                                | Settings                                                                                                                     |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `services/api/.env`                 | `GOOGLE_PLAY_ENABLED=true`, `GOOGLE_PLAY_PACKAGE_NAME`, `GOOGLE_PLAY_PRODUCT_ID`, `GOOGLE_PLAY_BASE_PLAN_ID`                 |
+| `services/subscription-worker/.env` | Same four values plus `GOOGLE_PLAY_SERVICE_ACCOUNT_FILE` (only the worker holds the key)                                     |
+| `services/google-webhook/.env`      | Copy from `.env.example`; same product values plus push audience, expected service-account email, and full subscription name |
 
-Copy `services/google-webhook/.env.example` to `.env` if absent. Set the same
-product settings plus the push audience, expected service-account email, and
-full subscription name. Start `pnpm dev:webhook:google` separately; expose
-`http://127.0.0.1:3004/v1/webhooks/google` through your HTTPS tunnel. Use that HTTPS
-URL as `GOOGLE_PLAY_PUSH_AUDIENCE` and as the Pub/Sub audience/endpoint. Configure
-the required Pub/Sub service-agent token-creator permission as described in the
-[authenticated-push guide](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
-Keep Pub/Sub's wrapped payload format enabled.
+Then:
 
-API routes `/v1/billing/google/config`, `/sync`, and `/sync/:operationId` use the
-existing Auth0 middleware/scopes. Config supplies the internal random UUID as
-`obfuscatedAccountId`; only the Google API response proves its ownership.
-Mobile passes the configured base-plan offer token, synchronizes purchased
-tokens, and polls for the worker's recorded completion. Native Restore and
-foreground recovery use the same path. Management opens Google Play; changes
-refresh on return. The client does not acknowledge purchases itself.
+1. Restart API and worker. Start `pnpm dev:webhook:google` separately.
+2. Expose `http://127.0.0.1:3004/v1/webhooks/google` through your HTTPS tunnel.
+3. Use that HTTPS URL as `GOOGLE_PLAY_PUSH_AUDIENCE` and as the Pub/Sub
+   audience and endpoint. Grant the Pub/Sub service agent the token-creator
+   permission from the [authenticated-push guide](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions)
+   and keep the wrapped payload format.
 
-The worker persists state, immutable token ownership, completion intent, and
-outbox atomically. It then acknowledges Google and records completion; a retry
-does not repeat the domain write. In grace, Google's verified expiry already
-includes the access window. Account hold/pause/expiry grant no Google access.
-Public subscription IDs contain a package-scoped token hash; only the private
-provider record and queue contain the token. See the [data model](DYNAMODB_DATA_MODEL.md#google-play-records).
+### What happens during a purchase
 
-For missed updates, configure Google in the [CLI's own environment](../apps/cli/README.md#configuration).
-Use `pnpm cli reconcile --provider google --dry-run`, then omit
-`--dry-run` to queue refreshes. Discovery covers stored purchase tokens; an
-unknown first purchase needs client sync/Restore or RTDN. Provider outages never
-erase verified state. Optional AWS API/notification/worker wiring and
-[five-minute cloud reconciliation](RECONCILIATION.md#cloud-reconciliation)
-are described below. Plan replacements (`linkedPurchaseToken`),
-offers/trials, additional base plans, and production purchases are rejected.
+```mermaid
+sequenceDiagram
+    participant App as Android app
+    participant API
+    participant Google as Google Play
+    participant Worker
+    App->>API: GET /v1/billing/google/config
+    API-->>App: product, base plan, obfuscatedAccountId
+    App->>Google: Purchase with obfuscatedAccountId
+    Google-->>App: Purchase token
+    App->>API: POST /v1/billing/google/sync (token)
+    API-->>App: operationId (pending)
+    API->>Worker: Queue job
+    Worker->>Google: Read subscription state
+    Worker->>Worker: Verify owner, product, expiry, then commit atomically
+    Worker->>Google: Acknowledge purchase
+    App->>API: Poll /sync/:operationId until completed
+```
+
+- The `obfuscatedAccountId` is our internal user ID. Only Google's API response
+  proves ownership, never the app's claim.
+- The app never acknowledges purchases. The worker acknowledges after the
+  commit; a retry resumes acknowledgement without repeating the domain write.
+- Restore and foreground recovery use the same sync path. **Manage** opens
+  Google Play; changes refresh when the app returns.
+- Grace uses Google's verified expiry; account hold, pause, and expiry grant no
+  Google access. Public IDs contain only a token hash; the raw token stays in the
+  private provider record and the queue. [Google records](DYNAMODB_DATA_MODEL.md#google-play-records).
+- Not supported: plan replacements (`linkedPurchaseToken`), offers or trials,
+  more base plans, and production purchases.
+
+**Missed updates:** configure Google in the [CLI's own environment](../apps/cli/README.md#configuration),
+run `pnpm cli reconcile --provider google --dry-run`, then without `--dry-run`.
+This refreshes stored tokens only; an unknown first purchase needs sync/Restore
+or RTDN. [Reconciliation](RECONCILIATION.md).
 
 ## AWS notification processing
 
-The CDK stack includes protected Google billing routes in the API Lambda,
-`POST /v1/webhooks/google`, and a Google webhook Lambda.
-`GOOGLE_PLAY_ENABLED=false` is the default. Opting in enables the same test-only
-worker processing path with a dedicated credential secret. Deployment and Google
-account changes are separate steps.
+The CDK stack can run the same Google path in AWS: protected billing routes in
+the API Lambda, `POST /v1/webhooks/google`, and a Google webhook Lambda. It stays
+off until `GOOGLE_PLAY_ENABLED=true`. CDK creates no Google topic, subscription,
+account, key, or Play Console product.
 
-1. Store the dedicated billing service-account JSON from step 5 as an existing
-   Secrets Manager secret in the selected AWS account/region. Required fields are
-   `type=service_account`, `client_email`, and `private_key`; preserve the PEM
-   newlines. Only the worker can read it. No key belongs in Lambda environment
-   variables, CDK parameters/assets, or the webhook. This demo uses a key secret;
-   Workload Identity Federation would require separate cross-cloud trust setup.
+1. **Secret:** store the billing service-account JSON (`type=service_account`,
+   `client_email`, `private_key` with its PEM newlines) as a Secrets Manager
+   secret in the selected account/region. Only the worker reads it.
    [AWS secret access](https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_GetSecretValue.html).
-2. In `infra/.env`, set `GOOGLE_PLAY_ENABLED=true`, the package/product/base-plan
-   values, and `GOOGLE_PLAY_SECRET_ARN`. Also set the push audience, expected
-   verified service-account email, and full Pub/Sub subscription name from step 6.
-   The dedicated push-auth service account is separate from the billing key.
-3. Use a stable HTTPS audience identifier, for example
-   `https://billing.example.com/google-play-push`, and configure that exact value
-   in Pub/Sub. It can differ from the receiver URL, allowing configuration before
-   the generated API URL is known. Keep the subscription's wrapped payload format.
-   [Google push authentication](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
-4. Follow [AWS setup and dry runs](../infra/README.md#deploy). After an authorized
-   deployment, use `GoogleWebhookUrl` as the Pub/Sub push **endpoint**, retaining
-   the configured audience. CDK creates no Google topic, subscription, account,
-   key, or Play Console product. Do not point a live subscription at an undeployed
-   endpoint.
-5. Verify identity rejection, a valid TEST push, queue acceptance, worker
-   completion, and matching cloud owner records separately. TEST messages do not
-   enqueue purchase work. Queue failures or unconfirmed sends return 503 so Pub/Sub
-   can retry. The worker reads current Google state before granting access,
-   commits before purchase acknowledgement, and records completion before SQS
-   acknowledgement. Cloud credential reads cache for up to five minutes; reused
-   sources rebuild after a successful refresh. Failed reloads do not use an
-   expired cached key.
+2. **Configuration:** in `infra/.env`, set `GOOGLE_PLAY_ENABLED=true`, the
+   package/product/base-plan values, `GOOGLE_PLAY_SECRET_ARN`, the push audience,
+   the expected push service-account email, and the full subscription name.
+3. **Audience:** choose a stable HTTPS identifier such as
+   `https://billing.example.com/google-play-push` and set the same value in
+   Pub/Sub. It may differ from the receiver URL, so you can configure it before
+   the API URL exists. [Google push authentication](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
+4. **Deploy:** follow [AWS setup and dry runs](../infra/README.md#deploy), then
+   use the `GoogleWebhookUrl` output as the Pub/Sub push endpoint. Never point a
+   live subscription at an undeployed endpoint.
+5. **Verify separately:** identity rejection, a valid TEST push (it queues no
+   purchase work), queue acceptance, worker completion, and cloud owner records.
 
-Ingress has queue-send permission and public-key JWT verification, with no database
-or secret access. The API receives conditional queue-send and Google completion-marker
-read permission; it receives no Google key or provider-record write permission.
-The worker receives conditional secret and Google record-family permissions only
-when Google is enabled. Existing Stripe/Apple resource identities
-and data retention are preserved. Local keys and cloud secrets are separate
-sources; neither is an implicit fallback for the other.
+| Component | Permissions when Google is enabled                 | Never gets                                |
+| --------- | -------------------------------------------------- | ----------------------------------------- |
+| Webhook   | Queue send; verifies Pub/Sub JWTs with public keys | Database or secret access                 |
+| API       | Queue send; read Google completion markers         | Google key; provider-record writes        |
+| Worker    | Google secret; Google record families in the table | Any Google permission while Google is off |
+
+Queue failures return 503 so Pub/Sub retries. Cloud credentials are cached for up
+to five minutes; an expired key is never reused after a failed reload. Local key
+files and cloud secrets are separate; neither falls back to the other.
 
 ### Authenticated cloud purchase and Restore
 
-The API Lambda composes the same billing adapter as the local runtime. The CDK
-Google opt-in supplies its public package/product/base-plan settings and queue URL;
-no extra Auth0 scopes or Gateway authorizer are introduced. Authentication and
-scope checks run in Hono before profile lookup, queue submission, or marker reads.
+The API Lambda uses the same billing adapter and Auth0 checks as the local API;
+no extra scopes or Gateway authorizer are added.
 
 | Request                                                                   | Required scopes             | Successful result                                                            |
 | ------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------- |
@@ -295,45 +298,38 @@ scope checks run in Hono before profile lookup, queue submission, or marker read
 | `POST /v1/billing/google/sync` with `{"purchaseToken":"SYNTHETIC_TOKEN"}` | `write:checkout`            | 202: `operationId` and `status=pending`, only after confirmed SQS acceptance |
 | `GET /v1/billing/google/sync/<operationId>`                               | `read:me`                   | 200: `status=pending` or `status=completed` for the authenticated owner      |
 
-Purchase and Restore use the same sync endpoint. It accepts only a purchase token;
-the server supplies the owner and configured package. Completion requires the
-worker's durable `completedAt` after verification, atomic persistence, and Google
-acknowledgement. A committed but unfinished operation remains `pending`. Missing
-and other users' operation IDs also return `pending`, so possession of an operation
-ID cannot disclose someone else's completion. Disabled Google returns 503 after
-authentication/scope checks; queue failures or unconfirmed sends return 503 rather
-than an accepted operation. Malformed input/operation IDs return 400; request
-bodies over 8 KiB return 413 with `google_request_too_large`.
+| Situation                               | Response                                      |
+| --------------------------------------- | --------------------------------------------- |
+| Committed but not yet acknowledged      | `pending`                                     |
+| Unknown or another user's `operationId` | `pending` (reveals nothing about other users) |
+| Google disabled, queue failure          | 503 (after authentication and scope checks)   |
+| Malformed input or operation ID         | 400                                           |
+| Body over 8 KiB                         | 413 `google_request_too_large`                |
 
-After a separately authorized deployment, set mobile `EXPO_PUBLIC_API_URL` to
-`ApiUrl`, retain the configured Auth0 issuer/audience and existing scopes, and
-rebuild/restart the app as required by its environment setup. Fetch config from
-that API before purchasing: Google's verified `obfuscatedExternalAccountId` must
-match the **cloud** profile UUID. Local profiles, token ownership, and grants are
-not copied or reassigned. Restoring a purchase bound to a different UUID is rejected;
-use a separate license-test purchase for that cloud profile.
+**Switching the app to AWS:** set `EXPO_PUBLIC_API_URL` to the `ApiUrl` output,
+keep the Auth0 settings, and rebuild. Fetch the config from that API before
+buying: Google's `obfuscatedExternalAccountId` must match the **cloud** profile.
+Local profiles and purchases are not copied, so restoring a purchase bound to a
+local user is rejected; use a separate license-test purchase.
 
-Verify token/scope rejection, two distinct user UUIDs, pending → completed polling,
-wrong-user polling, Restore, acknowledgement retry, and Premium access separately.
-The native Android client needs no browser CORS change. The separate
-`RECONCILIATION_GOOGLE_ENABLED=true` switch enables Google discovery on the prepared
-[shared cloud reconciliation schedule](RECONCILIATION.md#cloud-reconciliation);
-`GOOGLE_PLAY_ENABLED=true` remains required for processing.
+Verify token/scope rejection, two distinct users, pending → completed polling,
+wrong-user polling, Restore, acknowledgement retry, and Premium access. Cloud
+reconciliation needs its own switch, `RECONCILIATION_GOOGLE_ENABLED=true`
+([shared schedule](RECONCILIATION.md#cloud-reconciliation)).
 
 ## Ready for the first integration run
 
-Keep a small private setup record with the package name, product/base-plan IDs,
-active regions, internal opt-in link, tester account, Cloud project ID, backend
-service-account email, and topic/subscription names. These identifiers are not
-credentials; avoid putting personal tester details in repository docs.
+Keep a private setup record (not in the repository): package name,
+product/base-plan IDs, regions, internal opt-in link, tester account, Cloud
+project ID, backend service-account email, and topic/subscription names.
 
-The first run must verify Android login, test purchase, backend-owned access,
-purchase acknowledgement, restore, and wrong-user rejection. Google refunds
-unacknowledged license-test purchases after about **three minutes**; the backend
-must persist verified access before acknowledgement and retry failures durably.
-Use Play Billing Lab later for renewal, grace, and account-hold exercises.
+The first run verifies Android login, test purchase, backend-owned access,
+acknowledgement, Restore, and wrong-user rejection. Google refunds
+unacknowledged license-test purchases after about **three minutes**, which is
+why the backend must commit first and retry acknowledgement durably. Use Play
+Billing Lab later for renewal, grace, and account hold.
 [Purchase testing and acknowledgement timing](https://developer.android.com/google/play/billing/test).
 
-Pause through the internal-test track and cancel any retained test subscription
-when finished. Stopping local processes does not stop provider renewals or Cloud
-resources; remove only demo-specific subscriptions/topics/keys when retiring them.
+**Cleanup:** pause through the internal-test track and cancel retained test
+subscriptions. Stopping local processes does not stop renewals or Cloud
+resources; remove only demo-specific subscriptions, topics, and keys.

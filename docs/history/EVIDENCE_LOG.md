@@ -831,3 +831,11 @@ at the time and are not a claim of a new rerun. Status and open gaps live in TAS
   rethrow, and exhaustion codes. A Google-mock-only reconciliation preview ran
   against the local database with zero writes. No device runs, real provider
   requests, or AWS deployment; no automated tests were added.
+
+- **Guide readability, October 18:** turned long prose in the Google Play, Apple
+  Sandbox, and DynamoDB data model guides into numbered steps, tables, and short
+  bullet lists without changing setup facts; added a Google purchase sequence
+  diagram; split the AWS topology into a request/notification diagram and a
+  reconciliation/failure-path diagram. `pnpm check`, Markdown formatting, 357
+  relative links/anchors, diff whitespace, and rendering of all ten Mermaid
+  diagrams in the edited guides passed. Documentation only.
