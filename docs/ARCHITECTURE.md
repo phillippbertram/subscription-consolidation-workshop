@@ -83,8 +83,14 @@ and the sole [verification record](TASKS.md).
 
 - [Stripe checkout and processing](PAYMENTS.md#payment-flow): payment → verified state → access.
 - [Apple purchase and notifications](APPLE_PURCHASES.md): client synchronization and lifecycle events converge in the worker.
+- [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 
 Outbox publication to EventBridge, scheduled reconciliation, and independent
 Google mock provider state are extensions tracked in P07–P09. Pending outbox
 records already exist; API expiry checks do not depend on those future jobs.
+
+Local reconciliation enqueues Stripe, known Apple Sandbox, and Google mock refreshes
+plus due expiration jobs through the subscription worker. Independent Google mock
+state supports suppressed-event exercises. See the [Reconciliation guide](RECONCILIATION.md)
+for discovery, processing, and the local/cloud boundary.

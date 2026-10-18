@@ -1,13 +1,11 @@
 import type { Subscription } from '@premiumpass/domain';
-import type { StripeJob } from '@premiumpass/billing-contracts';
+import type {
+  StripeJob,
+  StripeReconciliationJob,
+} from '@premiumpass/billing-contracts';
 
 /** Internal manual refresh, distinct from a signed Stripe webhook event. */
-export type StripeProcessingJob =
-  | StripeJob
-  | (Omit<StripeJob, 'eventType'> & {
-      eventType: 'reconciliation';
-      expectedUserId: string;
-    });
+export type StripeProcessingJob = StripeJob | StripeReconciliationJob;
 
 /**
  * Provider object references resolved from a queued event. They identify what
@@ -63,6 +61,15 @@ export interface Aggregate {
   /** Aggregate revision, separate from source revisions; zero means no snapshot. */
   revision: number;
   subscriptions: Subscription[];
+  /** Next persisted access boundary; source subscriptions are never extended by it. */
+  effectiveUntil?: string | null;
+}
+
+export function expirationDue(aggregate: Aggregate, now: Date) {
+  return Boolean(
+    aggregate.effectiveUntil &&
+    Date.parse(aggregate.effectiveUntil) <= now.getTime(),
+  );
 }
 
 /**

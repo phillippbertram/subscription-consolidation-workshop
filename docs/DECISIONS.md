@@ -33,7 +33,7 @@ status and evidence belong exclusively in [TASKS](TASKS.md).
 | Mobile               | Expo, SDK secure credentials, Axios/Zod API client, session-isolated TanStack Query cache; feature folders; Gluestack/NativeWind v4 with Tailwind v3 |
 | Dashboard            | Fixed dark theme, score-first layout, Account modal, collapsed developer tools; subscription details separated from current grants |
 | Apple                | Direct `expo-iap` and official Apple server library; Sandbox only; no RevenueCat; internal UUID as `appAccountToken`               |
-| Purchase completion  | Finish StoreKit transaction only after committed backend operation; immutable owner binding                                        |
+| Purchase completion  | Worker finishes with Apple after the atomic commit; durable finish target and queue retries close the crash window; app waits for recorded finish                                        |
 | Cancellation         | Stripe period-end cancellation verifies ownership; Apple uses native management; access follows verified provider state            |
 | Duplicate exercises  | Default-off, nonpersistent development Sandbox override affects UI eligibility only                                                |
 | Local administration | Fixed DynamoDB Local target; Stripe reconciliation reads provider state through the existing processor; preview with `--dry-run`   |

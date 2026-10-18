@@ -17,11 +17,19 @@ import { ProcessingError } from './processing/contracts.js';
 import { SubscriptionProcessor } from './processing/processor.js';
 import { StripeSubscriptionSource } from './processing/stripe-source.js';
 import { readWorkerConfig, readWorkerCredentials } from './config.js';
+import { GoogleMockProcessor } from './processing/google-mock-processor.js';
+import { ExpirationProcessor } from './processing/expiration.js';
 
 // Reuse AWS connections in warm Lambda invocations. Secrets are refreshed
 // separately so a cached client does not freeze credential rotation.
 const configurations = new Map<boolean, ReturnType<typeof readWorkerConfig>>();
-const stores = new Map<boolean, DynamoDbProcessingStore>();
+const stores = new Map<
+  boolean,
+  {
+    store: DynamoDbProcessingStore;
+    documentClient: ReturnType<typeof createDocumentClient>;
+  }
+>();
 
 function configFor(local: boolean) {
   let config = configurations.get(local);
@@ -33,56 +41,78 @@ function configFor(local: boolean) {
   return config;
 }
 
-export async function workerRuntime(local: boolean) {
+export function workerRuntime(local: boolean) {
   const config = configFor(local);
-  const credentials = await readWorkerCredentials(process.env, local);
-  const stripe = new Stripe(credentials.secretKey, {
-    maxNetworkRetries: 0,
-    timeout: 3_000,
-  });
-  let store = stores.get(local);
-  if (!store) {
-    store = new DynamoDbProcessingStore(
-      createDocumentClient(config.database),
-      config.database.tableName,
-    );
-    stores.set(local, store);
+  let persistence = stores.get(local);
+  if (!persistence) {
+    const documentClient = createDocumentClient(config.database);
+    persistence = {
+      documentClient,
+      store: new DynamoDbProcessingStore(
+        documentClient,
+        config.database.tableName,
+      ),
+    };
+    stores.set(local, persistence);
   }
 
-  const stripeProcessor = new SubscriptionProcessor(
-    store,
-    new StripeSubscriptionSource(stripe, credentials.priceId),
-  );
-  const settings = readAppleSettings(process.env);
-  const localAppleProcessor =
-    settings && local
-      ? new AppleSubscriptionProcessor(
-          store,
-          createAppleSource(settings, readLocalAppleCredentials(process.env)),
-        )
-      : undefined;
+  const { store, documentClient } = persistence;
   return {
     ...config,
     processor: {
       async process(job: SubscriptionJob) {
-        if (job.provider === 'stripe') {
-          return stripeProcessor.process(job);
+        // Local exercises must never become a cloud authentication/provider fallback.
+        if (
+          job.provider === 'google_mock' ||
+          job.provider === 'local_expiration'
+        ) {
+          if (!local) {
+            throw new ProcessingError('local_job_rejected');
+          }
+
+          return job.provider === 'google_mock'
+            ? new GoogleMockProcessor(
+                store,
+                documentClient,
+                config.database.tableName,
+              ).process(job)
+            : new ExpirationProcessor(
+                store,
+                documentClient,
+                config.database.tableName,
+              ).process(job);
         }
 
+        // Load only the selected provider's credentials. A blocked Apple account
+        // cannot prevent Stripe, expiration, or explicit local mocks from running.
+        if (job.provider === 'stripe') {
+          const credentials = await readWorkerCredentials(process.env, local);
+          const stripe = new Stripe(credentials.secretKey, {
+            maxNetworkRetries: 0,
+            timeout: 3_000,
+          });
+          return new SubscriptionProcessor(
+            store,
+            new StripeSubscriptionSource(stripe, credentials.priceId),
+          ).process(job);
+        }
+
+        if (!local && job.eventType === 'reconciliation') {
+          throw new ProcessingError('local_job_rejected');
+        }
+
+        const settings = readAppleSettings(process.env);
         if (!settings) {
           throw new ProcessingError('apple_not_configured');
         }
 
-        const appleProcessor =
-          localAppleProcessor ??
-          new AppleSubscriptionProcessor(
-            store,
-            createAppleSource(
-              settings,
-              await readCloudAppleCredentials(process.env),
-            ),
-          );
-        return appleProcessor.process(job);
+        const credentials = local
+          ? readLocalAppleCredentials(process.env)
+          : await readCloudAppleCredentials(process.env);
+        return new AppleSubscriptionProcessor(
+          store,
+          createAppleSource(settings, credentials),
+        ).process(job);
       },
     },
   };

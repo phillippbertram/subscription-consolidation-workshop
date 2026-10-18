@@ -64,6 +64,7 @@ Apple purchase/restore flow.
 | ------------------------------------------------------ | --------------------------------------------- |
 | Login, permissions, and client configuration           | [Auth0](docs/AUTH0_SETUP.md)                  |
 | Checkout, verified payments, retries, and access rules | [Payments](docs/PAYMENTS.md)                  |
+| Missed subscription updates and expiration            | [Reconciliation](docs/RECONCILIATION.md)     |
 | Database keys, records, and atomic updates             | [DynamoDB model](docs/DYNAMODB_DATA_MODEL.md) |
 | Product boundaries and learning goals                  | [Project plan](PROJECT_PLAN.md)               |
 | Why the project uses these approaches                  | [Decisions](docs/DECISIONS.md)                |

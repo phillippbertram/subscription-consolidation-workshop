@@ -118,6 +118,16 @@ CLI have different redelivery behavior. See [Stripe delivery](https://docs.strip
 The demo verifies the configured price and paid invoice lines, with a bounded
 invoice history; complex discounts, prorations, and out-of-band payments are outside scope.
 
+## Reconciliation and expiration
+
+The [Reconciliation guide](RECONCILIATION.md) owns missed-event discovery,
+provider differences, expiration processing, retry guarantees, and run diagnostics.
+It also links to local commands and the T20/T21 exercises.
+
+Repair uses the existing worker and atomic processing path. Provider failures
+never extend access or erase verified state; API access independently enforces
+the boundaries in the policy below.
+
 ## Access policy
 
 The API derives access from subscription records and the current time, not the

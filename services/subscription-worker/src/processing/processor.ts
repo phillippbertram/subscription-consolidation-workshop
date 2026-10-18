@@ -2,6 +2,7 @@ import { setTimeout } from 'node:timers/promises';
 import {
   ProcessingError,
   RevisionConflict,
+  expirationDue,
   type SubscriptionSource,
   type ProcessingStore,
   type StripeProcessingJob,
@@ -61,8 +62,11 @@ export class SubscriptionProcessor {
         now,
       );
       // Complete a fresh verification even when business fields are unchanged,
-      // but emit an outbox event only for a subscription domain change.
-      const changed = !previous || !sameDomainState(previous, subscription);
+      // but emit an outbox event only for source changes or a due access boundary.
+      const changed =
+        !previous ||
+        !sameDomainState(previous, subscription) ||
+        expirationDue(aggregate, now);
       try {
         await this.store.commitStripe(
           aggregate,

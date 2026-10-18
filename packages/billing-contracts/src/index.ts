@@ -36,6 +36,37 @@ export const jobSchema = baseJobSchema
   });
 export type StripeJob = z.infer<typeof jobSchema>;
 
+export const stripeReconciliationJobSchema = baseJobSchema.extend({
+  provider: z.literal('stripe'),
+  eventId: z.string().regex(/^reconcile_[0-9a-f-]{36}_sub_[A-Za-z0-9]+$/),
+  eventType: z.literal('reconciliation'),
+  expectedUserId: z.uuid(),
+  objectId: z.string().regex(/^sub_[A-Za-z0-9]+$/),
+});
+export type StripeReconciliationJob = z.infer<
+  typeof stripeReconciliationJobSchema
+>;
+
+export const googleMockIdSchema = z
+  .string()
+  .regex(/^mock_google_[A-Za-z0-9_-]{1,80}$/);
+export const googleMockJobSchema = baseJobSchema.extend({
+  provider: z.literal('google_mock'),
+  eventId: z.string().min(1).max(200),
+  eventType: z.enum(['notification', 'reconciliation']),
+  userId: z.uuid(),
+  subscriptionId: googleMockIdSchema,
+});
+export type GoogleMockJob = z.infer<typeof googleMockJobSchema>;
+
+export const expirationJobSchema = baseJobSchema.extend({
+  provider: z.literal('local_expiration'),
+  eventId: z.string().min(1).max(200),
+  eventType: z.literal('expiration'),
+  userId: z.uuid(),
+});
+export type ExpirationJob = z.infer<typeof expirationJobSchema>;
+
 export const appleJobSchema = baseJobSchema.extend({
   provider: z.literal('apple'),
   environment: z.literal('Sandbox'),
@@ -45,8 +76,27 @@ export const appleJobSchema = baseJobSchema.extend({
   userId: z.uuid(),
 });
 export type AppleJob = z.infer<typeof appleJobSchema>;
-export const subscriptionJobSchema = z.discriminatedUnion('provider', [
+
+// Internal refresh jobs cannot enter through the client/notification schema.
+export const appleReconciliationJobSchema = baseJobSchema.extend({
+  provider: z.literal('apple'),
+  environment: z.literal('Sandbox'),
+  eventId: z.string().regex(/^reconcile_[0-9a-f-]{36}_[0-9]{1,64}$/),
+  eventType: z.literal('reconciliation'),
+  transactionId: z.string().regex(/^[0-9]{1,64}$/),
+  userId: z.uuid(),
+});
+export type AppleReconciliationJob = z.infer<
+  typeof appleReconciliationJobSchema
+>;
+export type AppleProcessingJob = AppleJob | AppleReconciliationJob;
+
+export const subscriptionJobSchema = z.union([
   jobSchema,
+  stripeReconciliationJobSchema,
   appleJobSchema,
+  appleReconciliationJobSchema,
+  googleMockJobSchema,
+  expirationJobSchema,
 ]);
 export type SubscriptionJob = z.infer<typeof subscriptionJobSchema>;

@@ -12,7 +12,6 @@ import {
   getAvailablePurchases,
   getPendingTransactionsIOS,
   syncIOS,
-  finishTransaction,
   showManageSubscriptionsIOS,
   type Purchase,
 } from 'expo-iap';
@@ -116,8 +115,6 @@ function AppleStoreCard({
           return;
         }
 
-        // Queue acceptance is insufficient: only a committed completion permits finish.
-        await finishTransaction({ purchase, isConsumable: false });
         if (!signal.aborted) {
           setMessage('Purchase synchronized.');
           onVerifiedRef.current();
@@ -501,7 +498,7 @@ async function synchronizeApplePurchase(
 
   if (!signal.aborted) {
     throw new PurchaseSyncError(
-      'Verification is still pending. Refresh or restore purchases to retry.',
+      'Purchase completion is still pending. Restore purchases to check again.',
     );
   }
 }

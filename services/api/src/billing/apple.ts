@@ -87,7 +87,11 @@ export function createLocalAppleBilling(
         }),
       );
       // Do not disclose completion or ownership of another account's operation.
-      return Item?.userId === userId && Item.eventType === 'client.sync';
+      return (
+        Item?.userId === userId &&
+        Item.eventType === 'client.sync' &&
+        z.iso.datetime().safeParse(Item.finishedAt).success
+      );
     },
   };
 }

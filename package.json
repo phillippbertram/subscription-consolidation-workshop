@@ -34,7 +34,10 @@
     "dev:worker": "pnpm --filter @premiumpass/subscription-worker run dev",
     "dev:apple-webhook": "pnpm --filter @premiumpass/apple-webhook run dev",
     "lint:fix": "eslint . --fix --max-warnings 0",
-    "subscription": "pnpm --filter @premiumpass/subscription-worker run subscription"
+    "subscription": "pnpm --filter @premiumpass/subscription-worker run subscription",
+    "reconcile": "pnpm --filter @premiumpass/subscription-worker run reconcile",
+    "dev:reconcile": "pnpm --filter @premiumpass/subscription-worker run reconcile --watch",
+    "google-mock": "pnpm --filter @premiumpass/subscription-worker run google-mock"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

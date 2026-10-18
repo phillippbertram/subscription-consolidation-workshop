@@ -61,7 +61,7 @@ export function createAppleWebhookApp(
         environment: 'Sandbox',
         eventId: notification.notificationUUID,
         eventType: 'notification',
-        transactionId: transaction.originalTransactionId,
+        transactionId: transaction.transactionId,
         userId: transaction.appAccountToken?.toLowerCase(),
         receivedAt: new Date().toISOString(),
         correlationId,

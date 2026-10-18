@@ -1,9 +1,10 @@
-import type { AppleJob } from '@premiumpass/billing-contracts';
+import type { AppleProcessingJob } from '@premiumpass/billing-contracts';
 import { TransactionCanceledException } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
   TransactWriteCommand,
+  UpdateCommand,
   type TransactWriteCommandInput,
 } from '@aws-sdk/lib-dynamodb';
 import { z } from 'zod';
@@ -90,7 +91,14 @@ export class DynamoDbProcessingStore {
       this.client,
       this.tableName,
     ).listForUser(userId);
-    return { userId, revision, subscriptions };
+    return {
+      userId,
+      revision,
+      subscriptions,
+      effectiveUntil: item
+        ? z.iso.datetime().nullable().parse(item.effectiveUntil)
+        : null,
+    };
   }
 
   /**
@@ -204,27 +212,66 @@ export class DynamoDbProcessingStore {
     );
   }
 
-  async isAppleProcessed(job: AppleJob) {
+  async getAppleProcessing(job: AppleProcessingJob) {
     const item = await this.get(
       `EVENT#apple#Sandbox#${job.eventId}`,
       'PROCESSED',
     );
+    if (!item) {
+      return undefined;
+    }
+
     if (
-      item &&
-      (item.userId !== job.userId || item.transactionId !== job.transactionId)
+      item.userId !== job.userId ||
+      item.transactionId !== job.transactionId ||
+      item.eventType !== job.eventType
     ) {
       throw new ProcessingError('apple_event_owner_mismatch');
     }
 
-    return Boolean(item);
+    const processing = z
+      .object({
+        finishTransactionId: z.string().regex(/^[0-9]{1,64}$/),
+        finishedAt: z.iso.datetime().optional(),
+      })
+      .safeParse(item);
+    if (!processing.success) {
+      throw new ProcessingError('apple_processing_marker_invalid');
+    }
+
+    return processing.data;
+  }
+
+  async markAppleFinished(
+    job: AppleProcessingJob,
+    transactionId: string,
+    now: Date,
+  ) {
+    await this.client.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { pk: `EVENT#apple#Sandbox#${job.eventId}`, sk: 'PROCESSED' },
+        UpdateExpression: 'SET finishedAt = if_not_exists(finishedAt, :now)',
+        ConditionExpression:
+          'userId = :user AND transactionId = :submitted AND eventType = :type AND finishTransactionId = :finished',
+        ExpressionAttributeValues: {
+          ':user': job.userId,
+          ':submitted': job.transactionId,
+          ':type': job.eventType,
+          ':finished': transactionId,
+          ':now': now.toISOString(),
+        },
+      }),
+    );
   }
 
   async commitApple(
     aggregate: Aggregate,
     subscription: Subscription,
-    job: AppleJob,
+    job: AppleProcessingJob,
     now: Date,
     changed: boolean,
+    finishTransactionId: string,
   ) {
     if (
       aggregate.userId !== job.userId ||
@@ -265,6 +312,7 @@ export class DynamoDbProcessingStore {
             sk: 'PROCESSED',
             userId: job.userId,
             transactionId: job.transactionId,
+            finishTransactionId,
             eventId: job.eventId,
             eventType: job.eventType,
             correlationId: job.correlationId,

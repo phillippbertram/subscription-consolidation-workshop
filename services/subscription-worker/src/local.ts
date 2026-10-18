@@ -6,7 +6,7 @@ import { createLogger, readLogLevel } from '@premiumpass/logging';
 import { processMessage, workerRuntime } from './runtime.js';
 
 const log = createLogger(readLogLevel(process.env), 'premiumpass-worker');
-const { sqs, queueUrl, processor } = await workerRuntime(true);
+const { sqs, queueUrl, processor } = workerRuntime(true);
 let stopping = false;
 const polling = new AbortController();
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

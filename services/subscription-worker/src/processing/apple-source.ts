@@ -18,7 +18,7 @@ import {
   subscriptionSchema,
   type Subscription,
 } from '@premiumpass/domain';
-import type { AppleJob } from '@premiumpass/billing-contracts';
+import type { AppleProcessingJob } from '@premiumpass/billing-contracts';
 import { ProcessingError } from './contracts.js';
 import { sameDomainState } from './normalize.js';
 
@@ -41,6 +41,10 @@ export class AppleSubscriptionSource {
         .string()
         .regex(/^[0-9]{1,64}$/)
         .safeParse(transaction.originalTransactionId).success ||
+      !z
+        .string()
+        .regex(/^[0-9]{1,64}$/)
+        .safeParse(transaction.transactionId).success ||
       !z.number().int().positive().safeParse(transaction.expiresDate).success
     ) {
       throw new ProcessingError('apple_purchase_not_owned_or_supported');
@@ -48,27 +52,47 @@ export class AppleSubscriptionSource {
   }
 
   async read(
-    job: AppleJob,
+    job: AppleProcessingJob,
     previousSubscriptions: Subscription[],
     now: Date,
-  ): Promise<Subscription> {
-    const info = await this.client.getTransactionInfo(job.transactionId);
-    if (!info.signedTransactionInfo) {
-      throw new ProcessingError('apple_transaction_missing');
+  ): Promise<{ subscription: Subscription; finishTransactionId: string }> {
+    let originalId: string;
+    let submittedTransactionId: string | undefined;
+    if (job.eventType === 'reconciliation') {
+      // Reconciliation only revisits known lineages. It cannot discover or assign
+      // an unknown purchase; client sync/restore or a signed notification must do that.
+      originalId = job.transactionId;
+      if (
+        !previousSubscriptions.some(
+          (subscription) =>
+            subscription.userId === job.userId &&
+            subscription.provider === 'apple' &&
+            subscription.providerSubscriptionId === `Sandbox:${originalId}`,
+        )
+      ) {
+        throw new ProcessingError('apple_subscription_not_known');
+      }
+    } else {
+      const info = await this.client.getTransactionInfo(job.transactionId);
+      if (!info.signedTransactionInfo) {
+        throw new ProcessingError('apple_transaction_missing');
+      }
+
+      const submitted = await this.verifier.verifyAndDecodeTransaction(
+        info.signedTransactionInfo,
+      );
+      this.validate(submitted, job.userId);
+      if (
+        submitted.transactionId !== job.transactionId &&
+        submitted.originalTransactionId !== job.transactionId
+      ) {
+        throw new ProcessingError('apple_transaction_mismatch');
+      }
+
+      originalId = submitted.originalTransactionId!;
+      submittedTransactionId = submitted.transactionId!;
     }
 
-    const submitted = await this.verifier.verifyAndDecodeTransaction(
-      info.signedTransactionInfo,
-    );
-    this.validate(submitted, job.userId);
-    if (
-      submitted.transactionId !== job.transactionId &&
-      submitted.originalTransactionId !== job.transactionId
-    ) {
-      throw new ProcessingError('apple_transaction_mismatch');
-    }
-
-    const originalId = submitted.originalTransactionId!;
     // Resolve current state even when the submitted transaction/notification is old.
     const response = await this.client.getAllSubscriptionStatuses(originalId);
     if (
@@ -153,7 +177,21 @@ export class AppleSubscriptionSource {
       next.revision = previous.revision;
     }
 
-    return next;
+    return {
+      subscription: next,
+      // A missed renewal has no submitted transaction. Finish the current signed
+      // transaction after commit; retries retain that exact target in the marker.
+      finishTransactionId: submittedTransactionId ?? transaction.transactionId!,
+    };
+  }
+
+  async finish(transactionId: string) {
+    try {
+      await this.client.finishTransaction(transactionId);
+    } catch {
+      // Keep the committed marker and let the queue retry without logging SDK data.
+      throw new ProcessingError('apple_finish_unavailable');
+    }
   }
 }
 

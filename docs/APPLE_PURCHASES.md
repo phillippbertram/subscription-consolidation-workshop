@@ -66,31 +66,67 @@ curl --fail http://127.0.0.1:3003/health
    take time to become available; simulation is a different verification path.
    [Apple sandbox testing](https://developer.apple.com/documentation/storekit/testing-in-app-purchases-with-sandbox).
 4. Sign into PremiumPass with a synthetic Free user and choose **Subscribe**.
-   After the worker commits, refresh Web and Mobile and compare their access.
+   The worker verifies and commits the purchase, then finishes it with Apple.
+   The app waits for that completion; compare access in Web and Mobile.
+
+**1. Purchase and processing triggers.** The app buys through StoreKit. Separately,
+Apple pushes **App Store Server Notifications** for purchases and later lifecycle
+changes, even while the app is closed. Either queue entry starts processing;
+delivery order is not guaranteed, and the worker never waits for both.
 
 ```mermaid
 sequenceDiagram
-    participant App
-    participant API
-    participant Apple
-    participant Worker as Queue / worker
-    participant DB as DynamoDB
-    App->>API: Get Sandbox config
-    API-->>App: Product and internal UUID as appAccountToken
-    App->>Apple: Purchase
+    participant App as iPhone app
+    participant Apple as App Store
+    participant API as PremiumPass API
+    participant Webhook as Apple webhook
+    participant Queue
+    App->>API: Get product and appAccountToken
+    API-->>App: Sandbox config
+    App->>Apple: Purchase through StoreKit
     Apple-->>App: Transaction
-    App->>API: Submit transaction ID
-    API->>Worker: Queue owned synchronization
-    API-->>App: Pending operation
-    Worker->>Apple: Fetch and verify current signed state
-    Worker->>DB: Commit owner, grants, completion, outbox
-    App->>API: Poll own operation
-    API-->>App: Completed after commit
-    App->>Apple: Finish transaction
+    par App synchronization
+        App->>API: Submit transaction ID
+        API->>Queue: Queue owned sync
+        API-->>App: Pending operation
+    and Independent Server Notifications
+        Apple->>Webhook: POST /v1/webhooks/apple (via ngrok locally)
+        Webhook->>Webhook: Verify signed notification
+        Webhook->>Queue: Queue supported transaction
+        Webhook-->>Apple: 200 after queue acceptance
+    end
 ```
 
-Restore and unfinished-transaction recovery reuse this path. A timeout leaves the
-transaction unfinished; restore or reopen after fixing the cause. **Manage Apple
+**2. Worker calls to the App Store Server API.** Each new job follows the same
+verification and persistence path. These requests originate in our backend;
+notifications arrive independently of them. A webhook `200` confirms queue
+acceptance, while the app polls its own API operation until `finishedAt` is saved.
+
+```mermaid
+sequenceDiagram
+    participant Worker as Subscription worker
+    participant AppleAPI as App Store Server API
+    participant DB as DynamoDB
+    Worker->>AppleAPI: Get Transaction Info
+    AppleAPI-->>Worker: Signed submitted transaction
+    Worker->>AppleAPI: Get All Subscription Statuses
+    AppleAPI-->>Worker: Current signed subscription state
+    Worker->>Worker: Verify signatures and ownership
+    Worker->>DB: Commit grants, owner, marker and outbox atomically
+    DB-->>Worker: Committed with finishTransactionId
+    Worker->>AppleAPI: Finish Transaction (stored transaction ID)
+    AppleAPI-->>Worker: Success
+    Worker->>DB: Record finishedAt
+    Worker->>Worker: Acknowledge queue job
+```
+
+The app never calls `finishTransaction`; automatic StoreKit finishing stays off.
+The worker uses Apple's [Finish Transaction API](https://developer.apple.com/documentation/appstoreserverapi/finish-transaction)
+only after the database commit. Failed finishes retry from the stored marker
+([recovery details](#processing-and-ownership)). Closing the app does not stop an
+already queued operation.
+Restore and unfinished-transaction recovery reuse this path. A polling timeout
+does not cancel processing; restore or reopen to check again. **Manage Apple
 subscription** opens Apple's native sheet and synchronizes known subscriptions
 when it closes. Existing Premium normally hides a new purchase. The development
 Sandbox override in Developer tools permits deliberate duplicate-purchase
@@ -171,12 +207,53 @@ flowchart LR
 The worker verifies Sandbox, bundle, product, signed state, and `appAccountToken`.
 `Sandbox:<originalTransactionId>` is permanently bound to one internal user;
 restoring with another Auth0 identity cannot transfer it. A transaction commits
-ownership, subscription, all-provider entitlements, completion, and any outbox
-change together. Conflicts reload current state; duplicates do not extend access.
+ownership, subscription, all-provider entitlements, processing marker, and any
+outbox change together. The marker stores the exact verified `finishTransactionId`;
+notification jobs carry the signed transaction ID, not just the subscription lineage.
+Conflicts reload current state; duplicates do not extend access.
+
+| Interruption                                     | Recovery                                                          |
+| ------------------------------------------------ | ----------------------------------------------------------------- |
+| Before database commit                           | Retry verification and commit; no Apple finish yet                |
+| After commit, before/during Apple finish         | Retry only the stored finish target; do not rewrite grants/outbox |
+| Apple finished, but saving `finishedAt` failed   | Repeat the same Apple finish, then record success                 |
+| After `finishedAt`, before queue acknowledgement | A duplicate skips both domain writes and Apple finish             |
+
+Queue acknowledgement follows the persisted finish result. API polling remains
+`pending` until `finishedAt` exists, while access follows the already committed
+grant. Finish failures never roll back or extend access. Repeated failures reach
+the DLQ; fix the cause and redrive the original message. Local queue messages are
+volatile: keep ElasticMQ running during retries, or restore purchases to enqueue
+a new sync after a local queue reset. Earlier demo markers without a finish target
+are not migrated; use a new client sync/Restore for those purchases.
 
 Apple grace follows its signed boundary. Disabling renewal keeps access until
 verified expiry; expiration/revocation removes only this provider's grant.
 See [shared access policy](PAYMENTS.md#access-policy) and [Apple records](DYNAMODB_DATA_MODEL.md#apple-sandbox-records).
+
+## Local reconciliation
+
+With the [worker's Apple configuration](#enable-local-processing) in place,
+run a preview, then enqueue a refresh:
+
+```sh
+pnpm reconcile --user <internal-user-id> --provider apple --dry-run
+pnpm reconcile --user <internal-user-id> --provider apple
+```
+
+Keep `pnpm dev:worker` running for queued work. Configured commands call the real
+Apple Sandbox API; database and queue remain local. For all-user runs, the watcher,
+preview, and diagnostics, see [Reconciliation](RECONCILIATION.md).
+
+Discovery revisits only stored `Sandbox:<originalTransactionId>` lineages using
+[Get All Subscription Statuses](https://apple.github.io/app-store-server-library-node/classes/AppStoreServerAPIClient.html#getAllSubscriptionStatuses). It
+cannot find an initial purchase missing from the database; use purchase/Restore
+or a signed notification for that.
+
+After verification and commit, reconciliation finishes the latest signed
+transaction. A committed retry retains that exact target even if another renewal
+occurs; a new run can refresh that later renewal. This uses the same
+[finish-retry path](#processing-and-ownership) as notifications.
 
 ## AWS notification processing
 
@@ -193,16 +270,19 @@ cloud mobile purchase/restore path. Runtime secret caching lasts five minutes.
 
 ## Manual device checks
 
-| Check                                                                 | Expected result                                                |
-| --------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Purchase as Free user; compare Web/Mobile                             | Matching internal user, verified Apple grant, protected scores |
-| Restart/restore; restore as another user                              | Stable ownership; wrong-user restore rejected                  |
-| T10–T12: duplicates, delayed notifications, concurrent Stripe changes | Current state wins; no lost or duplicate grant                 |
-| T13/T14: renewal disabled, expiry, grace                              | Access follows verified boundaries                             |
-| T15: stop worker/provider access during purchase                      | Pending verification; no premature finish or access            |
-| Manage subscription, close sheet                                      | Refreshed renewal state and retained paid access               |
-| End Apple while Stripe remains valid                                  | Premium remains                                                |
-| Development-only duplicate override                                   | Store outcome visible; ownership checks still enforced         |
+| Check                                                                 | Expected result                                                                         |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Purchase as Free user; compare Web/Mobile                             | Matching internal user, verified Apple grant, protected scores                          |
+| Restart/restore; restore as another user                              | Stable ownership; wrong-user restore rejected                                           |
+| T10–T12: duplicates, delayed notifications, concurrent Stripe changes | Current state wins; no lost or duplicate grant                                          |
+| T13/T14: renewal disabled, expiry, grace                              | Access follows verified boundaries                                                      |
+| T15: stop worker/provider access during purchase                      | Pending verification; no premature finish or access                                     |
+| Fail Apple finish after commit; retry the same job                    | Access committed, operation pending; retry finishes without another domain/outbox write |
+| Lose response/save after Apple finish; redeliver                      | Repeat the same finish safely; acknowledge only after `finishedAt` is stored            |
+| Close app after enqueue, then reopen                                  | Worker completes independently; restored account reflects backend state                 |
+| Manage subscription, close sheet                                      | Refreshed renewal state and retained paid access                                        |
+| End Apple while Stripe remains valid                                  | Premium remains                                                                         |
+| Development-only duplicate override                                   | Store outcome visible; ownership checks still enforced                                  |
 
 Device, provider, and AWS evidence belong in [P07](TASKS.md#p07-apple-sandbox-and-google-mocks).
 

@@ -5,18 +5,21 @@ work, local diagnostics, and cleanup. Commands run from the repository root.
 
 ## Run and check
 
-| Command                                       | Purpose                                                                                        |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                    | Initialize Docker/table, then run API, both webhooks, worker, and Web                          |
-| `pnpm local:up` / `pnpm local:down`           | Start/initialize or remove Compose containers; retain database volume                          |
-| `pnpm dev:api` / `pnpm dev:api:lan`           | API on loopback / all IPv4 interfaces                                                          |
-| `pnpm dev:webhook` / `pnpm dev:apple-webhook` | Individual Stripe / Apple ingress                                                              |
-| `pnpm dev:worker` / `pnpm web:dev`            | Individual worker / website                                                                    |
-| `pnpm stripe:listen`                          | Forward Stripe test events; separate CLI terminal                                              |
-| `pnpm mobile:ios` / `pnpm mobile:dev`         | Build native iOS app / run Metro for an installed app                                          |
-| `pnpm mobile:dev:lan`                         | Metro for a physical iPhone; [device setup](../apps/mobile/README.md#run-on-a-physical-iphone) |
-| `pnpm format` / `pnpm check`                  | Apply code formatting; verify formatting, lint, types, and builds                              |
-| `pnpm synth`                                  | Produce CDK assembly locally; no deployment                                                    |
+| Command                                                 | Purpose                                                                                        |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                              | Initialize Docker/table, then run API, both webhooks, worker, and Web                          |
+| `pnpm local:up` / `pnpm local:down`                     | Start/initialize or remove Compose containers; retain database volume                          |
+| `pnpm dev:api` / `pnpm dev:api:lan`                     | API on loopback / all IPv4 interfaces                                                          |
+| `pnpm dev:webhook` / `pnpm dev:apple-webhook`           | Individual Stripe / Apple ingress                                                              |
+| `pnpm dev:worker` / `pnpm web:dev`                      | Individual worker / website                                                                    |
+| `pnpm reconcile --dry-run` / `pnpm reconcile`           | Preview / enqueue local reconciliation across all users                                        |
+| `pnpm dev:reconcile`                                    | Repeat local reconciliation every five minutes                                                 |
+| `pnpm google-mock --help`                               | Change independent local Google mock state                                                     |
+| `pnpm stripe:listen`                                    | Forward Stripe test events; separate CLI terminal                                              |
+| `pnpm mobile:ios` / `pnpm mobile:dev`                   | Build native iOS app / run Metro for an installed app                                          |
+| `pnpm mobile:dev:lan`                                   | Metro for a physical iPhone; [device setup](../apps/mobile/README.md#run-on-a-physical-iphone) |
+| `pnpm format` / `pnpm check`                            | Apply code formatting; verify formatting, lint, types, and builds                              |
+| `pnpm synth`                                            | Produce CDK assembly locally; no deployment                                                    |
 
 Use the grouped stack or individual commands, not both. Restart after `.env`
 changes. `pnpm build` bundles backend entry points, builds Web, and exports
@@ -91,6 +94,85 @@ For independent mock records, use `pnpm demo:subscription <internal-user-id>
 change only two reserved, marked demo records. `free` removes those records;
 it does not remove real provider grants. Refresh the client after changes.
 
+## Local reconciliation and expiration
+
+For the overview, provider differences, processing flow, and failure behavior,
+read [Reconciliation](RECONCILIATION.md). This section owns commands and exercises.
+
+The existing `pnpm subscription reconcile <user-id>` performs a synchronous
+Stripe-only repair. The following commands instead discover work for one or all
+users and send it to the existing subscription queue:
+
+```sh
+pnpm local:up
+pnpm dev:worker
+```
+
+In another terminal:
+
+```sh
+pnpm reconcile --dry-run
+pnpm reconcile
+pnpm dev:reconcile
+```
+
+The watcher runs immediately, then every five minutes, without overlapping its
+own runs. Stop with `Ctrl+C`; these commands are separate from `pnpm dev`.
+Follow [run diagnostics](RECONCILIATION.md#follow-a-run) to distinguish queue
+acceptance from completed repair.
+
+| Option                      | Effect                                                       |
+| --------------------------- | ------------------------------------------------------------ |
+| `--user <internal-user-id>` | Limit discovery to one existing local profile                |
+| `--provider all`            | Stripe test, known Apple Sandbox subscriptions, and managed Google mocks; default |
+| `--provider stripe`         | Stripe test only                                             |
+| `--provider apple`          | Known Apple Sandbox subscriptions only                       |
+| `--provider google_mock`    | Independent Google mock state only; no provider keys         |
+| `--provider none`           | Expiration only; no provider keys                            |
+| `--dry-run`                 | Read and report differences without database or queue writes |
+
+Expiration is included with every provider selection. It recalculates due
+entitlement snapshots from stored verified boundaries without changing provider
+records. API access already checks time independently of the scheduler.
+
+All commands use the fixed Compose table and subscription queue. The worker
+needs its local database/queue `.env` settings. Stripe work loads
+`STRIPE_SECRET_KEY` (test mode) and `STRIPE_PRICE_ID` from the worker environment.
+Apple work loads the worker's enabled Sandbox settings and In-App Purchase key
+only when a known Apple subscription exists. See [Apple reconciliation](APPLE_PURCHASES.md#local-reconciliation).
+Mock and expiration jobs need neither provider's credentials.
+For partial failures, exit codes, retries, and the cloud boundary, see
+[Reconciliation](RECONCILIATION.md#follow-a-run).
+
+### Exercise a missed Google mock event (T20)
+
+Use an existing synthetic user and a unique `mock_google_` subscription ID:
+
+```sh
+pnpm google-mock <internal-user-id> mock_google_demo active
+# Wait for subscription.processed in the worker terminal.
+pnpm google-mock <internal-user-id> mock_google_demo revoked --suppress-event
+pnpm reconcile --user <internal-user-id> --provider google_mock --dry-run
+pnpm reconcile --user <internal-user-id> --provider google_mock
+```
+
+The suppressed change updates only the independent mock source. Derived access
+stays unchanged until reconciliation/worker processing repairs it. Repeat the
+last command: fresh verification may update metadata, but it must not create a
+second domain-change outbox event. Another valid provider still grants Premium.
+
+Other scenarios: `renewal_failed` retains the previous period with bounded grace;
+`canceling` disables renewal while preserving its boundary; `expired`, `revoked`,
+and `pending` grant nothing. `active --until <future-UTC-timestamp>` sets an explicit
+boundary. Failure/cancellation require an existing period; repeated failure never
+restarts grace. These are synthetic local states, not Google Play purchases.
+Old `demo:subscription` records are separate and are not authoritative mock state.
+
+For T21, a Stripe customer mapping must preexist. Reconciliation lists all that
+customer's test subscriptions, including ones absent locally after a missed
+initial webhook. The worker verifies ownership and paid periods before granting
+access. Provider errors never mean deletion. [Technical behavior](RECONCILIATION.md#recovery-guarantees).
+
 ## Cleanup
 
 Choose the intended result. Local data, provider subscriptions, and AWS resources
@@ -116,7 +198,8 @@ have separate lifecycles; deleting one does not delete the others.
 ### Reset local data
 
 **Deletes all profiles, customer/owner mappings, subscriptions, markers, and
-outbox records in this project's local database, plus queued work.** It does
+outbox records and independent Google mock state in this project's local database,
+plus queued work.** It does
 not cancel Stripe/Apple subscriptions or delete Auth0 users.
 
 Stop processes first. Inspect the target with `docker compose config --volumes`

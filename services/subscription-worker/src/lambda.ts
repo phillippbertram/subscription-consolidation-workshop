@@ -9,7 +9,7 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
   // distinct from the Stripe event IDs used to deduplicate domain processing.
   const batchItemFailures: SQSBatchResponse['batchItemFailures'] = [];
   try {
-    const { processor } = await workerRuntime(false);
+    const { processor } = workerRuntime(false);
     for (const record of event.Records) {
       try {
         await processMessage(processor, record.body, log);

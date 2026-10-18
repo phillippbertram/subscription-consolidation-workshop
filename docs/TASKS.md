@@ -24,8 +24,9 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P10 | CI/CD, operations, and final demo          | P04, P06–P09                         | open     |
 | P11 | Self-service subscription cancellation     | P06; P07 for stores                  | partial  |
 
-**Next milestone:** P07 real iPhone purchase/restore and lifecycle verification
-against the local backend. AWS verification is a separately authorized path.
+**Current focus:** P09 local reconciliation and expiration, including Apple.
+The P07 real purchase/restore milestone still needs Apple account/key and device
+evidence. AWS deployment and verification remain a separately authorized path.
 
 ## P00 Prepare the project for agents
 
@@ -147,7 +148,8 @@ against the local backend. AWS verification is a separately authorized path.
 ## P07 Apple sandbox and Google mocks
 
 - **Acceptance:** real iPhone purchase/restore activates only the matching user;
-  committed completion precedes transaction finish; signed lifecycle delivery
+  committed state precedes backend Apple finish, which survives retries;
+  queue acknowledgement follows recorded finish; signed lifecycle delivery
   updates access; T10–T15 preserve ownership and other valid provider grants.
   Google mocks require independent provider state and event suppression for P09.
 - **Implemented:** direct `expo-iap`, Sandbox verification, immutable owner binding,
@@ -184,9 +186,23 @@ against the local backend. AWS verification is a separately authorized path.
   and query recovery after canceled logout. No automated test suite was added.
   Native rebuild for `expo-network`, device foreground/offline/expiry behavior,
   real account switching, and Sandbox purchase verification remain outstanding.
+- **Backend Apple finish, October 15:** worker uses the official server finish
+  API after atomic persistence. Markers store the verified finish target and
+  later `finishedAt`; redelivery resumes finish without repeating domain/outbox
+  writes. Client finish removed; polling waits for recorded finish. Notifications
+  now retain the exact signed transaction ID. Worker `UpdateItem` IAM is limited
+  to Apple event keys. `pnpm format`, `pnpm check`, and synth/template inspection
+  passed (existing Web bundle warning). Manual execution with a disposable local
+  DynamoDB table and substituted Apple responses covered finish failure, lost
+  finish-marker/commit responses, duplicate/concurrent processing, ownership
+  rejection, pending/completed polling, and notification transaction targeting.
+  The temporary table was removed. Real Apple finish, native purchase/restore,
+  and deployed IAM/delivery remain unverified; no automated tests were added.
 - **Outstanding local/device:** configure own key/product/bundle and Native scopes,
   rebuild/install, then verify real purchase, restore, management, renewal,
-  cancellation/expiry, override and signed tunnel delivery. Google mocks are absent.
+  cancellation/expiry, override and signed tunnel delivery. Real Google billing is
+  outside scope; independent local Google mock state and
+  suppressed-event processing are implemented with P09.
 - **Outstanding cloud:** deploy with a real secret, register the sandbox URL,
   verify signed delivery/IAM/worker/access; wire authenticated cloud Apple
   config/sync/completion separately. [Apple checks](APPLE_PURCHASES.md#manual-device-checks).
@@ -218,9 +234,66 @@ against the local backend. AWS verification is a separately authorized path.
 - **Acceptance — T21:** discover an owned Stripe subscription after skipping its
   initial webhook; the customer mapping must preexist.
 - **Acceptance — T22:** access expires without another event; API evidence is P05.
-- **Outstanding:** scheduled/all-user runs, Apple/Google reconciliation, periodic
-  expiration processing, missed-event end-to-end checks and the seven-minute
-  demo target. Provider failures must never erase existing verified state.
+- **Implemented, October 15:** local manual/all-user discovery and five-minute
+  non-overlapping watcher, provider selection, zero-write preview, strict queued
+  Stripe reconciliation jobs and lazy provider credentials. Independent Google
+  mock source supports suppressed notifications; notification/reconciliation share
+  current-state processing with immutable ownership and source/aggregate guards.
+  Expiration recalculates due snapshots with atomic completion/outbox while
+  retaining provider records and other grants. Provider refreshes also publish
+  due snapshot changes when source fields remain unchanged.
+- **Local evidence, October 15:** `pnpm format`, `pnpm check` (existing Web
+  bundle-size warning), Markdown formatting, 78 relative links/anchors, and diff
+  checks passed. Disposable DynamoDB/ElasticMQ resources verified T20 suppression
+  and repair through the queue, zero-write preview, multi-user/empty-page discovery,
+  duplicate/new-run behavior, owner rejection, missing-source failure, expiry
+  preserving other grants, and partial failures. Source changes during commit and
+  simultaneous expiry jobs preserved revision guards and emitted no duplicate
+  effects; provider refresh crossing expiry emitted the required outbox event.
+  The real Stripe SDK against a local synthetic HTTP server paginated discovery,
+  recovered two missing initial subscriptions, verified paid periods, and preserved
+  state/markers during outages and owner mismatch. Real Stripe test-mode dry-run
+  found two unchanged subscriptions for one local user, with zero queued jobs.
+  Credential-free local mock processing, cloud rejection of local-only jobs,
+  bundled CLI startup/help and watcher SIGTERM passed. Temporary resources were
+  removed; no automated test suite, live provider writes, AWS calls/deployment,
+  or device checks were performed.
+- **Apple local implementation, October 18:** added `--provider apple` and known
+  Sandbox lineages to all-user/watcher runs, with lazy Apple configuration and
+  strict internal run/lineage jobs. Discovery verifies current signed state;
+  the worker rereads after the aggregate revision, commits through the existing
+  Apple path, then finishes the latest verified transaction. Committed retries
+  retain that exact target. Preview performs no writes, queue sends, or finish;
+  unknown initial purchases still require sync/Restore or signed notifications.
+  Cloud workers reject these jobs before provider/persistence requests.
+- **Local evidence, October 18:** inspected existing uncommitted changes and
+  passed baseline `pnpm check` before implementation. `pnpm format`, `pnpm check`
+  (including iOS JavaScript export; existing Web bundle-size warning), source/
+  bundled CLI help, 93 relative links/anchors, and diff checks passed. Manual execution with disposable
+  DynamoDB Local 3.3.1/ElasticMQ 1.6.16 resources and isolated Apple client/verifier
+  responses covered paginated multi-user preview with zero writes, queue-to-worker
+  repair, a renewal between discovery and processing, stable/duplicate/new-run
+  behavior, finish failure/retry across another renewal, outage/missing status,
+  signature/environment/owner rejection, immutable owner conflicts, partial failure,
+  revocation preserving Stripe, aggregate conflicts and concurrent duplicates.
+  The actual Apple verifier separately rejected malformed JWS. Existing client
+  sync/delayed notification targets, strict ingress separation, lazy/missing
+  credentials, abort during verification, and cloud job rejection passed.
+  Disposable resources were removed. No automated tests, real Apple requests,
+  device checks, AWS requests/deployment, commits, or pushes were performed.
+- **Documentation, October 18:** added a central [Reconciliation guide](RECONCILIATION.md)
+  for the overview, provider differences, processing flow, diagnostics, and
+  recovery guarantees. Linked it from README, architecture, and the worker;
+  shortened repeated explanations in Payments and Apple. Commands and exercises
+  remain in Development. `pnpm format`, `pnpm check` (existing Web bundle-size
+  warning), new-guide Markdown formatting, CLI help, 192 relative links/anchors,
+  and diff checks passed. This documentation update changes no runtime behavior
+  or acceptance status; no provider, device, or AWS flows were rerun.
+- **Outstanding:** real Apple Sandbox reconciliation, cloud scheduling/IAM/deployment,
+  a real missed-initial-webhook Stripe purchase exercise and measured seven-minute
+  latency. Provider failures must never erase existing verified state.
+- **Next step:** once the own Apple key/product and device are available, verify
+  Sandbox renewal/expiration repair and record the provider/device evidence.
 
 ## P10 CI/CD, operations, and final demo
 

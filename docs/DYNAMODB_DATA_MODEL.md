@@ -122,31 +122,60 @@ Outbox publication is P08; pending records have no automatic TTL cleanup.
 
 ## Apple sandbox records
 
-| PK / SK                                                        | Meaning                                                     |
-| -------------------------------------------------------------- | ----------------------------------------------------------- |
-| `USER#U` / `SUB#apple#Sandbox:<originalTransactionId>`         | Normalized subscription lineage                             |
-| `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` | Immutable internal owner                                    |
-| `EVENT#apple#Sandbox#<eventId>` / `PROCESSED`                  | User, transaction reference, type, and committed completion |
+| PK / SK                                                        | Meaning                                                                                               |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `USER#U` / `SUB#apple#Sandbox:<originalTransactionId>`         | Normalized subscription lineage                                                                       |
+| `PROVIDER#apple#SUB#Sandbox:<originalTransactionId>` / `OWNER` | Immutable internal owner                                                                              |
+| `EVENT#apple#Sandbox#<eventId>` / `PROCESSED`                  | User, submitted reference, verified `finishTransactionId`, type, `processedAt`, optional `finishedAt` |
 
 Client sync uses a generated operation UUID; notifications use Apple's verified
-notification UUID. Completion is visible only to its owner and is written in the
-same transaction as access. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+notification UUID. Local reconciliation uses
+`reconcile_<run-uuid>_<originalTransactionId>` and stores the latest signed
+transaction ID as its finish target; the submitted reference is the known lineage.
+The processing marker and finish target commit atomically with
+access. A conditional `UpdateItem` records `finishedAt` only after Apple finish
+succeeds; it does not change grants, revisions, or outbox. Owner-only API polling
+reports completion only then. See [Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+
+## Local reconciliation records
+
+| PK / SK                                               | Fields and role                                                                                                             |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `MOCK#google#USER#U` / `SUB#mock_google_<id>`         | Independent synthetic provider state: owner, ID, status, access/grace, renewal flag, source revision and update time        |
+| `PROVIDER#google_mock#SUB#mock_google_<id>` / `OWNER` | Immutable owner established with the independent source                                                                     |
+| `EVENT#google_mock#E` / `PROCESSED`                   | Owner/subscription, correlation ID and completion time; atomic with derived `SUB`, entitlement snapshot and optional outbox |
+| `EVENT#local_expiration#E` / `PROCESSED`              | Owner and completion time; atomic with the recalculated snapshot and outbox                                                 |
+
+Google mock source changes require an existing profile and compare the source
+revision. They do not write derived `USER#U / SUB#google_mock#…` rows. Processing
+reads the aggregate revision before the source and guards both revisions plus
+ownership at commit. Source absence/errors never delete derived subscriptions.
+The old `demo-p05-*` seed records have no independent source and are not discovered
+as managed Google mocks. Local source records share this table for convenience;
+they remain a separate authority for the synthetic provider exercise.
+
+Stripe reconciliation uses existing customer mappings and processing markers.
+Its event ID is `reconcile_<run-uuid>_<subscription-id>`; a run retries with stable
+IDs, while later runs can reverify. Expiration uses `expire_<run-uuid>_<user-id>`.
+Processing markers and outbox records have no automatic cleanup or TTL.
 
 ## Access patterns
 
-| Operation                                            | Pattern                                                                                           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                  |
-| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                              |
-| Identity creation                                    | Conditional transaction for mapping + profile                                                     |
-| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                      |
-| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                          |
-| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows |
+| Operation                                            | Pattern                                                                                                     |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                            |
+| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                        |
+| Identity creation                                    | Conditional transaction for mapping + profile                                                               |
+| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                |
+| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                    |
+| Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query` |
+| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows           |
 
-Application flows use no table scan. Local Stripe reconciliation discovers
-provider subscriptions through the stored customer and reuses processing.
-Scheduled discovery and outbox publication access patterns remain future work.
-Direct DynamoDB Admin edits bypass these guarantees.
+User-facing flows use no table scan. Local reconciliation scans the small demo
+table for profiles and queries their subscriptions, then uses provider-specific
+discovery and the shared processor. Cloud scheduling, production discovery indexes,
+and outbox publication remain separate work. Direct DynamoDB Admin edits bypass
+these guarantees.
 
 Sources: [user store](../services/api/src/dynamodb-users.ts),
 [checkout store](../services/api/src/billing/dynamodb-billing.ts),

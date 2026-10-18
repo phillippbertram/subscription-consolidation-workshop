@@ -7,8 +7,10 @@
     "start": "node --env-file-if-exists=.env dist/local.js",
     "demo:subscription": "tsx scripts/subscription-cli.ts seed",
     "typecheck": "tsc --noEmit",
-    "build": "esbuild src/local.ts src/lambda.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
-    "subscription": "tsx scripts/subscription-cli.ts"
+    "build": "esbuild src/local.ts src/lambda.ts scripts/reconcile.ts scripts/google-mock.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --entry-names='[name]' --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
+    "subscription": "tsx scripts/subscription-cli.ts",
+    "reconcile": "tsx scripts/reconcile.ts",
+    "google-mock": "tsx scripts/google-mock.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1149.0",

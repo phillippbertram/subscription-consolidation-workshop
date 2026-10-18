@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Stripe from 'stripe';
 import type { Subscription } from '@premiumpass/domain';
+import type { StripeReconciliationJob } from '@premiumpass/billing-contracts';
 import {
   ProcessingError,
   type ProcessingStore,
@@ -38,6 +39,10 @@ export async function reconcileStripeSubscriptions(options: {
   customerId: string;
   dryRun: boolean;
   onProgress?: (message: string) => void;
+  runId?: string;
+  now?: () => Date;
+  enqueue?: (job: StripeReconciliationJob) => Promise<void>;
+  signal?: AbortSignal;
 }) {
   const { stripe, priceId, store, userId, customerId, dryRun } = options;
   if ((await store.owner(customerId)) !== userId) {
@@ -61,6 +66,10 @@ export async function reconcileStripeSubscriptions(options: {
     status: 'all',
     limit: 100,
   })) {
+    if (options.signal?.aborted) {
+      return [];
+    }
+
     const owner =
       typeof subscription.customer === 'string'
         ? subscription.customer
@@ -77,10 +86,15 @@ export async function reconcileStripeSubscriptions(options: {
   }
 
   const source = new StripeSubscriptionSource(stripe, priceId);
-  const processor = new SubscriptionProcessor(store, source);
-  const runId = randomUUID();
+  const clock = options.now ?? (() => new Date());
+  const processor = new SubscriptionProcessor(store, source, clock);
+  const runId = options.runId ?? randomUUID();
   const rows: ReconciliationRow[] = [];
   for (const subscriptionId of ids) {
+    if (options.signal?.aborted) {
+      break;
+    }
+
     options.onProgress?.(`Checking ${subscriptionId}…`);
     const previous = aggregate.subscriptions.find(
       (s) =>
@@ -93,9 +107,9 @@ export async function reconcileStripeSubscriptions(options: {
         const snapshot = await source.read(
           { customerId, subscriptionId },
           userId,
-          new Date(),
+          clock(),
         );
-        next = normalizeSubscription(userId, snapshot, previous, new Date());
+        next = normalizeSubscription(userId, snapshot, previous, clock());
         result =
           previous && sameDomainState(previous, next)
             ? 'unchanged'
@@ -103,21 +117,28 @@ export async function reconcileStripeSubscriptions(options: {
               ? 'would update'
               : 'would create';
       } else {
-        const processed = await processor.process({
+        const job: StripeReconciliationJob = {
           provider: 'stripe',
           eventId: `reconcile_${runId}_${subscriptionId}`,
           eventType: 'reconciliation',
           expectedUserId: userId,
           objectId: subscriptionId,
-          receivedAt: new Date().toISOString(),
+          receivedAt: clock().toISOString(),
           correlationId: runId,
-        });
-        result = processed.outcome;
-        next = (await store.load(userId)).subscriptions.find(
-          (s) =>
-            s.provider === 'stripe' &&
-            s.providerSubscriptionId === subscriptionId,
-        );
+        };
+        if (options.enqueue) {
+          await options.enqueue(job);
+          result = 'queued';
+          next = previous;
+        } else {
+          const processed = await processor.process(job);
+          result = processed.outcome;
+          next = (await store.load(userId)).subscriptions.find(
+            (s) =>
+              s.provider === 'stripe' &&
+              s.providerSubscriptionId === subscriptionId,
+          );
+        }
       }
 
       rows.push({

@@ -157,5 +157,5 @@ export function createAppleClient(
 
 export type AppleClient = Pick<
   AppStoreServerAPIClient,
-  'getTransactionInfo' | 'getAllSubscriptionStatuses'
+  'getTransactionInfo' | 'getAllSubscriptionStatuses' | 'finishTransaction'
 >;

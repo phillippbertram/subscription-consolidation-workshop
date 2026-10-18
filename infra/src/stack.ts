@@ -175,6 +175,17 @@ export class PremiumPassStack extends Stack {
         },
       }),
     );
+    worker.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['dynamodb:UpdateItem'],
+        resources: [table.tableArn],
+        conditions: {
+          'ForAllValues:StringLike': {
+            'dynamodb:LeadingKeys': ['EVENT#apple#Sandbox#*'],
+          },
+        },
+      }),
+    );
     const apiFunction = createApiFunction(this, table, auth0);
 
     // Hono owns user routes and verifies Auth0 tokens/scopes inside the API Lambda.
