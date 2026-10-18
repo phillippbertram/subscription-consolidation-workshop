@@ -1,7 +1,14 @@
 # PremiumPass
 
+![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
+
 **A hands-on workshop on subscription consolidation: sell one subscription on
 the web, iOS, and Android, and keep access correct everywhere.**
+
+> [!NOTE]
+> **Work in progress.** The local web flow with Stripe test payments works end
+> to end. Real Google Play and Apple Sandbox purchases and the AWS deployment
+> are prepared but not fully verified yet. Details: [TASKS](docs/TASKS.md).
 
 ![PremiumPass at a glance: users pay on the website with Stripe, in the iPhone app through the App Store, or in the Android app through Google Play. The backend translates every store, combines all purchases, and checks the clock, so every app gives the same answer to the question: is this user Premium right now?](docs/images/overview.svg)
 
