@@ -107,3 +107,12 @@ Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove ev
 Contributing or working with an AI agent? Read [AGENTS.md](AGENTS.md) first.
 Code and docs are in English. There is no automated test suite; changes are
 checked with formatting, linting, type checks, builds, and manual flows.
+
+## Support
+
+Did this workshop help you understand how to combine Stripe, App Store, and
+Google Play subscriptions into one reliable answer? If it saved you time or a
+few headaches, a coffee helps keep this demo up to date and supports more
+hands-on examples like it. Thank you! ☕
+
+<a href="https://buymeacoffee.com/phillippbertram"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="45"></a>
