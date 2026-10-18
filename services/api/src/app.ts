@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { CheckoutError } from './billing/contracts.js';
 import type { AppleBilling } from './billing/apple.js';
+import type { GoogleBilling } from './billing/google.js';
+import { registerGoogleRoutes } from './routes/google.js';
 import { type AppEnv, authenticate } from './auth.js';
 import type { AuthConfig } from './config.js';
 import type { UserStore } from './users.js';
@@ -26,6 +28,7 @@ export function createApp(
   now: () => Date = () => new Date(),
   options: StripeRouteOptions & {
     apple?: AppleBilling | undefined;
+    google?: GoogleBilling | undefined;
   } = {},
 ) {
   const app = new Hono<AppEnv>();
@@ -94,6 +97,7 @@ export function createApp(
   registerSubscriptionsRoutes(app, stores.users, stores.subscriptions, now);
   registerPremiumRoutes(app, stores.users, stores.subscriptions, now);
   registerAppleRoutes(app, stores.users, options.apple);
+  registerGoogleRoutes(app, stores.users, options.google);
   registerStripeRoutes(app, authConfig, stores.users, options);
 
   return app;

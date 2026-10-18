@@ -96,6 +96,11 @@ Keep API `PORT=3000` and `HOST=127.0.0.1`. The examples already contain the loca
 database and queue defaults. Omitting the database endpoint selects AWS
 credential resolution, so retain it for this local path.
 
+For optional subscription CLI tools, copy `apps/cli/.env.example` to
+`apps/cli/.env` and configure the same Stripe test key and price there. The CLI
+has its own [provider configuration](../apps/cli/README.md#configuration) and
+does not read the worker's `.env`.
+
 ## 6. Start and make a test purchase
 
 With Docker running and the Stripe listener in its own terminal:
@@ -105,7 +110,9 @@ pnpm dev
 ```
 
 This initializes the local table and starts API, both webhook processes,
-worker, and website. The Apple process remains disabled for purchase handling.
+worker, website, and reconciliation watcher. Reconciliation runs immediately
+and every five minutes using the CLI's provider settings. The Apple process
+remains disabled for purchase handling.
 Keep this terminal running; use a third terminal for the `curl` checks below.
 Stop older individual processes first to avoid port conflicts. If startup exits,
 fix the first failing process in the output; the grouped command stops its peers.

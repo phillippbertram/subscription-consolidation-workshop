@@ -21,11 +21,13 @@ export function describeSubscription(
 ) {
   const grant = overview.entitlements.grants.find(
     (item) =>
+      item.source === 'provider' &&
       item.provider === subscription.provider &&
       item.providerSubscriptionId === subscription.providerSubscriptionId,
   );
   const providerLabels: Record<Subscription['provider'], string> = {
     apple: 'App Store',
+    google: 'Google Play',
     stripe: 'Website',
     apple_mock: 'Apple demo',
     google_mock: 'Google demo',

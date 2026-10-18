@@ -3,6 +3,11 @@
 An Expo development app with Auth0 login, synthetic score history, and shared
 subscription access. Start with [Getting started](../../docs/GETTING_STARTED.md).
 Native purchase/restore is a separate [Apple Sandbox setup](../../docs/APPLE_PURCHASES.md).
+For the Android extension, follow [Google Play preparation](../../docs/GOOGLE_PLAY.md).
+Android build, login, and real purchase verification are tracked in
+[P12](../../docs/TASKS.md#p12-google-play-test-purchases). Android commands, upload
+signing, emulator networking, and Google configuration are in the
+[Android build guide](../../docs/GOOGLE_PLAY.md#local-android-build); the setup below covers iOS.
 
 ## Configure the app
 
@@ -38,7 +43,7 @@ pnpm mobile:ios
 ```
 
 This builds/installs the development app and starts Metro. Later JavaScript work
-only needs `pnpm mobile:dev`; press `i` to open the installed iOS app. Rebuild after
+only needs `pnpm dev:mobile`; press `i` to open the installed iOS app. Rebuild after
 native dependency, Auth0 domain, scheme, or bundle changes. Edit `app.config.ts`,
 not generated native settings, for persistent configuration.
 
@@ -83,20 +88,20 @@ user ID with Web. Simulator can reach the Mac's loopback address.
    Allow Local Network access
    on the device. Stop an older localhost-only Metro process first.
 
-5. For later runs, use `pnpm mobile:dev:lan` in the terminal with the API override.
+5. For later runs, use `pnpm dev:mobile:lan` in the terminal with the API override.
    Alternatively save the LAN URL in `apps/mobile/.env`; an exported value lasts
    only for that shell. The API address does not change the Auth0 callback URL.
 
 ## App structure
 
-| Area                                                 | Responsibility                                                     |
-| ---------------------------------------------------- | ------------------------------------------------------------------ |
-| `src/App.tsx`, `src/app/`                            | Providers, configuration, session-dependent screen selection       |
-| `src/features/auth/`                                 | Login/logout and optional session inspector                        |
-| `src/features/dashboard/`                            | Score-first layout, query refresh, expiry updates                  |
-| `src/features/profile/`, `scores/`, `subscriptions/` | Account modal, protected history, subscription/purchase behavior   |
+| Area                                                 | Responsibility                                                                      |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `src/App.tsx`, `src/app/`                            | Providers, configuration, session-dependent screen selection                        |
+| `src/features/auth/`                                 | Login/logout and optional session inspector                                         |
+| `src/features/dashboard/`                            | Score-first layout, query refresh, expiry updates                                   |
+| `src/features/profile/`, `scores/`, `subscriptions/` | Account modal, protected history, subscription/purchase behavior                    |
 | `src/api/`                                           | Typed Axios/Zod client, account queries, session cache, native focus/network events |
-| `src/components/ui/`                                 | Locally owned Gluestack/NativeWind components and fixed dark theme |
+| `src/components/ui/`                                 | Locally owned Gluestack/NativeWind components and fixed dark theme                  |
 
 API schemas live in [HTTP contracts](../../packages/api-contracts/README.md).
 Profile, subscription overview, and score history use TanStack Query hooks over
@@ -137,7 +142,7 @@ stays mounted during dashboard refreshes and modal changes.
 - Follow [payment scenarios](../../docs/PAYMENTS.md#manual-checks) and the separate
   [Apple device checks](../../docs/APPLE_PURCHASES.md#manual-device-checks).
 
-`pnpm check` exports iOS JavaScript; it does not prove native build, rendering,
+`pnpm check` exports iOS and Android JavaScript; it does not prove native build, rendering,
 or device purchases. Record those results separately in [TASKS](../../docs/TASKS.md).
 
 ## Cleanup

@@ -9,6 +9,13 @@ import {
   appleConfigSchema,
   appleSyncOperationSchema,
   appleSyncStatusSchema,
+  googleConfigSchema,
+  googleSyncOperationSchema,
+  googleSyncStatusSchema,
+  type GoogleConfig,
+  type GoogleSyncRequest,
+  type GoogleSyncOperation,
+  type GoogleSyncStatus,
   type UserProfile,
   type Entitlements,
   type SubscriptionOverview,
@@ -199,6 +206,33 @@ export class ApiClient {
 
   getProfile(options: RequestOptions = {}): Promise<UserProfile> {
     return this.get('/v1/me', userProfileSchema, options);
+  }
+
+  getGoogleConfig(options: RequestOptions = {}): Promise<GoogleConfig> {
+    return this.get('/v1/billing/google/config', googleConfigSchema, options);
+  }
+
+  startGoogleSync(
+    input: GoogleSyncRequest,
+    options: RequestOptions = {},
+  ): Promise<GoogleSyncOperation> {
+    return this.post(
+      '/v1/billing/google/sync',
+      input,
+      googleSyncOperationSchema,
+      options,
+    );
+  }
+
+  getGoogleSyncStatus(
+    operationId: string,
+    options: RequestOptions = {},
+  ): Promise<GoogleSyncStatus> {
+    return this.get(
+      `/v1/billing/google/sync/${encodeURIComponent(operationId)}`,
+      googleSyncStatusSchema,
+      options,
+    );
   }
 
   getAppleConfig(options: RequestOptions = {}): Promise<AppleConfig> {

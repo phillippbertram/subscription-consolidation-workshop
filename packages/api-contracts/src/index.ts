@@ -19,7 +19,13 @@ export type UserProfile = z.infer<typeof userProfileSchema>;
 export type ScoreHistory = z.infer<typeof scoreHistorySchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorSchema>;
 
-const providerSchema = z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']);
+const providerSchema = z.enum([
+  'stripe',
+  'apple',
+  'google',
+  'apple_mock',
+  'google_mock',
+]);
 
 // HTTP representation only; persistence schemas and access rules stay in domain.
 export const subscriptionSchema = z.object({
@@ -42,12 +48,21 @@ export const entitlementsSchema = z.object({
   effectiveUntil: z.iso.datetime().nullable(),
   evaluatedAt: z.iso.datetime(),
   grants: z.array(
-    z.object({
-      provider: providerSchema,
-      providerSubscriptionId: z.string(),
-      revision: z.number().int().positive(),
-      validUntil: z.iso.datetime(),
-    }),
+    z.discriminatedUnion('source', [
+      z.object({
+        source: z.literal('provider'),
+        provider: providerSchema,
+        providerSubscriptionId: z.string(),
+        revision: z.number().int().positive(),
+        validUntil: z.iso.datetime(),
+      }),
+      z.object({
+        source: z.literal('admin'),
+        grantId: z.literal('premium'),
+        revision: z.number().int().positive(),
+        validUntil: z.iso.datetime().nullable(),
+      }),
+    ]),
   ),
   warnings: z.array(
     z.object({
@@ -119,3 +134,26 @@ export type AppleConfig = z.infer<typeof appleConfigSchema>;
 export type AppleSyncRequest = z.infer<typeof appleSyncRequestSchema>;
 export type AppleSyncOperation = z.infer<typeof appleSyncOperationSchema>;
 export type AppleSyncStatus = z.infer<typeof appleSyncStatusSchema>;
+
+export const googleConfigSchema = z.object({
+  packageName: z.string(),
+  productId: z.string(),
+  basePlanId: z.string(),
+  obfuscatedAccountId: z.uuid(),
+  environment: z.literal('test'),
+});
+export const googleSyncRequestSchema = z.strictObject({
+  purchaseToken: z.string().min(1).max(4096).regex(/^\S+$/),
+});
+export const googleOperationIdSchema = z.uuid();
+export const googleSyncOperationSchema = z.object({
+  operationId: googleOperationIdSchema,
+  status: z.literal('pending'),
+});
+export const googleSyncStatusSchema = z.object({
+  status: z.enum(['pending', 'completed']),
+});
+export type GoogleConfig = z.infer<typeof googleConfigSchema>;
+export type GoogleSyncRequest = z.infer<typeof googleSyncRequestSchema>;
+export type GoogleSyncOperation = z.infer<typeof googleSyncOperationSchema>;
+export type GoogleSyncStatus = z.infer<typeof googleSyncStatusSchema>;

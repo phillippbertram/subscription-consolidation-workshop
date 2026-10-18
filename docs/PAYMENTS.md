@@ -135,8 +135,9 @@ the boundaries in the policy below.
 
 ## Access policy
 
-The API derives access from subscription records and the current time, not the
-stored entitlement snapshot. Only `premium_monthly` grants `score_history`.
+The API derives access from subscription records, the independent admin grant,
+and the current time, not the stored entitlement snapshot. The subscription
+policy below applies to `premium_monthly`, which grants `score_history`.
 
 | State                                                        | Access                                                                                                         |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
@@ -157,6 +158,29 @@ All valid grants are combined: ending Apple cannot remove valid Stripe access.
 `effectiveUntil` is the next reevaluation boundary, not necessarily the end of
 all Premium access. Stripe custom cancellation dates can shorten a paid period;
 only the covered portion is granted. `verifiedAt` is the last successful check.
+
+### Complimentary access
+
+A local administrator can grant the same Premium features without payment using
+[the CLI](DEVELOPMENT.md#complimentary-premium). One independent grant per user
+can be active until a specified UTC expiry or until revoked. `null` expiry means
+unbounded **only for an active admin grant**; a provider record with no verified
+access boundary still grants nothing. At the exact expiry, API access stops
+without waiting for a worker. Login and API scopes remain required.
+
+Access is the union of valid paid and admin grants. Reconciliation, cancellation,
+and provider failure never change the admin grant; its revocation never changes
+a provider contract or removes another valid source. Web/Mobile show
+“Complimentary Premium” separately from subscriptions. Audit reasons/actors are
+local administration data and are not returned by the user API.
+
+The CLI delegates to shared admin-grant processing, which atomically persists
+grant, audit receipt, entitlement snapshot, and outbox intent; revision checks
+serialize these changes with provider updates. The audit
+receipt makes retries with the same request ID safe even after a later change.
+The local expiration runner recalculates due snapshots through the same path;
+indefinite grants do not require a timer. `effectiveUntil` remains the earliest
+finite boundary across all sources, or `null` if none remains.
 
 ## Manual checks
 

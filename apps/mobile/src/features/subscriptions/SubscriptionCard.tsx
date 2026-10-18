@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/card';
 import { Text } from '../../components/ui/text';
 import { Button, ButtonText } from '../../components/ui/button';
 import { ErrorMessage } from '../../components/ErrorMessage';
-import { AppleSubscriptionActions } from './AppleSubscriptionActions';
+import { StoreSubscriptionActions } from './StoreSubscriptionActions';
 import { SubscriptionDetails } from './SubscriptionDetails';
 import {
   describeSubscription,
@@ -42,13 +42,13 @@ export function SubscriptionCard({
         ['pending', 'past_due', 'paused'].includes(subscription.state),
       ));
   return (
-    <AppleSubscriptionActions overview={overview} onVerified={onReload}>
+    <StoreSubscriptionActions overview={overview} onVerified={onReload}>
       {({ actions, sandboxControl }) => (
         <>
           <Card className="gap-4 rounded-[18px] border border-border p-5 shadow-none">
             <View className="flex-row flex-wrap items-center justify-between gap-2">
               <Text className="flex-1 text-[17px] font-medium text-foreground">
-                Your current subscription
+                Your Premium access
               </Text>
               {overview && (
                 <Text className="rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-primary">
@@ -75,6 +75,24 @@ export function SubscriptionCard({
                     history.
                   </Text>
                 )}
+                {overview.entitlements.grants
+                  .filter((grant) => grant.source === 'admin')
+                  .map((grant) => (
+                    <View key={`admin:${grant.grantId}`} className="gap-2">
+                      <SubscriptionRow
+                        label="Access source"
+                        value="Complimentary Premium"
+                      />
+                      <SubscriptionRow
+                        label="Available"
+                        value={
+                          grant.validUntil
+                            ? `Until ${formatAccessDate(grant.validUntil, overview.entitlements.evaluatedAt)}`
+                            : 'Until revoked'
+                        }
+                      />
+                    </View>
+                  ))}
                 {current.map((subscription, index) => (
                   <View
                     key={subscription.key}
@@ -143,7 +161,7 @@ export function SubscriptionCard({
           </DeveloperDetails>
         </>
       )}
-    </AppleSubscriptionActions>
+    </StoreSubscriptionActions>
   );
 }
 

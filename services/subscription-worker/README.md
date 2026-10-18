@@ -1,46 +1,59 @@
 # Subscription worker
 
-Processes subscription updates from PremiumPass's billing queue: Amazon SQS in
-AWS, or ElasticMQ locally. The Stripe and Apple webhook services add jobs after
-verifying incoming events. Locally, Apple purchase/restore requests through the
-API, reconciliation runs, and Google mock tools also add jobs to this queue.
+Processes subscription jobs from Amazon SQS in AWS or ElasticMQ locally. Webhooks,
+purchase synchronization, and reconciliation enqueue work; the worker verifies
+current provider state and ownership before updating subscriptions and access.
+It runs in the background without an HTTP framework.
 
-The worker checks the current subscription state and which user it belongs to,
-then updates subscriptions and Premium access in DynamoDB. It saves these changes
-together with completion markers and pending outgoing events in one atomic write
-so retries remain safe. It runs in the background without an HTTP framework.
-[Processing rules](../../docs/PAYMENTS.md#processing-and-retries).
+The service owns transport and runtime composition. The reusable processors,
+provider adapters, and atomic persistence live in
+[subscription processing](../../packages/subscription-processing/README.md).
+Developer commands live in the separate [CLI](../../apps/cli/README.md).
+Scheduled provider discovery is another backend entry in this service: it
+creates queue jobs and belongs to the same subscription-processing lifecycle.
+Provider discovery adapters live in the processing package; the service owns
+scheduling context, queue acceptance, and run-level failure handling.
 
-For Apple, the worker then finishes the verified transaction and records
-`finishedAt` before acknowledging the job. Retries of a committed event resume
-this step without another domain/outbox write. [Apple recovery](../../docs/APPLE_PURCHASES.md#processing-and-ownership).
+| Entry                                   | Responsibility                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `src/local.ts`                          | Local polling, acknowledgement, retries, and graceful shutdown          |
+| `src/lambda.ts`                         | SQS Lambda partial-batch responses                                      |
+| `src/config.ts`                         | Validate database and queue configuration                               |
+| `src/runtime.ts`                        | Reuse connections, select providers, and safely log processing outcomes |
+| `src/reconciliation/lambda.ts`          | Cloud schedule/manual handler and queue acceptance                      |
+| `src/reconciliation/run.ts`, `*-run.ts` | Shared preview, queue acceptance, and partial failures                  |
 
-| Entry                                         | Responsibility                                                        |
-| --------------------------------------------- | --------------------------------------------------------------------- |
-| `src/local.ts`, `src/lambda.ts`               | Local polling / SQS partial-batch handler                             |
-| `src/config.ts`, `src/runtime.ts`             | Validate configuration and compose clients/processors                 |
-| `src/apple-credentials.ts`                    | Local key / cached cloud Apple credentials                            |
-| `src/processing/`                             | Provider reads, normalization, idempotency and transactions           |
-| `scripts/subscription-cli.ts`, `src/cli/`     | CLI lifecycle, commands, prompts and presentation                     |
-| `src/local-admin/`                            | Fixed local database edits, seeding and reconciliation setup          |
-| `scripts/reconcile.ts`, `src/reconciliation/` | Local paginated discovery, five-minute runner and provider refreshes  |
-| `scripts/google-mock.ts`                      | Independent Google mock changes and optional notification suppression |
-| `src/reconciliation/stripe.ts`                | Reusable Stripe discovery through the existing processor              |
+`runtime.ts` keeps a typed provider switch and delegates construction to the
+shared provider factories. Credentials load only for the selected provider.
+Google's lazy source is scoped to one runtime; settings are checked on every
+selection. Cloud credentials cache for five minutes; Google rebuilds its client
+when credentials refresh. Local-only mock/expiration factories reject cloud jobs
+before reading credentials.
+
+Cloud discovery has no database-write permissions. Apple/Google discovery has no
+provider keys; Stripe discovery reads the existing test secret and validates
+customer ownership before fully listing subscriptions. Provider-specific reference
+stores remain in the shared processing package. Schedule switches, preview,
+failure isolation, and small-table limits belong to
+[Cloud reconciliation](../../docs/RECONCILIATION.md#cloud-reconciliation).
+
+A build cleans `dist/` and emits `local.js`, `lambda.js`, and
+`reconciliation/lambda.js`; moved CLI bundles cannot survive a rebuild. Provider
+runner files build strict refresh jobs with stable event IDs; the shared runner
+handles preview, queue acceptance, and partial failures. Logger types come from
+`@premiumpass/logging`, which owns the Pino dependency.
 
 `pnpm dev:worker` runs individually; `pnpm dev` includes it. Follow the
 [configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
-No Auth0 configuration or webhook signing secret is needed. Provider credentials
-are loaded only for that provider's jobs; local mock/expiration work requires
-neither a Stripe key nor an Apple key. In-flight jobs may
-finish on shutdown; unacknowledged jobs become visible again after timeout.
+No Auth0 configuration or webhook signing secret is needed. Local mock/expiration
+jobs need no provider credentials. In-flight jobs may finish on shutdown;
+unacknowledged jobs become visible again after timeout.
 
-Cloud credentials come from existing Secrets Manager references and cache for
-five minutes. Only this service reads the Apple private key. See
-[Apple AWS setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing).
+Cloud credentials come from existing Secrets Manager references. Only the worker
+reads Apple/Google private keys in AWS. See
+[Apple AWS setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing) and
+[Google AWS setup](../../docs/GOOGLE_PLAY.md#aws-notification-processing).
 
-The [subscription CLI](../../docs/DEVELOPMENT.md#local-subscription-cli) writes
-only DynamoDB Local. The [Reconciliation guide](../../docs/RECONCILIATION.md)
-explains provider discovery, expiration, and recovery through the existing worker.
-For startup and scenarios, use the [local commands](../../docs/DEVELOPMENT.md#local-reconciliation-and-expiration).
-`pnpm google-mock` changes independent synthetic source state; implementation
-status remains in [P09](../../docs/TASKS.md#p09-reconciliation-and-expiration).
+[Payments](../../docs/PAYMENTS.md#processing-and-retries) owns processing guarantees;
+[Reconciliation](../../docs/RECONCILIATION.md) owns discovery and recovery behavior.
+Implementation status and verification remain in [TASKS](../../docs/TASKS.md).

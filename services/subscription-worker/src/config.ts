@@ -1,17 +1,5 @@
-import { GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import {
-  createSqsClient,
-  createSecretsManagerClient,
-  LOCAL_SQS_ENDPOINT,
-} from '@premiumpass/aws-clients';
-import { z } from 'zod';
+import { createSqsClient, LOCAL_SQS_ENDPOINT } from '@premiumpass/aws-clients';
 import { readDatabaseConfig } from '@premiumpass/persistence';
-
-const credentialsSchema = z.object({
-  secretKey: z.string().regex(/^sk_test_[A-Za-z0-9]+$/),
-  priceId: z.string().regex(/^price_[A-Za-z0-9]+$/),
-});
-export type WorkerCredentials = z.infer<typeof credentialsSchema>;
 
 export function readWorkerConfig(env: NodeJS.ProcessEnv, local: boolean) {
   const database = readDatabaseConfig(env, local);
@@ -44,52 +32,4 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv, local: boolean) {
 
   const sqs = createSqsClient({ local });
   return { database, queueUrl, sqs };
-}
-
-let cached: { expiresAt: number; value: WorkerCredentials } | undefined;
-export async function readWorkerCredentials(
-  env: NodeJS.ProcessEnv,
-  local: boolean,
-): Promise<WorkerCredentials> {
-  if (local) {
-    const parsed = credentialsSchema.safeParse({
-      secretKey: env.STRIPE_SECRET_KEY,
-      priceId: env.STRIPE_PRICE_ID,
-    });
-    if (!parsed.success) {
-      throw new Error(
-        'Configure STRIPE_SECRET_KEY (test mode) and STRIPE_PRICE_ID in services/subscription-worker/.env.',
-      );
-    }
-
-    return parsed.data;
-  }
-
-  // Reuse secrets across warm invocations, but bound the cache lifetime so
-  // later invocations can pick up rotation without a code deployment.
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.value;
-  }
-
-  if (!env.STRIPE_SECRET_ARN) {
-    throw new Error('STRIPE_SECRET_ARN is required.');
-  }
-
-  const client = createSecretsManagerClient();
-  try {
-    const result = await client.send(
-      new GetSecretValueCommand({ SecretId: env.STRIPE_SECRET_ARN }),
-    );
-    const parsed = credentialsSchema.safeParse(
-      JSON.parse(result.SecretString ?? '{}'),
-    );
-    if (!parsed.success) {
-      throw new Error('Invalid Stripe secret configuration.');
-    }
-
-    cached = { value: parsed.data, expiresAt: Date.now() + 300_000 };
-    return parsed.data;
-  } finally {
-    client.destroy();
-  }
 }

@@ -16,6 +16,9 @@ Selected fields explain each record; the sections below contain full key layouts
 erDiagram
     IDENTITY_MAP ||--|| USER_PROFILE : resolves_to
     USER_PROFILE ||--o{ SUBSCRIPTION : owns
+    USER_PROFILE ||--o| ADMIN_GRANT : receives
+    USER_PROFILE ||--o{ ADMIN_AUDIT : records
+    ADMIN_GRANT o|--o{ ADMIN_AUDIT : has_history
     USER_PROFILE ||--o| ENTITLEMENT_SNAPSHOT : has_current
     USER_PROFILE ||--o{ PROVIDER_SUBSCRIPTION_OWNER : owns
     SUBSCRIPTION ||..o| PROVIDER_SUBSCRIPTION_OWNER : protected_by
@@ -37,6 +40,19 @@ erDiagram
         string providerSubscriptionId
         string state
         datetime accessUntil "nullable"
+    }
+    ADMIN_GRANT {
+        string grantId "premium"
+        string state "active or revoked"
+        datetime expiresAt "nullable"
+        int revision
+    }
+    ADMIN_AUDIT {
+        uuid requestId
+        string actor "local OS user"
+        string action "grant or revoke"
+        string reason
+        datetime at
     }
     ENTITLEMENT_SNAPSHOT {
         int revision "aggregate revision"
@@ -76,7 +92,7 @@ The worker atomically saves subscription, owner binding, current snapshot, marke
 and an outbox event when access/domain state changes. A snapshot's `grants` array
 is embedded derived data. Outbox records retain their own revision and access
 snapshot; they do not point to an immutable historical `ENTITLEMENTS` row.
-API access is recalculated from subscriptions and current time, so an old snapshot
+API access is recalculated from subscriptions, admin grants, and current time, so an old snapshot
 cannot extend access. A scope alone never grants Premium.
 
 ### Checkout and local mock extensions
@@ -117,9 +133,8 @@ Customer creation and checkout session references can remain unresolved; an acti
 pointer selects a stored request and is not proof of payment. A checkout request
 does not directly create a subscription: verified worker processing does that.
 Google mock source rows are local-only inputs; their derived subscriptions and
-immutable owners use the core model above. Complimentary admin grants are planned
-in [P13](TASKS.md#p13-admin-granted-complimentary-premium) and have no stored record
-type yet.
+immutable owners use the core model above. Complimentary admin grants use the
+independent [complimentary access records](#complimentary-access-records).
 
 | Logical record                                | DynamoDB record family / details                                                                                                                          |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -193,6 +208,31 @@ Synthetic document shape (timestamps illustrate a record, not current access):
 Zod validates persisted fields/ownership before API responses. Unknown product
 or status strings remain visible but grant nothing; malformed records fail
 closed. Expired records remain stored; expiry is evaluated during reads.
+
+## Complimentary access records
+
+| Key                                | Contents                                                                                                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `USER#U` / `ADMIN_GRANT#premium`   | `userId`, stable `grantId=premium`, `state`, nullable `expiresAt`, source `revision`, `createdAt`, `updatedAt`                                         |
+| `USER#U` / `ADMIN_AUDIT#requestId` | `requestId`, `userId`, `action`, OS `actor`, `reason`, requested `expiresAt`, `at`, `aggregateRevision`, `outcome`, full `before`/`after` grant values |
+
+The single grant is separate from `SUB#` records; it has no provider/product
+purchase reference. Revocation retains it and its history. Audit entries are
+append-only through the CLI and double as durable idempotency receipts; no TTL
+removes them. They are not tamper-proof against someone with local database
+access. Ordinary API responses expose only active grant ID/revision/expiry.
+
+The CLI transaction guards the profile and aggregate revision, writes the grant
+and audit receipt, recomputes the combined entitlement snapshot, and records
+outbox intent. Every provider commit loads and preserves this grant under the
+same aggregate guard. A no-op records its receipt without a grant rewrite or
+outbox event unless a time boundary is due. Replayed request IDs perform no writes.
+
+`grants` entries distinguish `source=provider` (provider/subscription reference,
+finite `validUntil`) from `source=admin` (`grantId`, nullable `validUntil`). Old
+pending outbox provider entries without `source` are still accepted by the
+publisher. Consistent `GetItem` reads the admin grant; a paginated user-partition
+query with prefix `ADMIN_AUDIT#` loads its audit history.
 
 ## Stripe customer and checkout records
 
@@ -303,27 +343,28 @@ Processing markers and outbox records have no automatic cleanup or TTL.
 
 ## Access patterns
 
-| Operation                                            | Pattern                                                                                                                                                 |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                                                                        |
-| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                                                                    |
-| Identity creation                                    | Conditional transaction for mapping + profile                                                                                                           |
-| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                                                            |
-| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                                                                |
-| Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query` |
-| Cloud Google reconciliation discovery                | Paginated consistent `Scan` filtered to package-scoped Google owner records; project owner UUID, private token, package and keys; enqueue refresh only  |
-| Local outbox discovery                               | Paginated consistent `Scan` filtered by `OUTBOX#`, `EVENT`, and pending status; reads the whole table                                                   |
-| Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance                                                             |
-| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows                                                       |
+| Operation                                            | Pattern                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                                                                                                                                                |
+| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                                                                                                                                            |
+| Identity creation                                    | Conditional transaction for mapping + profile                                                                                                                                                                                   |
+| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                                                                                                                                    |
+| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                                                                                                                                        |
+| Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query`                                                                         |
+| Cloud reconciliation discovery                       | Paginated consistent `Scan` of Stripe customer mappings, Apple Sandbox owner lineages, or package-scoped Google token owners; Stripe also reads both customer mapping directions and stored subscriptions; enqueue refresh only |
+| Local outbox discovery                               | Paginated consistent `Scan` filtered by `OUTBOX#`, `EVENT`, and pending status; reads the whole table                                                                                                                           |
+| Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance                                                                                                                                     |
+| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows                                                                                                                               |
 
 User-facing flows use no table scan. Local outbox discovery scans the small demo
 table without an index; filters do not reduce read capacity. Local Stripe
 reconciliation discovers provider subscriptions through the stored customer and
 reuses processing. The local five-minute reconciliation watcher also scans
-profiles. Cloud Google discovery scans known owner records, without a new record
-type, cursor, or database writes; run/job IDs travel in the schedule event and
-queue. Its scan filter does not enforce an IAM key boundary. Production-scale
-indexes/resumable discovery and other providers' cloud schedules are not wired.
+profiles. Cloud Stripe/Apple/Google discovery uses existing mappings/owners,
+without a new record type, cursor, or database writes; run/job IDs travel in the
+shared schedule event and queue. Scan filters do not enforce IAM key boundaries.
+Each provider has a separate opt-in and Lambda target. Production-scale indexes
+and resumable discovery remain outside the demo.
 Direct DynamoDB Admin edits bypass these guarantees.
 
 Sources: [user store](../services/api/src/dynamodb-users.ts),

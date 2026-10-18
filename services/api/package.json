@@ -24,7 +24,8 @@
     "@premiumpass/billing-contracts": "workspace:*",
     "@aws-sdk/client-sqs": "3.1149.0",
     "@premiumpass/api-contracts": "workspace:*",
-    "@premiumpass/aws-clients": "workspace:*"
+    "@premiumpass/aws-clients": "workspace:*",
+    "@premiumpass/google-play": "workspace:*"
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.159",

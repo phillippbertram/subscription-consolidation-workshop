@@ -1,5 +1,6 @@
 import { readDatabaseConfig } from '@premiumpass/persistence';
 import { createLocalAppleBilling } from './billing/apple.js';
+import { createGoogleBilling } from './billing/google.js';
 import { CheckoutService } from './billing/checkout-service.js';
 import { CancellationService } from './billing/cancellation-service.js';
 import { StripeBillingProvider } from './billing/stripe-provider.js';
@@ -24,6 +25,7 @@ const app = createApp(
   {
     webOrigin: readWebOrigin(process.env),
     apple: createLocalAppleBilling(process.env, database),
+    google: createGoogleBilling(process.env, database, true),
     ...(stripe
       ? {
           checkout: new CheckoutService(

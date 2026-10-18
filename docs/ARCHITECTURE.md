@@ -23,6 +23,7 @@ their own colors; labels and shapes identify each component as well.
 | API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, handle enabled billing actions | [API](../services/api/README.md)                                                                                                             |
 | Webhooks                    | Verify event signatures or Pub/Sub identity, then enqueue references                           | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md), [Google](../services/google-webhook/README.md) |
 | Worker                      | Verify current provider state/ownership; persist atomically                                    | [Worker](../services/subscription-worker/README.md)                                                                                          |
+| Developer CLI               | Inspect and edit local demo state; preview or trigger reconciliation                           | [CLI](../apps/cli/README.md)                                                                                                                 |
 | Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                         | [Outbox](../services/outbox-publisher/README.md)                                                                                             |
 
 Hono belongs to HTTP services. Domain code receives ordinary values and a clock,
@@ -34,16 +35,17 @@ entry points; services do not import other services.
 These libraries are imported by apps and services; they are not separate running
 processes. Workspace names come from each package's `package.json`.
 
-| Workspace package                                                           | Responsibility                                                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| [`@premiumpass/api-contracts`](../packages/api-contracts/README.md)         | Shared HTTP request/response schemas and types for API, Web, and Mobile                                 |
-| [`@premiumpass/billing-contracts`](../packages/billing-contracts/README.md) | Provider event allowlist and queue job schemas/types                                                    |
-| [`@premiumpass/domain`](../packages/domain/src/subscriptions.ts)            | Subscription and access rules across providers                                                          |
-| [`@premiumpass/persistence`](../packages/persistence/src/index.ts)          | DynamoDB subscription storage and database configuration                                                |
-| [`@premiumpass/aws-clients`](../packages/aws-clients/README.md)             | AWS SDK client construction for local and cloud use                                                     |
-| [`@premiumpass/apple-store`](../packages/apple-store/README.md)             | Apple Sandbox configuration, API client, and signed-data verification                                   |
-| [`@premiumpass/google-play`](../packages/google-play/README.md)             | Google Play configuration, Developer API client, test-purchase verification, and Pub/Sub authentication |
-| [`@premiumpass/logging`](../packages/logging/src/index.ts)                  | Shared structured logging and log-level configuration                                                   |
+| Workspace package                                                                       | Responsibility                                                                                          |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [`@premiumpass/api-contracts`](../packages/api-contracts/README.md)                     | Shared HTTP request/response schemas and types for API, Web, and Mobile                                 |
+| [`@premiumpass/billing-contracts`](../packages/billing-contracts/README.md)             | Provider event allowlist and queue job schemas/types                                                    |
+| [`@premiumpass/domain`](../packages/domain/src/subscriptions.ts)                        | Subscription and access rules across providers                                                          |
+| [`@premiumpass/persistence`](../packages/persistence/src/index.ts)                      | DynamoDB subscription storage and database configuration                                                |
+| [`@premiumpass/aws-clients`](../packages/aws-clients/README.md)                         | AWS SDK client construction for local and cloud use                                                     |
+| [`@premiumpass/apple-store`](../packages/apple-store/README.md)                         | Apple Sandbox configuration, API client, and signed-data verification                                   |
+| [`@premiumpass/google-play`](../packages/google-play/README.md)                         | Google Play configuration, Developer API client, test-purchase verification, and Pub/Sub authentication |
+| [`@premiumpass/subscription-processing`](../packages/subscription-processing/README.md) | Shared provider processors, ownership checks, and atomic subscription/access/outbox writes              |
+| [`@premiumpass/logging`](../packages/logging/src/index.ts)                              | Shared structured logging and log-level configuration                                                   |
 
 ## Local development topology
 
@@ -82,6 +84,9 @@ flowchart TB
         Queue[["ElasticMQ and DLQ"]]
         Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
         DB[("DynamoDB Local")]
+        Reconciliation["Reconciliation watcher<br/>@premiumpass/cli<br/>pnpm dev · every five minutes"]
+        DB -->|"Profiles / subscriptions / expiry"| Reconciliation
+        Reconciliation -->|"Refresh / expiration jobs"| Queue
         API -->|"Read access"| DB
         API -->|"Apple / Google sync"| Queue
         StripeHook --> Queue
@@ -97,6 +102,7 @@ flowchart TB
     StripeCLI --> StripeHook
     AppleTunnel --> AppleHook
     GoogleTunnel --> GoogleHook
+    Reconciliation <-->|"Current test-provider state"| Stripe & Apple & Google
     classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
     classDef client fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1.5px,rx:12,ry:12
     classDef identity fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px,rx:12,ry:12
@@ -111,7 +117,7 @@ flowchart TB
     class Web,Mobile client
     class Auth0 identity
     class API,StripeHook,AppleHook,GoogleHook,Worker service
-    class Queue queue
+    class Queue,Reconciliation queue
     class DB data
     class Stripe stripe
     class Apple apple
@@ -124,9 +130,12 @@ flowchart TB
 Publisher and log consumer are separate processes from the same
 `@premiumpass/outbox-publisher` workspace package.
 
-`pnpm dev` starts the five app processes and Docker/table initialization.
-Stripe CLI, Mobile/Metro, HTTPS tunnels, Google ingress, the optional outbox
-publisher/log consumer, and the local reconciliation watcher run separately.
+`pnpm dev` initializes Docker/the table, then starts API, Stripe/Apple webhooks,
+worker, Web, and the CLI reconciliation watcher. The watcher runs immediately
+and then every five minutes; it queues provider refreshes and due expiration
+work for the same worker. It stops with the grouped command.
+Stripe CLI, Mobile/Metro, HTTPS tunnels, Google ingress, and the optional outbox
+publisher/log consumer run separately.
 Apple and Google stay disabled until configured. API checkout and worker
 verification/completion call external provider APIs. Google ingress authenticates
 Pub/Sub push identity; the worker fetches fresh purchase state from Google.
@@ -184,13 +193,17 @@ flowchart TB
         Queue --> Worker --> DB
         API -->|"Google purchase / Restore sync"| Queue
         API --> DB
-        Schedule["Google schedule<br/>every five minutes, opt-in"] --> Discovery["Google discovery Lambda"]
-        DB -->|"Known token references"| Discovery --> Queue
+        Schedule["Amazon EventBridge rule<br/>Shared reconciliation · every five minutes"] -->|"Stripe opt-in"| StripeDiscovery["Stripe discovery Lambda<br/>customers + read-only API listing"]
+        Schedule -->|"Apple opt-in"| AppleDiscovery["Apple discovery Lambda<br/>known Sandbox lineages"]
+        Schedule -->|"Google opt-in"| GoogleDiscovery["Google discovery Lambda<br/>known token references"]
+        DB -->|"Customer / owner references"| StripeDiscovery & AppleDiscovery & GoogleDiscovery
+        StripeDiscovery & AppleDiscovery & GoogleDiscovery --> Queue
         Schedule -.->|"Delivery failure"| ReconciliationDLQ["Reconciliation failure queue"]
-        Discovery -.->|"Execution failure"| ReconciliationDLQ
+        StripeDiscovery & AppleDiscovery & GoogleDiscovery -.->|"Execution failure"| ReconciliationDLQ
         Queue -.->|"Repeated failures"| DLQ
         Secrets -->|"Stripe signing secret"| StripeHook
         Secrets --> Worker
+        Secrets -->|"Stripe test key only"| StripeDiscovery
     end
     API -.->|"Fetch JWKS"| Auth0
     classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
@@ -213,7 +226,7 @@ flowchart TB
     class Apple apple
     class Google,PubSub google
     class Gateway service
-    class Discovery service
+    class StripeDiscovery,AppleDiscovery,GoogleDiscovery service
     class Schedule queue
     class DLQ,ReconciliationDLQ failure
     class Secrets identity
@@ -243,11 +256,14 @@ CORS, and authenticated Apple config/sync/completion remain incomplete.
 The stack also prepares Stripe/Apple/Google notification processing. Google topics, push
 subscriptions, and Play Console resources remain external setup. This diagram
 shows code wiring, not deployed or provider-verified evidence.
-The same Google opt-in enables paginated known-token discovery on a five-minute
-schedule. Discovery scans and enqueues; only the worker calls Google and writes
-access. Failure delivery is separate from the worker DLQ. The small-table scan,
-retry behavior, and manual preview are owned by the
-[reconciliation guide](RECONCILIATION.md#cloud-google-reconciliation).
+One shared five-minute schedule has separate default-off switches for Stripe,
+Apple, and Google discovery. Three Lambda targets isolate failures and retries.
+Stripe discovery lists mapped customer subscriptions using its test secret;
+Apple/Google discovery only scans known owner references and receives no private
+key. Every repair uses fresh worker verification and atomic persistence. The
+shared discovery failure queue is separate from the worker DLQ. Configuration,
+small-table limits, retries, and preview belong to the
+[reconciliation guide](RECONCILIATION.md#cloud-reconciliation).
 See [AWS boundaries](../infra/README.md#resources-and-boundaries) and the sole
 [verification record](TASKS.md).
 
@@ -265,8 +281,15 @@ owns transport and runtime composition.
 The [CLI](../apps/cli/README.md) owns prompts, commands, local demo edits, and
 local reconciliation discovery. It imports the processing package through public
 exports, without importing worker source. Both executables use the same verified
-processing and atomic commit paths. CLI provider settings have explicit shell/CLI/
-worker-fallback precedence; its database and queue destinations stay fixed to Compose.
+processing and atomic commit paths. CLI provider settings come only from its own
+`.env` and overriding shell variables; its database and queue destinations stay fixed to Compose.
+
+Complimentary Premium uses the processing package's `/admin-grants` entry.
+Its processor owns grant/revoke rules, audit receipts, idempotency, and retries;
+its store owns DynamoDB reads and atomic grant/access/audit/outbox writes. The
+CLI only translates flags, obtains the trusted OS actor, and presents results.
+The grant model and access policy remain in the domain package. A shared
+operation is not an authorization boundary; each caller must authorize its operator.
 
 Provider stores prepare ownership checks, subscription writes, and processing
 markers. The shared [`DynamoDbProcessingStore`](../packages/subscription-processing/src/processing/dynamodb-processing.ts)
@@ -289,8 +312,8 @@ EventBridge adapter has no deployed bus/rule or cloud runtime wiring. Local
 reconciliation enqueues Stripe, known Apple Sandbox/Google Play test subscriptions,
 and Google mock refreshes plus due expiration jobs through the subscription worker.
 Independent Google mock state supports suppressed-event exercises. The opt-in
-Google cloud path prepares scheduled reference discovery; other cloud discovery
-and live reconciliation evidence remain outstanding in P09.
+cloud path prepares Stripe, Apple, and Google discovery on one shared schedule.
+Live reconciliation evidence remains outstanding in P09.
 API access and expiry checks do not depend on event publication or
 consumer success.
 

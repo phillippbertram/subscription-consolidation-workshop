@@ -6,7 +6,7 @@ for configuration and the first purchase.
 
 ## Run
 
-`pnpm dev` includes Web at `http://localhost:5173`. Use `pnpm web:dev` only when
+`pnpm dev` includes Web at `http://localhost:5173`. Use `pnpm dev:web` only when
 starting services individually. Restart Vite after `.env` changes; missing
 configuration shows a setup message. Never put Stripe secrets in `VITE_` values.
 

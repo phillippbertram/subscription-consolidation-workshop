@@ -7,16 +7,16 @@ work, local diagnostics, and cleanup. Commands run from the repository root.
 
 Run `pnpm run` to list all root scripts. Names follow these groups:
 `dev:*` for long-running development processes, `local:*` for Docker,
-`mobile:*` for native builds, `subscription:*` for local subscription tools,
+`mobile:*` for native builds, `cli` for all local subscription tools,
 and `infra:*` for CDK. Standard checks keep their short names.
 Additional arguments follow the command directly, for example
-`pnpm subscription:reconcile --provider google --dry-run`.
+`pnpm cli reconcile --provider google --dry-run`.
 
 ### Development processes
 
 | Command                                              | Purpose                                                                                                                      |
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                           | Initialize Docker/table, then run API, Stripe/Apple webhooks, worker, and Web                                                |
+| `pnpm dev`                                           | Initialize Docker/table, then run API, Stripe/Apple webhooks, worker, Web, and reconciliation watcher                        |
 | `pnpm dev:api` / `pnpm dev:api:lan`                  | API on loopback / all IPv4 interfaces                                                                                        |
 | `pnpm dev:web`                                       | Website only                                                                                                                 |
 | `pnpm dev:mobile` / `pnpm dev:mobile:lan`            | Metro for an installed development app on localhost / LAN; [device setup](../apps/mobile/README.md#run-on-a-physical-iphone) |
@@ -24,24 +24,25 @@ Additional arguments follow the command directly, for example
 | `pnpm dev:webhook:google`                            | Authenticated Google Pub/Sub ingress on loopback port 3004                                                                   |
 | `pnpm dev:worker`                                    | Subscription queue worker                                                                                                    |
 | `pnpm dev:outbox` / `pnpm dev:events`                | Watch local outbox / run its separate log consumer                                                                           |
-| `pnpm dev:reconcile`                                 | Repeat local reconciliation every five minutes                                                                               |
+| `pnpm cli reconcile --watch`                         | Run the reconciliation watcher separately when not using `pnpm dev`                                                          |
 
 Use the grouped stack or its individual processes, not both. Google ingress,
-Metro, outbox, event consumption, and reconciliation start separately.
+Metro, outbox, and event consumption start separately. Reconciliation is included
+in `pnpm dev`; do not start a second watcher alongside it.
 Restart processes after `.env` changes.
 
 ### Local tools
 
-| Command                                                | Purpose                                                               |
-| ------------------------------------------------------ | --------------------------------------------------------------------- |
-| `pnpm local:up` / `pnpm local:down`                    | Start/initialize or remove Compose containers; retain database volume |
-| `pnpm local:logs`                                      | Show the last 100 lines of Docker logs                                |
-| `pnpm subscription --help`                             | Inspect or change local subscriptions for one user                    |
-| `pnpm subscription:seed <internal-user-id> <scenario>` | Seed reserved synthetic demo records                                  |
-| `pnpm subscription:google-mock --help`                 | Change independent local Google mock state                            |
-| `pnpm subscription:reconcile --dry-run`                | Preview queued reconciliation; omit `--dry-run` to enqueue            |
-| `pnpm outbox:publish --dry-run`                        | Preview pending outbox events; omit `--dry-run` to publish one pass   |
-| `pnpm stripe:listen`                                   | Forward Stripe test events in a separate CLI terminal                 |
+| Command                                       | Purpose                                                               |
+| --------------------------------------------- | --------------------------------------------------------------------- |
+| `pnpm local:up` / `pnpm local:down`           | Start/initialize or remove Compose containers; retain database volume |
+| `pnpm local:logs`                             | Show the last 100 lines of Docker logs                                |
+| `pnpm cli --help`                             | Inspect or change local subscriptions for one user                    |
+| `pnpm cli seed <internal-user-id> <scenario>` | Seed reserved synthetic demo records                                  |
+| `pnpm cli google-mock --help`                 | Change independent local Google mock state                            |
+| `pnpm cli reconcile --dry-run`                | Preview queued reconciliation; omit `--dry-run` to enqueue            |
+| `pnpm outbox:publish --dry-run`               | Preview pending outbox events; omit `--dry-run` to publish one pass   |
+| `pnpm stripe:listen`                          | Forward Stripe test events in a separate CLI terminal                 |
 
 ### Builds and checks
 
@@ -112,48 +113,87 @@ the broker running during verification. [Publisher behavior and cloud boundary](
 
 ## Local subscription CLI
 
-The [CLI workspace](../apps/cli/README.md) owns these commands; their root aliases
-remain unchanged. Copy the internal user UUID from Web account details or Mobile developer tools.
+The [CLI workspace](../apps/cli/README.md) owns these commands. `pnpm cli` is the
+single root entry; subcommands replace the former `subscription*` and
+`dev:reconcile` aliases. Use `pnpm --filter @premiumpass/cli run dev --help`
+for the explicit source entry. After `pnpm --filter @premiumpass/cli build`,
+`pnpm --filter @premiumpass/cli start --help` runs the built entry. Copy the internal user UUID from Web account details or Mobile developer tools.
 The profile must already exist in DynamoDB Local.
 
 ```sh
-pnpm subscription <internal-user-id>
-pnpm subscription list <internal-user-id>
-pnpm subscription reconcile <internal-user-id> --dry-run
-pnpm subscription reconcile <internal-user-id>
-pnpm subscription set <internal-user-id> free
-pnpm subscription set <internal-user-id> active --subscription <provider-subscription-id>
-pnpm subscription --help
+pnpm cli                                 # interactive; asks for the user ID
+pnpm cli <internal-user-id>               # interactive for this user
+pnpm cli list <internal-user-id>
+pnpm cli stripe-sync <internal-user-id> --dry-run
+pnpm cli stripe-sync <internal-user-id>
+pnpm cli set <internal-user-id> free
+pnpm cli set <internal-user-id> active --subscription <provider-subscription-id>
+pnpm cli --help
 ```
 
-| Operation               | Effect                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------- |
-| `set … free`            | Expire existing local subscriptions and clear grace; does not cancel provider contracts               |
-| `set … active`          | Give existing known-product records one hour of local access; `--until` accepts a future UTC boundary |
-| `set … expiring`        | Give existing records 30 seconds of local access                                                      |
-| `--subscription <id>`   | Limit `set` to one subscription; otherwise all existing records, including Stripe/Apple, are changed  |
-| `reconcile … --dry-run` | Read current Stripe test state and preview differences without database writes                        |
-| `reconcile …`           | Restore local Stripe records through the worker processor; preserve other providers                   |
+| Operation                 | Effect                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `set … free`              | Expire existing local subscriptions and clear grace; does not cancel provider contracts               |
+| `set … active`            | Give existing known-product records one hour of local access; `--until` accepts a future UTC boundary |
+| `set … expiring`          | Give existing records 30 seconds of local access                                                      |
+| `--subscription <id>`     | Limit `set` to one subscription; otherwise all existing records, including Stripe/Apple, are changed  |
+| `stripe-sync … --dry-run` | Read current Stripe test state and preview differences without database writes                        |
+| `stripe-sync …`           | Restore local Stripe records through the worker processor; preserve other providers                   |
 
 All CLI writes target the fixed Compose database. Provider settings resolve from
-shell variables, then optional `apps/cli/.env`, then `services/subscription-worker/.env`
-as a fallback for existing setups. See the [CLI example](../apps/cli/.env.example).
-Reconciliation needs a Stripe test key/price and an existing Stripe customer mapping, but no running
+shell variables, then optional `apps/cli/.env`. Copy the
+[CLI example](../apps/cli/.env.example) and configure each provider used by CLI
+commands; worker configuration is not loaded.
+Direct `stripe-sync` needs a Stripe test key/price and an existing Stripe customer mapping, but no running
 worker or queue. It discovers missing subscriptions, verifies ownership, and
 reports partial failures with a nonzero exit code. It never changes Stripe.
 `list`, `set`, and mock seeding need no provider credentials.
 
-For independent mock records, use `pnpm subscription:seed <internal-user-id>
+For independent mock records, use `pnpm cli seed <internal-user-id>
 <scenario>` with `active`, `expiring`, `multiple`, or `free`. These scenarios
 change only two reserved, marked demo records. `free` removes those records;
 it does not remove real provider grants. Refresh the client after changes.
+
+### Complimentary Premium
+
+Give an existing user Premium without any provider subscription:
+
+```sh
+pnpm cli premium grant <internal-user-id> --forever --reason "Demo access"
+pnpm cli premium grant <internal-user-id> --until 2026-12-01T12:00:00Z --reason "Workshop access"
+pnpm cli premium list <internal-user-id>
+pnpm cli premium revoke <internal-user-id> --reason "Workshop ended"
+```
+
+Use exactly one of `--forever` (until revoked) or a future UTC `--until` when
+granting. Granting again updates this user's single complimentary grant.
+Revoking affects only that grant; a valid paid subscription still gives Premium.
+Both changes support `--dry-run` and `--request-id <uuid>`. Each write prints its
+request ID before attempting persistence. Retry an uncertain result with the
+**same ID and arguments**: the durable receipt prevents replay from reversing a
+later grant/revocation. Reusing an ID for the same user with different arguments or OS actor fails.
+New commands with unchanged settings record an audit receipt without another
+access-change event (unless an access boundary has become due).
+
+`premium list` shows current access, the stored grant (including expiry and revocation), and audit history. The interactive menu also offers grant/revoke.
+Refresh Web/Mobile after changes; complimentary access is displayed separately
+from purchases, with no subscription-management action.
+
+These commands use only fixed loopback DynamoDB Local with dummy credentials;
+no Auth0 admin role, provider key, worker, queue, or AWS credentials are required.
+Administrative trust is possession of the local OS/database access, **not** a
+user's `read:premium` scope. The CLI records the OS username automatically and
+requires a reason; never enter secrets or customer data. This is a trusted local
+developer tool, not a multi-user admin security boundary. There is no HTTP admin
+route. Hosted administration and IAM/role enforcement are outside this local CLI.
+Provider reconciliation and the old `set`/`seed` demo commands preserve this grant.
 
 ## Local reconciliation and expiration
 
 For the overview, provider differences, processing flow, and failure behavior,
 read [Reconciliation](RECONCILIATION.md). This section owns commands and exercises.
 
-The existing `pnpm subscription reconcile <user-id>` performs a synchronous
+`pnpm cli stripe-sync <user-id>` performs a synchronous
 Stripe-only repair. The following commands instead discover work for one or all
 users and send it to the existing subscription queue:
 
@@ -162,16 +202,19 @@ pnpm local:up
 pnpm dev:worker
 ```
 
-In another terminal:
+`pnpm dev` already starts the watcher. For a one-off preview or run:
 
 ```sh
-pnpm subscription:reconcile --dry-run
-pnpm subscription:reconcile
-pnpm dev:reconcile
+pnpm cli reconcile --dry-run
+pnpm cli reconcile
 ```
 
+When running the services individually, start `pnpm cli reconcile --watch` in
+another terminal. Use `--provider` to restrict that standalone watcher.
+
 The watcher runs immediately, then every five minutes, without overlapping its
-own runs. Stop with `Ctrl+C`; these commands are separate from `pnpm dev`.
+own runs. With `pnpm dev`, `Ctrl+C` stops it together with the other processes;
+stop a standalone watcher in its own terminal.
 Follow [run diagnostics](RECONCILIATION.md#follow-a-run) to distinguish queue
 acceptance from completed repair.
 
@@ -204,11 +247,11 @@ For partial failures, exit codes, retries, and the cloud boundary, see
 Use an existing synthetic user and a unique `mock_google_` subscription ID:
 
 ```sh
-pnpm subscription:google-mock <internal-user-id> mock_google_demo active
+pnpm cli google-mock <internal-user-id> mock_google_demo active
 # Wait for subscription.processed in the worker terminal.
-pnpm subscription:google-mock <internal-user-id> mock_google_demo revoked --suppress-event
-pnpm subscription:reconcile --user <internal-user-id> --provider google_mock --dry-run
-pnpm subscription:reconcile --user <internal-user-id> --provider google_mock
+pnpm cli google-mock <internal-user-id> mock_google_demo revoked --suppress-event
+pnpm cli reconcile --user <internal-user-id> --provider google_mock --dry-run
+pnpm cli reconcile --user <internal-user-id> --provider google_mock
 ```
 
 The suppressed change updates only the independent mock source. Derived access
@@ -221,7 +264,7 @@ Other scenarios: `renewal_failed` retains the previous period with bounded grace
 and `pending` grant nothing. `active --until <future-UTC-timestamp>` sets an explicit
 boundary. Failure/cancellation require an existing period; repeated failure never
 restarts grace. These are synthetic local states, not Google Play purchases.
-Old `subscription:seed` records are separate and are not authoritative mock state.
+Reserved `pnpm cli seed` records are separate and are not authoritative mock state.
 
 For T21, a Stripe customer mapping must preexist. Reconciliation lists all that
 customer's test subscriptions, including ones absent locally after a missed

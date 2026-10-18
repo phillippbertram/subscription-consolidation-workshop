@@ -2,7 +2,7 @@
 
 `@premiumpass/api-contracts` owns shared Zod request/response schemas and inferred
 types for the API, Web, and Mobile. `src/index.ts` covers profile, scores, errors,
-subscriptions/entitlements, Stripe actions, and Apple synchronization.
+subscriptions/entitlements, Stripe actions, and Apple/Google synchronization.
 
 Clients parse responses; API routes reuse strict billing inputs and check response
 types with `satisfies`. Unknown product/status strings remain representable;

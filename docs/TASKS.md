@@ -24,7 +24,7 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P10 | Operations and final demo                  | P04, P06–P09, P12, P13               | open     |
 | P11 | Self-service subscription cancellation     | P06; P07 for Apple; P12 for Google   | partial  |
 | P12 | Google Play test purchases                 | P04, P05, P06 local processing       | partial  |
-| P13 | Admin-granted complimentary Premium        | P02, P03 local, P05                  | open     |
+| P13 | Admin-granted complimentary Premium        | P02, P03 local, P05                  | partial  |
 
 **Current focus:** P12 real Google Play license-test purchases, starting with
 Play Console preparation and the Android build. Apple provider/device checks in
@@ -381,10 +381,33 @@ complete. AWS deployment and verification remain a separately authorized path.
   `pnpm check`, `pnpm infra:synth`, Markdown formatting, 165 relative links/anchors,
   and diff checks passed; the known Web bundle-size warning remains. No automated
   tests, deployments, real AWS/Google requests, or device checks were added.
-- **Outstanding:** real Apple Sandbox reconciliation, other-provider cloud
-  scheduling, deployed Google schedule/IAM/queue/worker evidence,
-  a real missed-initial-webhook Stripe purchase exercise and measured seven-minute
-  latency. Provider failures must never erase existing verified state.
+- **Shared cloud preparation, October 18:** replaces the initial Google-only
+  schedule behavior with one five-minute rule and separately enabled Stripe,
+  Apple, and Google Lambda targets. All reconciliation switches default to false;
+  Apple/Google additionally require provider processing enabled. Disabled targets
+  have no discovery policy and return before reads. Stripe scans completed customer
+  mappings, checks both ownership directions, and fully lists test subscriptions
+  before queueing stored/discovered IDs. Apple scans known Sandbox owner lineages;
+  the cloud worker now accepts their internal refresh jobs. Apple/Google discovery
+  has no provider keys; all discovery has no database writes. Existing Google
+  resource identities/output aliases and the shared retained failure queue remain.
+- **Shared cloud verification, October 18:** eleven Stripe/Apple and twelve Google
+  isolated manual scenario groups passed with actual discovery/worker Lambda
+  entries, disposable DynamoDB Local/ElasticMQ resources, and substituted provider,
+  secret, and Apple verifier responses. Covered previews, pagination, missed Stripe
+  creation/Apple renewal, fresh worker state, exact Apple finish recovery,
+  duplicate/outbox suppression, ownership/outage rejection, independent provider
+  failures, queue partial failure/receipts, stable IDs, and time budgets. All eight
+  switch combinations passed template evaluation and deploy dry runs; invalid
+  opt-ins were rejected. `pnpm format`, `pnpm check`, CDK synthesis/template
+  inspection, and diagram rendering passed. Original table/work-queue definitions
+  and all 41 baseline resource identities/types remain intact. Local checks do not
+  establish live Apple signature verification, provider behavior, scheduler delivery,
+  deployed IAM, or repair latency. No deployment or account changes were performed.
+- **Outstanding:** real Apple Sandbox reconciliation, deployed shared
+  schedule/IAM/queue/worker evidence, a real missed-initial-webhook Stripe purchase
+  exercise, and measured seven-minute latency. Provider failures must never erase
+  existing verified state.
 - **Next step:** exercise a real missed Google lifecycle notification through the
   P12 setup and record repair timing, preserving the local mock exercise. Apple Sandbox
   renewal/expiration repair remains deferred until account access is restored.
@@ -551,8 +574,10 @@ complete. AWS deployment and verification remain a separately authorized path.
   the conditional API policy. `pnpm format`, `pnpm check`, and `pnpm infra:synth`
   passed; documentation formatting/links were checked. The known Web bundle-size
   warning remains. No deployment, real AWS/Google calls, or Android checks occurred.
-- **Cloud reconciliation preparation, October 18:** known-token discovery,
-  schedule, conditional IAM, and a separate failure queue are prepared under
+- **Cloud reconciliation preparation, October 18:** Google discovery now uses
+  the separate `RECONCILIATION_GOOGLE_ENABLED` switch on the shared provider
+  schedule. Known-token discovery, conditional IAM, and the shared discovery
+  failure queue are prepared under
   [P09](#p09-reconciliation-and-expiration). Local CLI behavior and mock exercises
   remain separate. No deployment or real Google lifecycle evidence is implied.
 - **Next step:** configure the private Android and Google settings, produce/upload
@@ -582,14 +607,74 @@ complete. AWS deployment and verification remain a separately authorized path.
   unauthorized requests, concurrent provider updates, and revocation/expiry in
   both overlap directions. Show the source as complimentary access without
   inventing a paid subscription or exposing purchase-management actions for it.
-- **Planned, October 18:** requirement added only. Existing local subscription
-  overrides and seeded provider mocks do not satisfy this task.
-- **Next step:** define the smallest privileged administration interface and
-  extend the domain/storage contracts for independent admin grants; update the
-  owning Payments, DynamoDB, and Development guides with the implementation.
-  Any cloud administration remains subject to separate deployment authorization.
+- **Implemented, October 18:** `pnpm cli premium grant|revoke|list`, plus
+  interactive grant/revoke, operate on the fixed DynamoDB Local target. Granting
+  requires `--until` or `--forever`; writes require a reason and automatically
+  record the OS actor. Preview is read-only. One independent admin grant per user
+  is combined with provider subscriptions in API reads and every guarded worker/
+  CLI commit; providers and demo overrides preserve it. Web/Mobile display
+  complimentary access separately from purchases, without management actions.
+- **Consistency:** atomic grant/audit/snapshot/outbox writes; stable request IDs
+  and durable audit receipts prevent duplicate effects and replay after a later
+  revocation. No-op commands record a receipt without an access-change event,
+  except at due boundaries. Finite expiries remain scheduled alongside unbounded
+  admin access. The outbox publisher accepts new admin grants and older pending
+  provider events without a source discriminator.
+- **Local verification, October 18:** disposable DynamoDB Local and isolated
+  signed JWT/JWKS responses exercised no-purchase access, a separate Free user,
+  exact expiry without a worker, revocation, missing scopes/tokens, and absent
+  HTTP admin routes. Preview/unknown users/invalid expiry, request replay and
+  collisions, response loss after commit, concurrent changes, stale provider
+  writes, and expiry/revocation overlap in both directions were checked.
+  Expiration processing and paginated outbox publication to a synthetic sink
+  passed; repeated publication selected no events. Temporary resources were
+  removed. These checks do not establish real provider or AWS behavior.
+- **Package boundary review, October 18:** Premium commands now delegate through
+  `@premiumpass/subscription-processing/admin-grants`. The shared processor owns
+  request/audit validation, grant/revoke transitions, previews, durable idempotency
+  receipts, and retries. Its DynamoDB adapter owns keys, audit queries, and atomic
+  grant/access/audit/outbox persistence. CLI code keeps flag translation, request
+  IDs, OS actor attribution, and output; the domain retains grant/access rules.
+  No worker dependency, provider SDK, or new package dependency was added.
+- **Boundary verification:** six disposable-DynamoDB scenario groups passed for
+  validation/unknown users, write-free previews, atomic grant/audit/outbox,
+  duplicate and mismatched requests, unchanged receipts, replay after revocation,
+  lost commit responses, exact expiry, concurrent provider writes, grant overlap,
+  and rollback when a profile disappears. Source/built CLI smoke checks passed
+  for preview, grant, audit listing, replay, revoke, trusted OS attribution,
+  flag validation, missing-user/expiry messages, and forged actor rejection.
+  Temporary data was removed. `pnpm format`, `pnpm check`, Markdown formatting,
+  113 relative links/anchors, dependency/export/cycle inspection, and diff checks
+  passed. Shared admin processing has no CLI/OS/environment/output dependency;
+  the CLI has no audit schemas, DynamoDB keys, transaction or retry logic.
+- **CLI and checks:** source and built commands verified preview, indefinite/timed
+  grants, list/audit, revoke, replay after revoke, and preservation through demo
+  seed/edit commands. Environment overrides could not redirect the CLI target
+  or spoof its OS actor. Synthetic records/outbox entries were removed. Final
+  `pnpm format`, `pnpm check` (including Android/iOS/Web JavaScript exports),
+  edited-document formatting, 91 relative links/anchors, and diff checks passed.
+  The existing Web bundle-size warning remains. No automated test suite was added.
+- **Administration boundary:** this CLI trusts OS access to the loopback database;
+  ordinary API scopes cannot invoke it. Audit attribution is not an Auth0 role
+  check or tamper-proof evidence against a local database administrator. No
+  hosted admin endpoint, cloud grant command, or deployment is included.
+- **Outstanding:** end-to-end refresh and visual checks in the authenticated Web
+  app and on a mobile simulator/device. Native/provider/AWS flows were not run;
+  P13 remains partial until its Web/Mobile acceptance evidence is recorded.
 
 ## Maintenance verification
+
+- **Grouped local reconciliation, October 18:** `pnpm dev` now starts
+  `pnpm cli reconcile --watch` with a dedicated `reconciliation` log prefix,
+  after Docker/table initialization. The local topology shows the CLI timer,
+  database/provider reads, and refresh/expiration jobs sent to the worker queue;
+  setup/command guidance and the shared overview label match the new startup.
+  `pnpm format`, `pnpm check`, Markdown formatting, relative links/anchors,
+  SVG XML, and diff checks passed; the local Mermaid diagram rendered in the
+  browser. The exact grouped command started all six process substitutes and
+  stopped them on SIGINT. This checks orchestration without starting duplicate
+  application servers or making provider requests; no live reconciliation run,
+  deployment, or five-minute timing measurement was performed.
 
 - **Worker provider structure, October 18:** grouped Stripe, Apple, Google Play,
   and Google mocks under separate `providers/` folders. Stripe owns its contracts
@@ -638,6 +723,108 @@ complete. AWS deployment and verification remain a separately authorized path.
   including duplicate/revoked mock access; the table and synthetic key files were
   removed. No automated test suite was added. These checks did not include real
   provider requests, native builds, or AWS deployment.
+
+- **CLI workspace extraction, October 18:** moved interactive/scripted commands,
+  local demo actions, mock tooling, and the local reconciliation runner to
+  `apps/cli`. Provider processors, factories, credentials, shared atomic storage,
+  expiration, and Stripe reconciliation now live in
+  `packages/subscription-processing` behind explicit package exports. The worker
+  retains queue/Lambda entry points, runtime composition, and cloud Google
+  discovery. Existing root commands and arguments are unchanged. CLI provider
+  configuration initially resolved shell values before optional `apps/cli/.env`,
+  then the worker `.env` (removed in the CLI configuration isolation below);
+  local database/queue destinations remain fixed.
+- **Extraction verification:** `pnpm format`, `pnpm check`, and `pnpm infra:synth`
+  passed. All 51 synthesized resource IDs/types and non-asset template content
+  remain unchanged; only worker/Google-reconciliation Lambda code assets changed.
+  Root CLI help output is identical. Synthetic local command checks covered
+  list/seed/targeted edits, preserving another grant, invalid inputs, mock event
+  suppression, read-only reconciliation, built entries from another directory,
+  watch shutdown, and interactive cancellation. Synthetic configuration checks
+  covered file precedence, missing/unreadable files, and source/bundle paths.
+  Disposable local Stripe/Apple processing and worker dispatch checks passed,
+  including ownership rejection, conflicts, concurrent grants, provider completion
+  recovery, expiration, and duplicate/outbox behavior; all 20 Google scenario
+  groups passed with isolated provider/certificate responses. Temporary tables,
+  queue, and synthetic CLI records were removed. Source and bundled direct Stripe
+  reconciliation also passed read-only preview, verified repair, repeat/outbox,
+  and wrong-owner checks through isolated HTTP responses. Markdown formatting,
+  167 relative links/anchors, and `git diff --check` passed; lockfile package
+  versions/resolutions are unchanged. No automated test suite was added.
+  Live provider, device, and deployed AWS evidence remains unchanged; no deployment,
+  commit, or push was performed. The known Web bundle-size warning remains.
+
+- **CLI/worker boundary review, October 18:** verified all direct imports and
+  workspace dependencies; no executable imports another executable's source and
+  the workspace graph has no cycles. Removed direct Pino dependencies from CLI and
+  worker by exporting the logger type from the logging package. Corrected type-only
+  imports and added narrow processing exports for stores, credentials, provider
+  readers, and discovery. At the reviewed Google-only snapshot, lightweight Google
+  contracts kept its discovery entry free of Google auth/HTTP and provider-completion
+  code; the unminified bundle decreased from 3,097,293 to 2,340,026 bytes with matching
+  build options. The boundary changes did not alter provider processing behavior.
+- **Build and invocation:** CLI/worker builds now clean their own output directory;
+  the worker emits only local, Lambda, and Google discovery entries, removing stale
+  CLI bundles. Added the CLI's built `start` script and documented source/workspace/
+  built invocations and the distinction between direct Stripe repair and queued
+  reconciliation. Existing root aliases and help/argument forwarding are unchanged.
+  The worker retains transport, runtime configuration/composition, and its scheduled
+  backend discovery entry. The CLI worker-`.env` fallback was retained at this
+  stage and is removed in the configuration isolation below.
+- **Boundary verification snapshot:** `pnpm format`, `pnpm check`, and `pnpm infra:synth`
+  passed before concurrent cross-provider reconciliation edits appeared. At that
+  snapshot, all 51 resource IDs/types and non-asset template content were unchanged;
+  no dependency versions/resolutions changed. Six source/built invocation contexts
+  and all four secondary root aliases returned unchanged help. A module-load probe
+  confirmed source CLI help does not load Stripe SDK or provider construction,
+  credentials, or verification modules. Synthetic CLI commands, source/built direct
+  Stripe reconciliation, watch shutdown, and 12 actual Google discovery/worker
+  Lambda scenario groups passed using disposable local resources and isolated
+  provider/secret responses. Temporary data and resources were removed. Markdown
+  formatting, relative links, and diff checks passed. No automated tests were added,
+  no real provider/AWS requests or deployment occurred, and nothing was committed
+  or pushed. The known Web bundle-size warning remains.
+- **Concurrent work boundary:** the final comparison found a new shared
+  `src/reconciliation/lambda.ts` plus Stripe/Apple discovery adapters and changed
+  CDK wiring being edited in parallel. Those changes were preserved and are not
+  covered by the earlier build, synthesis, bundle-size, or Lambda scenario evidence.
+  Their implementation and final verification belong to the reconciliation task.
+
+- **Unified CLI and shared reconciliation review, October 18:** supersedes the
+  earlier alias-preservation and concurrent-work limitation above. `pnpm cli` now
+  delegates to one `src/main.ts` entry and one `dist/main.js` bundle. Local list,
+  edit, seed, Google mock, queued `reconcile` (including `--watch`), and direct
+  `stripe-sync` are subcommands; the old root aliases and three executable scripts
+  are removed. Interactive mode also exposes queued provider reconciliation.
+  Stripe discovery composition now owns credential/client setup separately from
+  its pure customer-mapping store. Worker code owns transport, scheduling context,
+  job construction, and run-level failures; reusable processing stays in its package.
+- **Current local evidence:** source/built CLI calls, local-only target enforcement,
+  seeded edits/grant preservation, no-write previews, mock suppression, direct
+  Stripe repair/ownership rejection, configuration precedence, interactive cancellation,
+  and watch SIGTERM passed. Reran all eleven Stripe/Apple and twelve Google
+  discovery/worker scenario groups against disposable DynamoDB/ElasticMQ with
+  substituted provider/secret/verifier responses; resources and synthetic users
+  were removed. The three workspace imports/dependencies are declared and used,
+  public exports are respected, the graph has no cycles, and the lockfile is unchanged.
+  Source help does not initialize provider factories or the Stripe SDK. CDK
+  synthesis and all eight enable-switch combinations/deploy previews passed with
+  read-only discovery IAM and Stripe-only secret access. Final `pnpm format`,
+  `pnpm check` (format/lint/types/build), 96 relative links/anchors, and diff checks
+  passed. Template comparison preserves all 65 resource identities and non-asset
+  definitions; only three discovery Lambda code assets changed. No live AWS, real provider,
+  device, or deployment evidence is implied; P09/P12 live acceptance remains open.
+
+- **CLI configuration isolation, October 18:** removed the worker `.env` fallback.
+  Provider settings now come only from optional `apps/cli/.env`, overridden by
+  shell variables. The example and setup/development/provider guides describe
+  explicit CLI configuration; local storage and queue targets remain fixed.
+  `pnpm format`, `pnpm check`, Markdown formatting, 122 relative links/anchors,
+  and diff checks passed. An isolated source/bundle configuration exercise
+  confirmed ignored worker settings (including an unreadable worker file),
+  optional CLI settings, shell precedence, no process-environment mutation,
+  directory-independent resolution, and explicit unreadable CLI-file failure.
+  Only synthetic temporary configuration was used and removed; no provider calls.
 
 ## Manual scenario index
 

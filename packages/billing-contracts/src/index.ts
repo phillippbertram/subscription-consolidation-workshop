@@ -91,11 +91,33 @@ export type AppleReconciliationJob = z.infer<
 >;
 export type AppleProcessingJob = AppleJob | AppleReconciliationJob;
 
+export const googleJobSchema = baseJobSchema
+  .extend({
+    provider: z.literal('google'),
+    environment: z.literal('test'),
+    eventId: z.string().regex(/^[A-Za-z0-9_-]{1,200}$/),
+    eventType: z.enum(['client.sync', 'notification', 'reconciliation']),
+    packageName: z.string().regex(/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/),
+    purchaseToken: z.string().min(1).max(4096).regex(/^\S+$/),
+    // Notifications resolve ownership from a fresh Google API response.
+    userId: z.uuid().optional(),
+  })
+  .superRefine((job, context) => {
+    if (job.eventType !== 'notification' && !job.userId) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Internal user is required.',
+      });
+    }
+  });
+export type GoogleJob = z.infer<typeof googleJobSchema>;
+
 export const subscriptionJobSchema = z.union([
   jobSchema,
   stripeReconciliationJobSchema,
   appleJobSchema,
   appleReconciliationJobSchema,
+  googleJobSchema,
   googleMockJobSchema,
   expirationJobSchema,
 ]);

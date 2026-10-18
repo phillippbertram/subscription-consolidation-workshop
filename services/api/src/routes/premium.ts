@@ -18,8 +18,11 @@ export function registerPremiumRoutes(
     requireScopes('read:premium'),
     async (c) => {
       const user = await users.getOrCreate(c.get('auth'));
-      const subscriptions = await subscriptionStore.listForUser(user.userId);
-      const entitlements = deriveEntitlements(subscriptions, now());
+      const [subscriptions, adminGrant] = await Promise.all([
+        subscriptionStore.listForUser(user.userId),
+        subscriptionStore.getAdminGrant(user.userId),
+      ]);
+      const entitlements = deriveEntitlements(subscriptions, now(), adminGrant);
       // Scope permits calling the API; an entitlement proves current product
       // access. A valid JWT with read:premium alone is not a paid subscription.
       if (!entitlements.features.includes('score_history')) {

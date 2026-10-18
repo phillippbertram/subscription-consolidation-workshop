@@ -19,12 +19,22 @@ export const subscriptionChangedSchema = z
       effectiveUntil: z.iso.datetime().nullable(),
       evaluatedAt: z.iso.datetime(),
       grants: z.array(
-        z.object({
-          provider: subscriptionSchema.shape.provider,
-          providerSubscriptionId: z.string().min(1),
-          revision: z.number().int().positive(),
-          validUntil: z.iso.datetime(),
-        }),
+        z.union([
+          z.object({
+            // Pending provider events written before admin grants have no source.
+            source: z.literal('provider').default('provider'),
+            provider: subscriptionSchema.shape.provider,
+            providerSubscriptionId: z.string().min(1),
+            revision: z.number().int().positive(),
+            validUntil: z.iso.datetime(),
+          }),
+          z.object({
+            source: z.literal('admin'),
+            grantId: z.literal('premium'),
+            revision: z.number().int().positive(),
+            validUntil: z.iso.datetime().nullable(),
+          }),
+        ]),
       ),
       warnings: z.array(
         z.object({

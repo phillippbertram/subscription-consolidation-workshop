@@ -22,7 +22,7 @@ export function readWebConfig() {
     });
   if (!values.success) {
     throw new Error(
-      'Copy apps/web/.env.example to apps/web/.env and configure the Auth0 SPA client, audience, and API origin. Restart pnpm web:dev after editing it.',
+      'Copy apps/web/.env.example to apps/web/.env and configure the Auth0 SPA client, audience, and API origin. Restart pnpm dev:web after editing it.',
     );
   }
 

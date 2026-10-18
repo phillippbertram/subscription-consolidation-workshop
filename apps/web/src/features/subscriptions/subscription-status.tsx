@@ -47,7 +47,7 @@ export function SubscriptionStatus({
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle>Your current subscription</CardTitle>
+          <CardTitle>Your Premium access</CardTitle>
           <Button
             variant="outline"
             onClick={onRefresh}
@@ -83,10 +83,26 @@ export function SubscriptionStatus({
             </Badge>
             <p className="text-sm text-muted-foreground">
               {state.entitlements.tier === 'premium'
-                ? 'Your Premium subscription includes score history.'
+                ? 'Your Premium access includes score history.'
                 : 'You are on the Free plan. Premium unlocks your score history.'}
             </p>
             {state.entitlements.grants.map((grant) => {
+              if (grant.source === 'admin') {
+                return (
+                  <div
+                    key={`admin:${grant.grantId}`}
+                    className="border-t pt-3 text-sm"
+                  >
+                    <p className="font-medium">Complimentary Premium</p>
+                    <p className="text-muted-foreground">
+                      {grant.validUntil
+                        ? `Access until ${formatDate(grant.validUntil)}`
+                        : 'Access until revoked'}
+                    </p>
+                  </div>
+                );
+              }
+
               const subscription = state.subscriptions.find(
                 (s) =>
                   s.provider === grant.provider &&

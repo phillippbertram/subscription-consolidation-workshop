@@ -3,7 +3,7 @@
 Set up one Premium subscription for real Google Play **license-test purchases**.
 Start with the local [Getting started](GETTING_STARTED.md) path. Implementation
 and verification are tracked in [P12](TASKS.md#p12-google-play-test-purchases);
-the existing `pnpm subscription:google-mock` command remains a separate synthetic local exercise.
+the existing `pnpm cli google-mock` command remains a separate synthetic local exercise.
 
 Use your own development accounts, synthetic application data, and Google's test
 payment instruments. Do not make production purchases.
@@ -227,11 +227,12 @@ includes the access window. Account hold/pause/expiry grant no Google access.
 Public subscription IDs contain a package-scoped token hash; only the private
 provider record and queue contain the token. See the [data model](DYNAMODB_DATA_MODEL.md#google-play-records).
 
-For missed updates, use `pnpm subscription:reconcile --provider google --dry-run`, then omit
+For missed updates, configure Google in the [CLI's own environment](../apps/cli/README.md#configuration).
+Use `pnpm cli reconcile --provider google --dry-run`, then omit
 `--dry-run` to queue refreshes. Discovery covers stored purchase tokens; an
 unknown first purchase needs client sync/Restore or RTDN. Provider outages never
 erase verified state. Optional AWS API/notification/worker wiring and
-[five-minute cloud reconciliation](RECONCILIATION.md#cloud-google-reconciliation)
+[five-minute cloud reconciliation](RECONCILIATION.md#cloud-reconciliation)
 are described below. Plan replacements (`linkedPurchaseToken`),
 offers/trials, additional base plans, and production purchases are rejected.
 
@@ -314,8 +315,10 @@ use a separate license-test purchase for that cloud profile.
 
 Verify token/scope rejection, two distinct user UUIDs, pending → completed polling,
 wrong-user polling, Restore, acknowledgement retry, and Premium access separately.
-The native Android client needs no browser CORS change. The same Google opt-in
-enables the prepared [cloud reconciliation schedule](RECONCILIATION.md#cloud-google-reconciliation).
+The native Android client needs no browser CORS change. The separate
+`RECONCILIATION_GOOGLE_ENABLED=true` switch enables Google discovery on the prepared
+[shared cloud reconciliation schedule](RECONCILIATION.md#cloud-reconciliation);
+`GOOGLE_PLAY_ENABLED=true` remains required for processing.
 Local checks and synthesis do not establish real Google
 delivery, deployed IAM, Android behavior, or purchase verification.
 

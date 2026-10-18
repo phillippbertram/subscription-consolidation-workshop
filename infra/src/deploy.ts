@@ -14,6 +14,15 @@ function required(name: string): string {
   return value;
 }
 
+function booleanSetting(name: string) {
+  const value = process.env[name] ?? 'false';
+  if (!['true', 'false'].includes(value)) {
+    throw new Error(`${name} must be true or false.`);
+  }
+
+  return value;
+}
+
 function main() {
   const [mode, ...flags] = process.argv.slice(2);
   if (
@@ -88,6 +97,90 @@ function main() {
         `AppleProductId=${productId}`,
         '--parameters',
         `AppleSecretArn=${appleSecretArn}`,
+      );
+    }
+
+    const googleEnabled = process.env.GOOGLE_PLAY_ENABLED ?? 'false';
+    if (!['true', 'false'].includes(googleEnabled)) {
+      throw new Error('GOOGLE_PLAY_ENABLED must be true or false.');
+    }
+
+    cdkArgs.push('--parameters', `GoogleEnabled=${googleEnabled}`);
+    if (googleEnabled === 'true') {
+      const packageName = required('GOOGLE_PLAY_PACKAGE_NAME');
+      const productId = required('GOOGLE_PLAY_PRODUCT_ID');
+      const basePlanId = required('GOOGLE_PLAY_BASE_PLAN_ID');
+      const googleSecretArn = required('GOOGLE_PLAY_SECRET_ARN');
+      const pushAudience = required('GOOGLE_PLAY_PUSH_AUDIENCE');
+      const pushEmail = required('GOOGLE_PLAY_PUSH_SERVICE_ACCOUNT_EMAIL');
+      const pushSubscription = required('GOOGLE_PLAY_PUSH_SUBSCRIPTION');
+      if (
+        !/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/.test(packageName) ||
+        !/^[a-z0-9][a-z0-9_.]{0,39}$/.test(productId) ||
+        !/^[a-z0-9][a-z0-9-]{0,62}$/.test(basePlanId)
+      ) {
+        throw new Error('Google package, product, or base plan is invalid.');
+      }
+
+      if (
+        !googleSecretArn.startsWith(
+          `arn:aws:secretsmanager:${region}:${account}:secret:`,
+        )
+      ) {
+        throw new Error(
+          'GOOGLE_PLAY_SECRET_ARN must reference a secret in the configured AWS account and region.',
+        );
+      }
+
+      const audienceUrl = new URL(pushAudience);
+      if (
+        audienceUrl.protocol !== 'https:' ||
+        audienceUrl.username ||
+        audienceUrl.password ||
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pushEmail) ||
+        !/^projects\/[^/]+\/subscriptions\/[^/]+$/.test(pushSubscription)
+      ) {
+        throw new Error(
+          'Google push audience, service-account email, or subscription is invalid.',
+        );
+      }
+
+      cdkArgs.push(
+        '--parameters',
+        `GooglePackageName=${packageName}`,
+        '--parameters',
+        `GoogleProductId=${productId}`,
+        '--parameters',
+        `GoogleBasePlanId=${basePlanId}`,
+        '--parameters',
+        `GoogleSecretArn=${googleSecretArn}`,
+        '--parameters',
+        `GooglePushAudience=${pushAudience}`,
+        '--parameters',
+        `GooglePushServiceAccountEmail=${pushEmail}`,
+        '--parameters',
+        `GooglePushSubscription=${pushSubscription}`,
+      );
+    }
+
+    for (const provider of ['Stripe', 'Apple', 'Google']) {
+      const name = `RECONCILIATION_${provider.toUpperCase()}_ENABLED`;
+      const enabled = booleanSetting(name);
+      const baseEnabled =
+        provider === 'Apple'
+          ? appleEnabled
+          : provider === 'Google'
+            ? googleEnabled
+            : 'true';
+      if (enabled === 'true' && baseEnabled !== 'true') {
+        throw new Error(
+          `${name} requires ${provider === 'Apple' ? 'APPLE_ENABLED' : 'GOOGLE_PLAY_ENABLED'}=true.`,
+        );
+      }
+
+      cdkArgs.push(
+        '--parameters',
+        `Reconciliation${provider}Enabled=${enabled}`,
       );
     }
 

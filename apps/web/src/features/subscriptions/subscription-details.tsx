@@ -22,6 +22,7 @@ export function SubscriptionDetails({
             subscription,
             hasAccess: state.entitlements.grants.some(
               (grant) =>
+                grant.source === 'provider' &&
                 grant.provider === subscription.provider &&
                 grant.providerSubscriptionId ===
                   subscription.providerSubscriptionId,

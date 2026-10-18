@@ -1,5 +1,7 @@
 import pino from 'pino';
 
+export type { Logger } from 'pino';
+
 const levels = { debug: 10, info: 20, warn: 30, error: 40, silent: 50 };
 export type LogLevel = keyof typeof levels;
 

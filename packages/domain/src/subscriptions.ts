@@ -1,8 +1,9 @@
 import { z } from 'zod';
+import { hasAdminAccess, type AdminGrant } from './admin-grants.js';
 
 export const subscriptionSchema = z.object({
   userId: z.uuid(),
-  provider: z.enum(['stripe', 'apple', 'apple_mock', 'google_mock']),
+  provider: z.enum(['stripe', 'apple', 'google', 'apple_mock', 'google_mock']),
   providerSubscriptionId: z.string().min(1),
   // Unknown products/statuses stay visible but never grant access.
   productId: z.string().min(1),
@@ -65,6 +66,27 @@ export function normalizeProviderStatus(
     }
   }
 
+  if (provider === 'google') {
+    switch (status) {
+      case 'SUBSCRIPTION_STATE_ACTIVE':
+      case 'SUBSCRIPTION_STATE_CANCELED':
+        // A canceled auto-renewing purchase keeps its verified access boundary.
+        return 'active';
+      case 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD':
+        return 'past_due';
+      case 'SUBSCRIPTION_STATE_PENDING':
+        return 'pending';
+      case 'SUBSCRIPTION_STATE_ON_HOLD':
+      case 'SUBSCRIPTION_STATE_PAUSED':
+        return 'paused';
+      case 'SUBSCRIPTION_STATE_EXPIRED':
+      case 'SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED':
+        return 'expired';
+      default:
+        return null;
+    }
+  }
+
   // The demo store adapters use the normalized vocabulary, not real store codes.
   switch (status) {
     case 'pending':
@@ -83,24 +105,35 @@ export function normalizeProviderStatus(
 
 export const GRACE_MS = 24 * 60 * 60 * 1000;
 
+type AccessGrant =
+  | {
+      source: 'provider';
+      provider: Provider;
+      providerSubscriptionId: string;
+      revision: number;
+      validUntil: string;
+    }
+  | {
+      source: 'admin';
+      grantId: 'premium';
+      revision: number;
+      validUntil: string | null;
+    };
+
 /**
- * Turn verified provider records into access at one explicit point in time.
+ * Combine verified provider records and complimentary access at one point in time.
  * The injected time keeps API reads and background workers on the same policy;
  * callers need no provider request to enforce an already-known expiration.
  */
 export function deriveEntitlements(
   subscriptions: readonly Subscription[],
   now: Date,
+  adminGrant: AdminGrant | null = null,
 ) {
   // Recompute the union of valid grants instead of toggling one user-wide flag.
   // A canceled subscription must not erase access from another valid provider.
   const evaluatedAt = now.toISOString();
-  const grants: {
-    provider: Provider;
-    providerSubscriptionId: string;
-    revision: number;
-    validUntil: string;
-  }[] = [];
+  const grants: AccessGrant[] = [];
   const warnings: {
     provider: Provider;
     providerSubscriptionId: string;
@@ -145,6 +178,7 @@ export function deriveEntitlements(
 
     if (Number.isFinite(validUntil) && now.getTime() < validUntil) {
       grants.push({
+        source: 'provider',
         provider,
         providerSubscriptionId,
         revision: subscription.revision,
@@ -153,11 +187,39 @@ export function deriveEntitlements(
     }
   }
 
-  grants.sort(
-    (a, b) =>
-      a.validUntil.localeCompare(b.validUntil) ||
-      a.providerSubscriptionId.localeCompare(b.providerSubscriptionId),
-  );
+  if (adminGrant && hasAdminAccess(adminGrant, now)) {
+    grants.push({
+      source: 'admin',
+      grantId: adminGrant.grantId,
+      revision: adminGrant.revision,
+      validUntil: adminGrant.expiresAt,
+    });
+  }
+
+  // Unbounded access has no timer. Still schedule the earliest finite boundary
+  // so a provider expiry is published even while complimentary access survives.
+  grants.sort((a, b) => {
+    if (a.validUntil === null) {
+      return b.validUntil === null ? 0 : 1;
+    }
+
+    if (b.validUntil === null) {
+      return -1;
+    }
+
+    const aKey =
+      a.source === 'provider'
+        ? `${a.provider}:${a.providerSubscriptionId}`
+        : a.grantId;
+    const bKey =
+      b.source === 'provider'
+        ? `${b.provider}:${b.providerSubscriptionId}`
+        : b.grantId;
+    return (
+      Date.parse(a.validUntil) - Date.parse(b.validUntil) ||
+      aKey.localeCompare(bKey)
+    );
+  });
   return {
     tier: grants.length ? ('premium' as const) : ('free' as const),
     features: grants.length ? ['score_history' as const] : [],

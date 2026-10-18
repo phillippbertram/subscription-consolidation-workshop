@@ -1,0 +1,43 @@
+{
+  "name": "@premiumpass/subscription-processing",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./reconciliation/stripe": "./src/reconciliation/stripe.ts",
+    "./stripe": "./src/providers/stripe/index.ts",
+    "./apple": "./src/providers/apple/index.ts",
+    "./google": "./src/providers/google/index.ts",
+    "./google-mock": "./src/providers/google-mock/index.ts",
+    "./contracts": "./src/processing/contracts.ts",
+    "./stripe/store": "./src/providers/stripe/store.ts",
+    "./stripe/credentials": "./src/providers/stripe/credentials.ts",
+    "./apple/source": "./src/providers/apple/source.ts",
+    "./google/source": "./src/providers/google/source.ts",
+    "./google/discovery": "./src/providers/google/reconciliation-store.ts",
+    "./stripe/discovery": "./src/providers/stripe/discovery.ts",
+    "./apple/discovery": "./src/providers/apple/reconciliation-store.ts",
+    "./admin-grants": "./src/admin-grants/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1149.0",
+    "@aws-sdk/lib-dynamodb": "3.1149.0",
+    "@premiumpass/aws-clients": "workspace:*",
+    "@premiumpass/domain": "workspace:*",
+    "@premiumpass/billing-contracts": "workspace:*",
+    "@premiumpass/apple-store": "workspace:*",
+    "@premiumpass/google-play": "workspace:*",
+    "stripe": "23.0.0",
+    "zod": "4.6.5",
+    "@aws-sdk/client-dynamodb": "3.1149.0",
+    "@premiumpass/persistence": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

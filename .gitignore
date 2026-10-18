@@ -26,3 +26,8 @@ work/
 
 # Apple In-App Purchase private keys
 *.p8
+
+# Android upload signing material and Google service-account credentials
+*.jks
+*.keystore
+*.service-account.json

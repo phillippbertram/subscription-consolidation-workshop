@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 890" role="img" aria-labelledby="title description">
   <title id="title">PremiumPass architecture overview</title>
-  <desc id="description">Web and Mobile obtain access tokens from Auth0. The API verifies tokens with public signing keys and serves stored access. Verified Stripe, Apple, and Google notifications and client sync feed a queue. The worker verifies fresh provider state and commits subscriptions, access, completion, and outbox atomically. Optional Google reconciliation enqueues known-token refreshes. Detailed runtime boundaries are documented separately.</desc>
+  <desc id="description">Web and Mobile obtain access tokens from Auth0. The API verifies tokens with public signing keys and serves stored access. Verified Stripe, Apple, and Google notifications and client sync feed a queue. The worker verifies fresh provider state and commits subscriptions, access, completion, and outbox atomically. Local reconciliation starts with pnpm dev; AWS reconciliation uses one optional schedule with separate provider switches. Detailed runtime boundaries are documented separately.</desc>
   <metadata>Brand paths embedded from the Iconify Logos collection: apple, auth0-icon, google-icon, stripe. Source: https://github.com/iconify/icon-sets/blob/master/json/logos.json . Retrieved 2026-10-18. Brand artwork belongs to its respective owners. This SVG has no external image/font dependencies. Edit the SVG directly; keep the component responsibilities aligned with ARCHITECTURE.md.</metadata>
   <defs>
     <marker id="slate-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#64748b"/></marker>
@@ -78,9 +78,9 @@
 <text x="452" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Verify provider identity</text>
 <text x="452" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Queue references only</text>
 <rect x="730" y="421" width="250" height="126" rx="16" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
-<text x="750" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#5b21b6" font-weight="700" text-anchor="start">Google reconciliation</text>
-<text x="750" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Known-token refresh jobs</text>
-<text x="750" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Five-minute opt-in schedule</text>
+<text x="750" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#5b21b6" font-weight="700" text-anchor="start">Reconciliation</text>
+<text x="750" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Stripe · Apple · Google</text>
+<text x="750" y="505" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#5b21b6" font-weight="400" text-anchor="start">Every 5 min · local / AWS</text>
 <rect x="1080" y="421" width="260" height="126" rx="16" fill="#f0fdfa" stroke="#99f6e4" stroke-width="1.5"/>
 <text x="1100" y="454" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#115e59" font-weight="700" text-anchor="start">Outbox publisher</text>
 <text x="1100" y="482" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#115e59" font-weight="400" text-anchor="start">Announce committed changes</text>

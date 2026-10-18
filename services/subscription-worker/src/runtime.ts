@@ -1,35 +1,25 @@
-import { readCloudAppleCredentials } from './apple-credentials.js';
-import Stripe from 'stripe';
-import type { Logger } from 'pino';
+import type { Logger } from '@premiumpass/logging';
 import { createDocumentClient } from '@premiumpass/aws-clients';
-import { DynamoDbProcessingStore } from './processing/dynamodb-processing.js';
 import {
   subscriptionJobSchema,
   type SubscriptionJob,
 } from '@premiumpass/billing-contracts';
+import { GooglePlayError } from '@premiumpass/google-play/contracts';
+import { readWorkerConfig } from './config.js';
 import {
-  readAppleSettings,
-  readLocalAppleCredentials,
-} from '@premiumpass/apple-store';
-import { AppleSubscriptionProcessor } from './processing/apple-processor.js';
-import { createAppleSource } from './processing/apple-source.js';
-import { ProcessingError } from './processing/contracts.js';
-import { SubscriptionProcessor } from './processing/processor.js';
-import { StripeSubscriptionSource } from './processing/stripe-source.js';
-import { readWorkerConfig, readWorkerCredentials } from './config.js';
-import { GoogleMockProcessor } from './processing/google-mock-processor.js';
-import { ExpirationProcessor } from './processing/expiration.js';
+  ProcessingError,
+  DynamoDbProcessingStore,
+  createExpirationProcessor,
+} from '@premiumpass/subscription-processing';
+import { createStripeProcessor } from '@premiumpass/subscription-processing/stripe';
+import { createAppleProcessor } from '@premiumpass/subscription-processing/apple';
+import { createGoogleProcessorFactory } from '@premiumpass/subscription-processing/google';
+import { createGoogleMockProcessor } from '@premiumpass/subscription-processing/google-mock';
 
 // Reuse AWS connections in warm Lambda invocations. Secrets are refreshed
 // separately so a cached client does not freeze credential rotation.
 const configurations = new Map<boolean, ReturnType<typeof readWorkerConfig>>();
-const stores = new Map<
-  boolean,
-  {
-    store: DynamoDbProcessingStore;
-    documentClient: ReturnType<typeof createDocumentClient>;
-  }
->();
+const stores = new Map<boolean, DynamoDbProcessingStore>();
 
 function configFor(local: boolean) {
   let config = configurations.get(local);
@@ -43,76 +33,58 @@ function configFor(local: boolean) {
 
 export function workerRuntime(local: boolean) {
   const config = configFor(local);
-  let persistence = stores.get(local);
-  if (!persistence) {
-    const documentClient = createDocumentClient(config.database);
-    persistence = {
-      documentClient,
-      store: new DynamoDbProcessingStore(
-        documentClient,
-        config.database.tableName,
-      ),
-    };
-    stores.set(local, persistence);
+  let store = stores.get(local);
+  if (!store) {
+    store = new DynamoDbProcessingStore(
+      createDocumentClient(config.database),
+      config.database.tableName,
+    );
+    stores.set(local, store);
   }
 
-  const { store, documentClient } = persistence;
+  const createGoogleProcessor = createGoogleProcessorFactory(
+    store,
+    process.env,
+    local,
+  );
   return {
     ...config,
     processor: {
       async process(job: SubscriptionJob) {
-        // Local exercises must never become a cloud authentication/provider fallback.
-        if (
-          job.provider === 'google_mock' ||
-          job.provider === 'local_expiration'
-        ) {
-          if (!local) {
-            throw new ProcessingError('local_job_rejected');
+        // Select the provider before reading credentials, so one unavailable
+        // provider cannot block unrelated jobs or local exercises.
+        switch (job.provider) {
+          case 'stripe': {
+            const processor = await createStripeProcessor(
+              store,
+              process.env,
+              local,
+            );
+            return processor.process(job);
           }
 
-          return job.provider === 'google_mock'
-            ? new GoogleMockProcessor(
-                store,
-                documentClient,
-                config.database.tableName,
-              ).process(job)
-            : new ExpirationProcessor(
-                store,
-                documentClient,
-                config.database.tableName,
-              ).process(job);
-        }
+          case 'apple': {
+            const processor = await createAppleProcessor(
+              store,
+              process.env,
+              local,
+            );
+            return processor.process(job);
+          }
 
-        // Load only the selected provider's credentials. A blocked Apple account
-        // cannot prevent Stripe, expiration, or explicit local mocks from running.
-        if (job.provider === 'stripe') {
-          const credentials = await readWorkerCredentials(process.env, local);
-          const stripe = new Stripe(credentials.secretKey, {
-            maxNetworkRetries: 0,
-            timeout: 3_000,
-          });
-          return new SubscriptionProcessor(
-            store,
-            new StripeSubscriptionSource(stripe, credentials.priceId),
-          ).process(job);
-        }
+          case 'google': {
+            const processor = await createGoogleProcessor();
+            return processor.process(job);
+          }
 
-        if (!local && job.eventType === 'reconciliation') {
-          throw new ProcessingError('local_job_rejected');
-        }
+          case 'google_mock': {
+            return createGoogleMockProcessor(store, local).process(job);
+          }
 
-        const settings = readAppleSettings(process.env);
-        if (!settings) {
-          throw new ProcessingError('apple_not_configured');
+          case 'local_expiration': {
+            return createExpirationProcessor(store, local).process(job);
+          }
         }
-
-        const credentials = local
-          ? readLocalAppleCredentials(process.env)
-          : await readCloudAppleCredentials(process.env);
-        return new AppleSubscriptionProcessor(
-          store,
-          createAppleSource(settings, credentials),
-        ).process(job);
       },
     },
   };
@@ -143,7 +115,7 @@ export async function processMessage(
       event: 'subscription.failed',
       ...fields,
       code:
-        error instanceof ProcessingError
+        error instanceof ProcessingError || error instanceof GooglePlayError
           ? error.code
           : 'provider_or_storage_unavailable',
     });

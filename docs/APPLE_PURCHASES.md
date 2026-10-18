@@ -233,12 +233,12 @@ See [shared access policy](PAYMENTS.md#access-policy) and [Apple records](DYNAMO
 
 ## Local reconciliation
 
-With the [worker's Apple configuration](#enable-local-processing) in place,
-run a preview, then enqueue a refresh:
+Configure Apple separately for the [CLI](../apps/cli/README.md#configuration)
+and the [worker](#enable-local-processing), then preview and enqueue a refresh:
 
 ```sh
-pnpm subscription:reconcile --user <internal-user-id> --provider apple --dry-run
-pnpm subscription:reconcile --user <internal-user-id> --provider apple
+pnpm cli reconcile --user <internal-user-id> --provider apple --dry-run
+pnpm cli reconcile --user <internal-user-id> --provider apple
 ```
 
 Keep `pnpm dev:worker` running for queued work. Configured commands call the real
@@ -254,6 +254,17 @@ After verification and commit, reconciliation finishes the latest signed
 transaction. A committed retry retains that exact target even if another renewal
 occurs; a new run can refresh that later renewal. This uses the same
 [finish-retry path](#processing-and-ownership) as notifications.
+
+## Cloud reconciliation
+
+The prepared [shared schedule](RECONCILIATION.md#cloud-reconciliation) supports
+`RECONCILIATION_APPLE_ENABLED=true` independently of Stripe/Google discovery and
+requires `APPLE_ENABLED=true`. Discovery scans verified Sandbox owner lineages;
+it has no Apple key or API calls. The cloud worker accepts these internal refresh
+jobs and uses current signed state, atomic commit, and the exact verified
+transaction's finish-retry path. Unknown first purchases still require client
+sync or a signed notification. Account access and live Sandbox/AWS verification
+remain outstanding; this preparation performs no deployment.
 
 ## AWS notification processing
 
