@@ -14,22 +14,21 @@ Additional arguments follow the command directly, for example
 
 ### Development processes
 
-| Command                                              | Purpose                                                                                                                      |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                           | Initialize Docker/table, then run API, Stripe/Apple webhooks, worker, Web, and reconciliation watcher                        |
-| `pnpm dev:api` / `pnpm dev:api:lan`                  | API on loopback / all IPv4 interfaces                                                                                        |
-| `pnpm dev:web`                                       | Website only                                                                                                                 |
-| `pnpm dev:mobile` / `pnpm dev:mobile:lan`            | Metro for an installed development app on localhost / LAN; [device setup](../apps/mobile/README.md#run-on-a-physical-iphone) |
-| `pnpm dev:webhook:stripe` / `pnpm dev:webhook:apple` | Individual Stripe / Apple ingress                                                                                            |
-| `pnpm dev:webhook:google`                            | Authenticated Google Pub/Sub ingress on loopback port 3004                                                                   |
-| `pnpm dev:worker`                                    | Subscription queue worker                                                                                                    |
-| `pnpm dev:outbox` / `pnpm dev:events`                | Watch local outbox / run its separate log consumer                                                                           |
-| `pnpm cli reconcile --watch`                         | Run the reconciliation watcher separately when not using `pnpm dev`                                                          |
+| Command                                              | Starts                                                                                            |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                           | Docker + table, then API, Stripe/Apple webhooks, worker, Web, reconciliation watcher              |
+| `pnpm dev:api` / `pnpm dev:api:lan`                  | API on loopback / on all interfaces (for a phone on the LAN)                                      |
+| `pnpm dev:web`                                       | Website only                                                                                      |
+| `pnpm dev:mobile` / `pnpm dev:mobile:lan`            | Metro for the development app ([device setup](../apps/mobile/README.md#run-on-a-physical-iphone)) |
+| `pnpm dev:webhook:stripe` / `pnpm dev:webhook:apple` | One webhook process                                                                               |
+| `pnpm dev:webhook:google`                            | Google Pub/Sub webhook on port 3004                                                               |
+| `pnpm dev:worker`                                    | Subscription queue worker                                                                         |
+| `pnpm dev:outbox` / `pnpm dev:events`                | Outbox publisher (repeating) / its log consumer                                                   |
+| `pnpm cli reconcile --watch`                         | Reconciliation watcher, only when not using `pnpm dev`                                            |
 
-Use the grouped stack or its individual processes, not both. Google ingress,
-Metro, outbox, and event consumption start separately. Reconciliation is included
-in `pnpm dev`; do not start a second watcher alongside it.
-Restart processes after `.env` changes.
+- Use either `pnpm dev` or individual processes, not both.
+- Google webhook, Metro, outbox publisher, and log consumer always start separately.
+- Restart processes after changing a `.env` file.
 
 ### Local tools
 
@@ -46,25 +45,22 @@ Restart processes after `.env` changes.
 
 ### Builds and checks
 
-| Command                                                          | Purpose                                                                                                      |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `pnpm mobile:ios` / `pnpm mobile:android`                        | Build/install a native development app                                                                       |
-| `pnpm mobile:android:doctor`                                     | Check local Java and Android SDK prerequisites                                                               |
-| `pnpm mobile:android:aab` / `pnpm mobile:android:aab --unsigned` | Build a signed Play upload / unsigned local verification bundle; [setup](GOOGLE_PLAY.md#local-android-build) |
-| `pnpm build` / `pnpm start:api`                                  | Build all workspaces / start the built local API                                                             |
-| `pnpm format` / `pnpm check`                                     | Apply lint fixes and formatting / verify formatting, lint, types, and builds                                 |
-| `pnpm format:check` / `pnpm lint` / `pnpm typecheck`             | Run an individual check                                                                                      |
-| `pnpm lint:fix`                                                  | Apply ESLint fixes only                                                                                      |
-| `pnpm infra:synth`                                               | Produce CDK assembly locally                                                                                 |
-| `pnpm infra:bootstrap:dev` / `pnpm infra:deploy:dev`             | Bootstrap / deploy AWS development resources; [account setup and dry run](../infra/README.md#deploy)         |
+| Command                                              | Purpose                                                                                 |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `pnpm format` / `pnpm check`                         | Fix lint and formatting / verify formatting, lint, types, and builds                    |
+| `pnpm format:check` / `pnpm lint` / `pnpm typecheck` | One check on its own                                                                    |
+| `pnpm lint:fix`                                      | ESLint fixes only                                                                       |
+| `pnpm build` / `pnpm start:api`                      | Build all workspaces / start the built local API                                        |
+| `pnpm mobile:ios` / `pnpm mobile:android`            | Build and install the native development app                                            |
+| `pnpm mobile:android:doctor`                         | Check Java and Android SDK prerequisites                                                |
+| `pnpm mobile:android:aab` (`--unsigned`)             | Signed Play upload / unsigned test bundle ([setup](GOOGLE_PLAY.md#local-android-build)) |
+| `pnpm infra:synth`                                   | Produce the CDK template locally, without AWS calls                                     |
+| `pnpm infra:bootstrap:dev` / `pnpm infra:deploy:dev` | Prepare / deploy AWS development resources ([AWS guide](../infra/README.md#deploy))     |
 
-`pnpm build` bundles backend entry points, builds Web, and exports Mobile
-JavaScript for iOS and Android; it does not compile native apps.
-There is no automated test suite.
-
-The formatting scripts cover code/configuration, not Markdown. For a changed
-Markdown file, also run `pnpm exec prettier --write path/to/file.md`, then
-`pnpm exec prettier --check path/to/file.md` and check its links/diagrams.
+- `pnpm build` bundles backends, builds Web, and exports Mobile JavaScript; it
+  does not compile native apps. There is no automated test suite.
+- Format scripts skip Markdown. For a changed Markdown file, run
+  `pnpm exec prettier --write path/to/file.md` and check its links and diagrams.
 
 ## Inspect and debug
 
@@ -113,12 +109,9 @@ the broker running during verification. [Publisher behavior and cloud boundary](
 
 ## Local subscription CLI
 
-The [CLI workspace](../apps/cli/README.md) owns these commands. `pnpm cli` is the
-single root entry; subcommands replace the former `subscription*` and
-`dev:reconcile` aliases. Use `pnpm --filter @premiumpass/cli run dev --help`
-for the explicit source entry. After `pnpm --filter @premiumpass/cli build`,
-`pnpm --filter @premiumpass/cli start --help` runs the built entry. Copy the internal user UUID from Web account details or Mobile developer tools.
-The profile must already exist in DynamoDB Local.
+`pnpm cli` is the single entry for all local subscription tools
+([CLI workspace](../apps/cli/README.md)). Copy the internal user UUID from the
+Web account details or Mobile developer tools; the user must have signed in once.
 
 ```sh
 pnpm cli                                 # interactive; asks for the user ID
@@ -140,19 +133,16 @@ pnpm cli --help
 | `stripe-sync … --dry-run` | Read current Stripe test state and preview differences without database writes                        |
 | `stripe-sync …`           | Restore local Stripe records through the worker processor; preserve other providers                   |
 
-All CLI writes target the fixed Compose database. Provider settings resolve from
-shell variables, then optional `apps/cli/.env`. Copy the
-[CLI example](../apps/cli/.env.example) and configure each provider used by CLI
-commands; worker configuration is not loaded.
-Direct `stripe-sync` needs a Stripe test key/price and an existing Stripe customer mapping, but no running
-worker or queue. It discovers missing subscriptions, verifies ownership, and
-reports partial failures with a nonzero exit code. It never changes Stripe.
-`list`, `set`, and mock seeding need no provider credentials.
-
-For independent mock records, use `pnpm cli seed <internal-user-id>
-<scenario>` with `active`, `expiring`, `multiple`, or `free`. These scenarios
-change only two reserved, marked demo records. `free` removes those records;
-it does not remove real provider grants. Refresh the client after changes.
+- **Target:** every CLI write goes to the fixed local Compose database, never AWS.
+- **Credentials:** `list`, `set`, `seed`, and `premium` need none. Provider
+  commands read shell variables, then `apps/cli/.env`
+  ([example](../apps/cli/.env.example)); the worker's `.env` is not loaded.
+- **`stripe-sync`** needs a Stripe test key/price and an existing customer
+  mapping, but no worker. It never changes Stripe; partial failures exit nonzero.
+- **`seed <user-id> <scenario>`** changes only two reserved demo records
+  (scenarios such as `active`, `expiring`, `multiple`, `grace`; `free` removes
+  them). Real provider grants stay untouched. [Exercise 3](exercises/03-consolidation.md)
+  walks through the scenarios.
 
 ### Complimentary Premium
 
@@ -165,86 +155,52 @@ pnpm cli premium list <internal-user-id>
 pnpm cli premium revoke <internal-user-id> --reason "Workshop ended"
 ```
 
-Use exactly one of `--forever` (until revoked) or a future UTC `--until` when
-granting. Granting again updates this user's single complimentary grant.
-Revoking affects only that grant; a valid paid subscription still gives Premium.
-Both changes support `--dry-run` and `--request-id <uuid>`. Each write prints its
-request ID before attempting persistence. Retry an uncertain result with the
-**same ID and arguments**: the durable receipt prevents replay from reversing a
-later grant/revocation. Reusing an ID for the same user with different arguments or OS actor fails.
-New commands with unchanged settings record an audit receipt without another
-access-change event (unless an access boundary has become due).
+| Rule              | Detail                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------ |
+| Expiry            | Exactly one of `--forever` or a future UTC `--until`; granting again updates the one grant                   |
+| Revoke            | Ends only this grant; a valid paid subscription still gives Premium                                          |
+| Preview and retry | `--dry-run` writes nothing. Retry an uncertain result with the printed `--request-id` and the same arguments |
+| Audit             | A reason is required; the OS user is recorded automatically. Never enter secrets                             |
+| `premium list`    | Current access, the stored grant, and its audit history                                                      |
+| Clients           | Web/Mobile show “Complimentary Premium” separately, without a manage action                                  |
 
-`premium list` shows current access, the stored grant (including expiry and revocation), and audit history. The interactive menu also offers grant/revoke.
-Refresh Web/Mobile after changes; complimentary access is displayed separately
-from purchases, with no subscription-management action.
-
-These commands use only fixed loopback DynamoDB Local with dummy credentials;
-no Auth0 admin role, provider key, worker, queue, or AWS credentials are required.
-Administrative trust is possession of the local OS/database access, **not** a
-user's `read:premium` scope. The CLI records the OS username automatically and
-requires a reason; never enter secrets or customer data. This is a trusted local
-developer tool, not a multi-user admin security boundary. There is no HTTP admin
-route. Hosted administration and IAM/role enforcement are outside this local CLI.
-Provider reconciliation and the old `set`/`seed` demo commands preserve this grant.
+- **Trust boundary:** whoever can use the local database can grant Premium.
+  There is no Auth0 admin role and no HTTP admin route; a hosted version would
+  need both. This is a developer tool, not a multi-user admin system.
+- Reconciliation and the `set`/`seed` demo commands never change this grant.
+  Step by step: [Exercise 6](exercises/06-complimentary-premium.md).
 
 ## Local reconciliation and expiration
 
-For the overview, provider differences, processing flow, and failure behavior,
-read [Reconciliation](RECONCILIATION.md). This section owns commands and exercises.
+What reconciliation does and why: [Reconciliation](RECONCILIATION.md). This
+section lists the commands.
 
-`pnpm cli stripe-sync <user-id>` performs a synchronous
-Stripe-only repair. The following commands instead discover work for one or all
-users and send it to the existing subscription queue:
+| Command                          | Effect                                                        |
+| -------------------------------- | ------------------------------------------------------------- |
+| `pnpm cli reconcile --dry-run`   | Preview differences for all users; no writes, no queued jobs  |
+| `pnpm cli reconcile`             | Queue refresh and due expiration jobs for the worker          |
+| `pnpm cli reconcile --watch`     | Run now, then every five minutes (already part of `pnpm dev`) |
+| `pnpm cli stripe-sync <user-id>` | Repair Stripe directly, without the queue                     |
 
-```sh
-pnpm local:up
-pnpm dev:worker
-```
+| Option                      | Effect                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `--user <internal-user-id>` | Only this user                                                                |
+| `--provider all`            | Default: Stripe test, known Apple/Google test subscriptions, and Google mocks |
+| `--provider stripe`         | Stripe test only                                                              |
+| `--provider apple`          | Known Apple Sandbox subscriptions only                                        |
+| `--provider google`         | Known Google Play license-test tokens; needs Google settings                  |
+| `--provider google_mock`    | Google mock state only; no provider keys                                      |
+| `--provider none`           | Expiration only; no provider keys                                             |
 
-`pnpm dev` already starts the watcher. For a one-off preview or run:
-
-```sh
-pnpm cli reconcile --dry-run
-pnpm cli reconcile
-```
-
-When running the services individually, start `pnpm cli reconcile --watch` in
-another terminal. Use `--provider` to restrict that standalone watcher.
-
-The watcher runs immediately, then every five minutes, without overlapping its
-own runs. With `pnpm dev`, `Ctrl+C` stops it together with the other processes;
-stop a standalone watcher in its own terminal.
-Follow [run diagnostics](RECONCILIATION.md#follow-a-run) to distinguish queue
-acceptance from completed repair.
-
-| Option                      | Effect                                                                                |
-| --------------------------- | ------------------------------------------------------------------------------------- |
-| `--user <internal-user-id>` | Limit discovery to one existing local profile                                         |
-| `--provider all`            | Stripe test, known Apple/Google test subscriptions, and managed Google mocks; default |
-| `--provider stripe`         | Stripe test only                                                                      |
-| `--provider apple`          | Known Apple Sandbox subscriptions only                                                |
-| `--provider google_mock`    | Independent Google mock state only; no provider keys                                  |
-| `--provider google`         | Known Google Play license-test tokens; worker service-account settings required       |
-| `--provider none`           | Expiration only; no provider keys                                                     |
-| `--dry-run`                 | Read and report differences without database or queue writes                          |
-
-Expiration is included with every provider selection. It recalculates due
-entitlement snapshots from stored verified boundaries without changing provider
-records. API access already checks time independently of the scheduler.
-
-All commands use the fixed Compose table and subscription queue. The worker
-needs its local database/queue `.env` settings. Stripe work loads
-`STRIPE_SECRET_KEY` (test mode) and `STRIPE_PRICE_ID` from the worker environment.
-Apple work loads the worker's enabled Sandbox settings and In-App Purchase key
-only when a known Apple subscription exists. See [Apple reconciliation](APPLE_PURCHASES.md#local-reconciliation).
-Mock and expiration jobs need neither provider's credentials.
-For partial failures, exit codes, retries, and the cloud boundary, see
-[Reconciliation](RECONCILIATION.md#follow-a-run).
+- Queued jobs need a running worker (`pnpm dev` or `pnpm dev:worker`).
+- Every run also checks expiration. The API enforces expiry on its own; the job
+  only refreshes the stored snapshot and announces the change.
+- Provider credentials load only when a matching subscription exists. Stripe
+  needs `STRIPE_SECRET_KEY` (test) and `STRIPE_PRICE_ID`; Apple needs the
+  [Apple settings](APPLE_PURCHASES.md#local-reconciliation).
+- Logs and exit codes: [Follow a run](RECONCILIATION.md#follow-a-run).
 
 ### Exercise a missed Google mock event (T20)
-
-Use an existing synthetic user and a unique `mock_google_` subscription ID:
 
 ```sh
 pnpm cli google-mock <internal-user-id> mock_google_demo active
@@ -254,22 +210,24 @@ pnpm cli reconcile --user <internal-user-id> --provider google_mock --dry-run
 pnpm cli reconcile --user <internal-user-id> --provider google_mock
 ```
 
-The suppressed change updates only the independent mock source. Derived access
-stays unchanged until reconciliation/worker processing repairs it. Repeat the
-last command: fresh verification may update metadata, but it must not create a
-second domain-change outbox event. Another valid provider still grants Premium.
+The suppressed change updates only the mock "provider". Access stays stale until
+reconciliation repairs it; repeating the last command adds no second outbox
+event. Guided version with explanations: [Exercise 5](exercises/05-repair-missed-updates.md).
 
-Other scenarios: `renewal_failed` retains the previous period with bounded grace;
-`canceling` disables renewal while preserving its boundary; `expired`, `revoked`,
-and `pending` grant nothing. `active --until <future-UTC-timestamp>` sets an explicit
-boundary. Failure/cancellation require an existing period; repeated failure never
-restarts grace. These are synthetic local states, not Google Play purchases.
-Reserved `pnpm cli seed` records are separate and are not authoritative mock state.
+| Google mock scenario            | Effect                                                  |
+| ------------------------------- | ------------------------------------------------------- |
+| `active [--until]`              | Access until one hour from now, or an explicit UTC time |
+| `renewal_failed`                | Keeps the previous period plus bounded grace            |
+| `canceling`                     | Renewal off; access until the existing boundary         |
+| `expired`, `revoked`, `pending` | No access                                               |
 
-For T21, a Stripe customer mapping must preexist. Reconciliation lists all that
-customer's test subscriptions, including ones absent locally after a missed
-initial webhook. The worker verifies ownership and paid periods before granting
-access. Provider errors never mean deletion. [Technical behavior](RECONCILIATION.md#recovery-guarantees).
+These are synthetic local states, not Google Play purchases. Failure and
+cancellation need an existing period; repeated failure never restarts grace.
+
+**T21 (missed initial Stripe webhook):** the Stripe customer mapping must
+already exist. Reconciliation lists all of that customer's test subscriptions,
+including ones never stored locally, and the worker verifies them before
+granting access. [Recovery guarantees](RECONCILIATION.md#recovery-guarantees).
 
 ## Cleanup
 

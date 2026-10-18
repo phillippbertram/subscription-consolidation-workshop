@@ -17,21 +17,39 @@ Start locally with [Getting started](../docs/GETTING_STARTED.md); see
 | Logs                    | CloudWatch, seven-day retention                                                                                                   |
 | Secrets                 | Existing Secrets Manager references; no values embedded in CDK                                                                    |
 
-API IAM permits identity/profile access and user-partition subscription reads.
-Worker IAM covers user, provider-owner, completion, and outbox records. Webhooks
-cannot access DynamoDB; Apple/Google ingress cannot read private keys. Google
-worker secret/data permissions are conditional on `GoogleEnabled=true`. The same
-condition gives the API only Google queue submission and `GetItem` for
-`EVENT#google#*` completion markers; no provider-owner, completion-write, or secret
-permission is added. These policies limit key families, while code still enforces
-individual ownership. Existing API profile-write permissions cover `USER#*`;
-the API's stores remain responsible for never writing entitlement records.
+| Role     | May                                                                     | May not                                  |
+| -------- | ----------------------------------------------------------------------- | ---------------------------------------- |
+| API      | Read/write identity and profile records; query a user's subscriptions  | Read provider keys                        |
+| Webhooks | Send to the queue (Stripe also reads its signing secret)                | Touch DynamoDB; read Apple/Google keys    |
+| Worker   | Read provider keys; write user, provider-owner, marker, outbox records  | Write identity mappings                   |
+| Google   | Extra API/worker rights only with `GoogleEnabled=true`                  | Anything while Google is disabled         |
 
-Which features the stack wires up, and which run only locally, is listed in
-[what runs where](../docs/ARCHITECTURE.md#what-runs-where). Google stays disabled
-by default and needs the external setup in the
-[Google guide](../docs/GOOGLE_PLAY.md#authenticated-cloud-purchase-and-restore).
-The stack creates no VPC and no EventBridge outbox publisher.
+Key-prefix conditions limit record families, not individual users: `USER#*`
+also covers profiles and subscriptions, so the code still enforces ownership
+and keeps the API from writing entitlement records.
+
+Which features the stack wires up is listed in
+[what runs where](../docs/ARCHITECTURE.md#what-runs-where). The stack creates
+no VPC and no EventBridge outbox publisher.
+
+## Code map
+
+[`src/stack.ts`](src/stack.ts) assembles the stack from small building blocks in
+[`src/resources/`](src/resources/storage.ts):
+
+| File                | Creates                                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| `parameters.ts`     | Deployment parameters, opt-in switches, and their validation rules |
+| `storage.ts`        | DynamoDB table, work queue, and worker DLQ (all retained)          |
+| `lambda.ts`         | Shared Lambda bundling defaults and log groups                     |
+| `webhooks.ts`       | Stripe, Apple, and Google webhook Lambdas with queue-send rights   |
+| `worker.ts`         | Subscription worker, its SQS trigger, and key-prefix-limited IAM   |
+| `api.ts`            | API Lambda and role, plus the HTTP API with webhook routes         |
+| `reconciliation.ts` | Five-minute rule, one discovery Lambda per provider, failure queue |
+| `outputs.ts`        | URLs and names printed after deployment                            |
+
+Resources are created directly in the stack, so splitting the code does not
+change any CloudFormation logical ID.
 
 ## Synthesize locally
 
@@ -113,7 +131,7 @@ template does not establish deployed IAM, event delivery, or purchases.
   owned records separately. Local database mappings are not copied to AWS.
 - T16/T17: force a disposable job to fail, inspect its DLQ entry, fix the cause,
   and redrive it. Preserve event identity; do not purge to hide failures.
-- Record actual AWS evidence under P03/P06/P07/P12 in [TASKS](../docs/TASKS.md).
+- Record what you verified in [TASKS](../docs/TASKS.md) and its evidence log.
 
 ### Cloud reconciliation
 

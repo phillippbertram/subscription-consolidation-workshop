@@ -48,12 +48,12 @@ can still cause duplicate delivery, so retries retain the same `domainEventId`.
 This provides at-least-once publication, not exactly-once consumer execution.
 The local queue's restart limitation is described below.
 
-| Component              | Responsibility                                                                                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------- |
-| Subscription worker    | Check provider state and save subscriptions and entitlements. Incoming payment jobs use its own queue.  |
-| Reconciliation (P09)   | Find missed provider changes or due access boundaries and submit jobs through the same processing path. |
-| Outbox publisher (P08) | Announce changes already committed to our database through a separate outgoing event queue.             |
-| Event consumer         | React to those announcements; currently, just log them.                                                 |
+| Component           | Responsibility                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| Subscription worker | Check provider state and save subscriptions and entitlements. Incoming payment jobs use its own queue.  |
+| Reconciliation      | Find missed provider changes or due access boundaries and submit jobs through the same processing path. |
+| Outbox publisher    | Announce changes already committed to our database through a separate outgoing event queue.             |
+| Event consumer      | React to those announcements; currently, just log them.                                                 |
 
 ## Run locally
 
@@ -115,14 +115,13 @@ publishing to a nonexistent bus. This check cannot prevent deletion after the
 check and is not proof of a matching rule or target delivery.
 [AWS PutEvents behavior](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevents.html).
 
-The local ElasticMQ adapter is an explicit transport substitute, **not an
-EventBridge emulator**. It exercises queue acceptance, retries, and the shared
-consumer, but provides no evidence of AWS rules, IAM, target retries, or Lambda
-execution. ElasticMQ stores messages in memory: restarting its container loses
-accepted messages, including events already marked sent. Keep it running during
-the local exercise. No cloud runtime, CDK bus/rule, or deployment is added here.
+- **Local queue ≠ EventBridge.** ElasticMQ is a stand-in transport. It shows
+  acceptance, retries, and the consumer, but not AWS rules, IAM, or target retries.
+- **Messages live in memory.** Restarting ElasticMQ loses accepted events, even
+  ones already marked `sent`; keep it running during the exercise.
+- **No cloud wiring yet.** The CDK stack has no event bus or rule for the
+  outbox ([what runs where](../../docs/ARCHITECTURE.md#what-runs-where)). A cloud
+  version must treat failed target delivery and failed Lambda execution as two
+  separate retry paths.
 
-Cloud follow-up must distinguish failed EventBridge target delivery from errors
-after Lambda accepts an asynchronous invocation; those need separate retry/DLQ
-configuration and verification. See [P08](../../docs/TASKS.md#p08-outbox-publisher-and-eventbridge)
-for implementation status and evidence.
+Hands-on: [Exercise 4](../../docs/exercises/04-reliability.md).

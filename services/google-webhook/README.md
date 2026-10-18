@@ -23,10 +23,8 @@ Pub/Sub must use the normal wrapped message format, not payload unwrapping.
 `GET /health` reports process liveness and configuration enablement. It does not
 check Google credentials, the tunnel, Pub/Sub, queue delivery, or purchases.
 
-`src/local.ts` selects ElasticMQ; `src/lambda.ts` adapts API Gateway HTTP API events
-to the same Hono app and selects an AWS HTTPS SQS queue. Initialization failures
-return a safe 503. CDK adds the Google POST route and queue-send permission; this
-Lambda has no database or Secrets Manager permission. Google processing is
-disabled by default. [AWS setup](../../docs/GOOGLE_PLAY.md#aws-notification-processing)
-and [P12 evidence](../../docs/TASKS.md#p12-google-play-test-purchases) distinguish
-prepared wiring from real delivery/purchase verification.
+`src/local.ts` selects ElasticMQ; `src/lambda.ts` adapts API Gateway HTTP API
+events to the same Hono app and an AWS SQS queue. Initialization failures return
+a safe 503. In AWS this Lambda may only send to the queue; it has no database or
+secret access. Google processing is disabled by default.
+[AWS setup](../../docs/GOOGLE_PLAY.md#aws-notification-processing).

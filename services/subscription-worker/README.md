@@ -5,14 +5,10 @@ purchase synchronization, and reconciliation enqueue work; the worker verifies
 current provider state and ownership before updating subscriptions and access.
 It runs in the background without an HTTP framework.
 
-The service owns transport and runtime composition. The reusable processors,
-provider adapters, and atomic persistence live in
-[subscription processing](../../packages/subscription-processing/README.md).
-Developer commands live in the separate [CLI](../../apps/cli/README.md).
-Scheduled provider discovery is another backend entry in this service: it
-creates queue jobs and belongs to the same subscription-processing lifecycle.
-Provider discovery adapters live in the processing package; the service owns
-scheduling context, queue acceptance, and run-level failure handling.
+This service is thin on purpose: it receives jobs and hands them to the
+processors in [subscription processing](../../packages/subscription-processing/README.md),
+where provider adapters and the atomic commit live. It also hosts the cloud
+reconciliation entry, which only discovers work and queues jobs.
 
 | Entry                                   | Responsibility                                                          |
 | --------------------------------------- | ----------------------------------------------------------------------- |
@@ -23,37 +19,27 @@ scheduling context, queue acceptance, and run-level failure handling.
 | `src/reconciliation/lambda.ts`          | Cloud schedule/manual handler and queue acceptance                      |
 | `src/reconciliation/run.ts`, `*-run.ts` | Shared preview, queue acceptance, and partial failures                  |
 
-`runtime.ts` keeps a typed provider switch and delegates construction to the
-shared provider factories. Credentials load only for the selected provider.
-Google's lazy source is scoped to one runtime; settings are checked on every
-selection. Cloud credentials cache for five minutes; Google rebuilds its client
-when credentials refresh. Local-only mock/expiration factories reject cloud jobs
-before reading credentials.
+## How a job is processed
 
-Cloud discovery has no database-write permissions. Apple/Google discovery has no
-provider keys; Stripe discovery reads the existing test secret and validates
-customer ownership before fully listing subscriptions. Provider-specific reference
-stores remain in the shared processing package. Schedule switches, preview,
-failure isolation, and small-table limits belong to
-[Cloud reconciliation](../../docs/RECONCILIATION.md#cloud-reconciliation).
+1. `local.ts` (ElasticMQ) or `lambda.ts` (SQS) receives a message.
+2. `runtime.ts` validates it and picks the processor for its provider. Only
+   that provider's credentials are loaded, so a misconfigured provider cannot
+   block the others.
+3. The processor verifies and commits. On success the message is acknowledged;
+   on failure it becomes visible again and, after five attempts, lands in the DLQ.
 
-A build cleans `dist/` and emits `local.js`, `lambda.js`, and
-`reconciliation/lambda.js`; moved CLI bundles cannot survive a rebuild. Provider
-runner files build strict refresh jobs with stable event IDs; the shared runner
-handles preview, queue acceptance, and partial failures. Logger types come from
-`@premiumpass/logging`, which owns the Pino dependency.
+## Run and configure
 
-`pnpm dev:worker` runs individually; `pnpm dev` includes it. Follow the
-[configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
-No Auth0 configuration or webhook signing secret is needed. Local mock/expiration
-jobs need no provider credentials. In-flight jobs may finish on shutdown;
-unacknowledged jobs become visible again after timeout.
+- `pnpm dev` includes the worker; `pnpm dev:worker` runs it alone. Settings:
+  [configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
+  No Auth0 settings or webhook secrets are needed.
+- Mock and expiration jobs need no provider credentials and are rejected in AWS.
+- In AWS, provider keys come from Secrets Manager and are cached for five
+  minutes. Only the worker reads Apple/Google private keys
+  ([Apple](../../docs/APPLE_PURCHASES.md#aws-notification-processing),
+  [Google](../../docs/GOOGLE_PLAY.md#aws-notification-processing)).
+- Cloud discovery never writes to the database; see
+  [Cloud reconciliation](../../docs/RECONCILIATION.md#cloud-reconciliation).
+- A build emits `local.js`, `lambda.js`, and `reconciliation/lambda.js` into a clean `dist/`.
 
-Cloud credentials come from existing Secrets Manager references. Only the worker
-reads Apple/Google private keys in AWS. See
-[Apple AWS setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing) and
-[Google AWS setup](../../docs/GOOGLE_PLAY.md#aws-notification-processing).
-
-[Payments](../../docs/PAYMENTS.md#processing-and-retries) owns processing guarantees;
-[Reconciliation](../../docs/RECONCILIATION.md) owns discovery and recovery behavior.
-Implementation status and verification remain in [TASKS](../../docs/TASKS.md).
+Processing guarantees: [Payments](../../docs/PAYMENTS.md#processing-and-retries).
