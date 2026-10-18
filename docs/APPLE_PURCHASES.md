@@ -263,8 +263,7 @@ requires `APPLE_ENABLED=true`. Discovery scans verified Sandbox owner lineages;
 it has no Apple key or API calls. The cloud worker accepts these internal refresh
 jobs and uses current signed state, atomic commit, and the exact verified
 transaction's finish-retry path. Unknown first purchases still require client
-sync or a signed notification. Account access and live Sandbox/AWS verification
-remain outstanding; this preparation performs no deployment.
+sync or a signed notification.
 
 ## AWS notification processing
 
@@ -275,9 +274,9 @@ encoded as `\n`). Only the worker reads it; the webhook needs no private key.
 
 Register **AppleWebhookUrl** instead of ngrok as the Sandbox URL. Verify TEST
 and lifecycle delivery separately. The signed account token must reference a
-profile in the AWS table; local users are not copied there. Authenticated cloud
-Apple config/sync/completion wiring is still absent, so this is not the complete
-cloud mobile purchase/restore path. Runtime secret caching lasts five minutes.
+profile in the AWS table; local users are not copied there. The AWS stack has no
+app-to-API Apple sync, so purchases from the app still need the local API (see
+[what runs where](ARCHITECTURE.md#what-runs-where)). Runtime secret caching lasts five minutes.
 
 ## Manual device checks
 
@@ -294,8 +293,6 @@ cloud mobile purchase/restore path. Runtime secret caching lasts five minutes.
 | Manage subscription, close sheet                                      | Refreshed renewal state and retained paid access                                        |
 | End Apple while Stripe remains valid                                  | Premium remains                                                                         |
 | Development-only duplicate override                                   | Store outcome visible; ownership checks still enforced                                  |
-
-Device, provider, and AWS evidence belong in [P07](TASKS.md#p07-apple-sandbox-and-google-mocks).
 
 ## Cleanup
 

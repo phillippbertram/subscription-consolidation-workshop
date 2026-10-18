@@ -17,31 +17,28 @@ const log = createLogger(logLevel, 'premiumpass-api');
 const database = readDatabaseConfig(process.env, true);
 const stores = createPersistence(database);
 const stripe = readStripeConfig(process.env);
-const app = createApp(
-  readAuthConfig(process.env),
+const app = createApp({
+  auth: readAuthConfig(process.env),
   stores,
   logLevel,
-  () => new Date(),
-  {
-    webOrigin: readWebOrigin(process.env),
-    apple: createLocalAppleBilling(process.env, database),
-    google: createGoogleBilling(process.env, database, true),
-    ...(stripe
-      ? {
-          checkout: new CheckoutService(
-            stores.billing,
-            new StripeBillingProvider(stripe.secretKey),
-            stripe,
-          ),
-          cancellation: new CancellationService(
-            stores.billing,
-            stores.subscriptions,
-            new StripeBillingProvider(stripe.secretKey),
-          ),
-        }
-      : {}),
-  },
-);
+  webOrigin: readWebOrigin(process.env),
+  apple: createLocalAppleBilling(process.env, database),
+  google: createGoogleBilling(process.env, database, true),
+  ...(stripe
+    ? {
+        checkout: new CheckoutService(
+          stores.billing,
+          new StripeBillingProvider(stripe.secretKey),
+          stripe,
+        ),
+        cancellation: new CancellationService(
+          stores.billing,
+          stores.subscriptions,
+          new StripeBillingProvider(stripe.secretKey),
+        ),
+      }
+    : {}),
+});
 const server = serve({ fetch: app.fetch, ...config }, (info) => {
   log.info({
     event: 'server.started',

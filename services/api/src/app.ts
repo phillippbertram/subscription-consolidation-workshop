@@ -19,18 +19,26 @@ import {
   type StripeRouteOptions,
 } from './routes/stripe.js';
 
+export interface AppOptions extends StripeRouteOptions {
+  auth: AuthConfig;
+  stores: { users: UserStore; subscriptions: SubscriptionStore };
+  logLevel?: LogLevel;
+  /** Injectable clock: every access decision compares grants with this time. */
+  now?: () => Date;
+  /** Optional providers; missing billing adapters disable their routes. */
+  apple?: AppleBilling | undefined;
+  google?: GoogleBilling | undefined;
+}
+
 // Composition boundary: Hono owns HTTP parsing and responses; injected stores
 // and services work with domain values and can also be used outside HTTP.
-export function createApp(
-  authConfig: AuthConfig,
-  stores: { users: UserStore; subscriptions: SubscriptionStore },
-  logLevel: LogLevel = 'info',
-  now: () => Date = () => new Date(),
-  options: StripeRouteOptions & {
-    apple?: AppleBilling | undefined;
-    google?: GoogleBilling | undefined;
-  } = {},
-) {
+export function createApp({
+  auth,
+  stores,
+  logLevel = 'info',
+  now = () => new Date(),
+  ...options
+}: AppOptions) {
   const app = new Hono<AppEnv>();
 
   app.use('*', async (c, next) => {
@@ -57,11 +65,12 @@ export function createApp(
     );
   }
 
-  app.onError((_error, c) => {
-    if (_error instanceof CheckoutError) {
+  app.onError((error, c) => {
+    // Known billing errors carry a safe code; everything else stays generic.
+    if (error instanceof CheckoutError) {
       return c.json(
-        { error: { code: _error.code, requestId: c.get('requestId') } },
-        _error.status,
+        { error: { code: error.code, requestId: c.get('requestId') } },
+        error.status,
       );
     }
 
@@ -75,7 +84,7 @@ export function createApp(
   app.get('/health', (c) => c.json({ status: 'ok' }));
 
   // Register all user routes below this middleware; authentication is the default.
-  app.use('*', authenticate(authConfig));
+  app.use('*', authenticate(auth));
   app.use('*', async (c, next) => {
     // A valid client-credentials token identifies an application, not a person
     // whose purchases and profile these /me routes are allowed to manage.
@@ -98,7 +107,7 @@ export function createApp(
   registerPremiumRoutes(app, stores.users, stores.subscriptions, now);
   registerAppleRoutes(app, stores.users, options.apple);
   registerGoogleRoutes(app, stores.users, options.google);
-  registerStripeRoutes(app, authConfig, stores.users, options);
+  registerStripeRoutes(app, auth, stores.users, options);
 
   return app;
 }

@@ -2,7 +2,8 @@
 
 PremiumPass has two paths: **authenticated reads/actions** through the API and
 **provider notifications** through verified webhook ingress. Both meet at
-subscriptions in DynamoDB. [Product overview](../README.md) · [Setup](GETTING_STARTED.md).
+subscriptions in DynamoDB. New to the terms? Start with [Concepts](CONCEPTS.md).
+[Product overview](../README.md) · [Setup](GETTING_STARTED.md).
 
 ## System overview
 
@@ -39,7 +40,7 @@ processes. Workspace names come from each package's `package.json`.
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | [`@premiumpass/api-contracts`](../packages/api-contracts/README.md)                     | Shared HTTP request/response schemas and types for API, Web, and Mobile                                 |
 | [`@premiumpass/billing-contracts`](../packages/billing-contracts/README.md)             | Provider event allowlist and queue job schemas/types                                                    |
-| [`@premiumpass/domain`](../packages/domain/src/subscriptions.ts)                        | Subscription and access rules across providers                                                          |
+| [`@premiumpass/domain`](../packages/domain/README.md)                                   | Subscription and access rules across providers                                                          |
 | [`@premiumpass/persistence`](../packages/persistence/src/index.ts)                      | DynamoDB subscription storage and database configuration                                                |
 | [`@premiumpass/aws-clients`](../packages/aws-clients/README.md)                         | AWS SDK client construction for local and cloud use                                                     |
 | [`@premiumpass/apple-store`](../packages/apple-store/README.md)                         | Apple Sandbox configuration, API client, and signed-data verification                                   |
@@ -49,8 +50,10 @@ processes. Workspace names come from each package's `package.json`.
 
 ## Local development topology
 
-App and service labels include their exact workspace names. Ports and Lambda
-labels distinguish how the same services run locally and in AWS.
+Labels include each process's workspace name and local port. The first picture
+shows requests and provider notifications; the second shows background work.
+
+### Requests and notifications
 
 ```mermaid
 ---
@@ -70,46 +73,35 @@ config:
     rankSpacing: 48
 ---
 flowchart TB
-    Web["Web :5173<br/>@premiumpass/web"] <-->|"Login / API access token"| Auth0["Auth0 tenant<br/>outside the local backend"]
+    Web["Web :5173<br/>@premiumpass/web"] <-->|"Login / API access token"| Auth0["Auth0 tenant"]
     Mobile["Mobile: iOS / Android<br/>@premiumpass/mobile"] <-->|"Login / API access token"| Auth0
     Stripe["Stripe test"] --> StripeCLI["Stripe CLI"]
-    Apple["Apple Sandbox"] --> AppleTunnel["Apple HTTPS tunnel"]
-    Google["Google Play license tests"] --> PubSub["Authenticated Pub/Sub push"]
-    PubSub --> GoogleTunnel["Google HTTPS tunnel"]
-    subgraph Host["Local backend"]
+    Apple["Apple Sandbox"] --> AppleTunnel["HTTPS tunnel"]
+    Google["Google Play license tests"] --> PubSub["Pub/Sub push"] --> GoogleTunnel["HTTPS tunnel"]
+    subgraph Host["Your computer"]
         API["API :3000<br/>@premiumpass/api"]
-        StripeHook["Stripe webhook :3002<br/>@premiumpass/stripe-webhook"]
-        AppleHook["Apple webhook :3003<br/>@premiumpass/apple-webhook"]
-        GoogleHook["Google webhook :3004<br/>@premiumpass/google-webhook"]
-        Queue[["ElasticMQ and DLQ"]]
+        StripeHook["Stripe webhook :3002"]
+        AppleHook["Apple webhook :3003"]
+        GoogleHook["Google webhook :3004"]
+        Queue[["ElasticMQ queue + DLQ"]]
         Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
         DB[("DynamoDB Local")]
-        Reconciliation["Reconciliation watcher<br/>@premiumpass/cli<br/>pnpm dev · every five minutes"]
-        DB -->|"Profiles / subscriptions / expiry"| Reconciliation
-        Reconciliation -->|"Refresh / expiration jobs"| Queue
         API -->|"Read access"| DB
         API -->|"Apple / Google sync"| Queue
-        StripeHook --> Queue
-        AppleHook --> Queue
-        GoogleHook --> Queue
+        StripeHook & AppleHook & GoogleHook -->|"References only"| Queue
         Queue --> Worker -->|"Atomic writes"| DB
-        DB -->|"Pending outbox"| Publisher["Outbox publisher<br/>@premiumpass/outbox-publisher"]
-        Publisher --> Events["Separate ElasticMQ event queue"] --> Consumer["Log consumer<br/>@premiumpass/outbox-publisher"]
     end
-    Web -->|"Bearer token; loopback"| API
-    Mobile -->|"Bearer token; loopback / LAN"| API
+    Web & Mobile -->|"Bearer token"| API
     API -.->|"Fetch JWKS"| Auth0
     StripeCLI --> StripeHook
     AppleTunnel --> AppleHook
     GoogleTunnel --> GoogleHook
-    Reconciliation <-->|"Current test-provider state"| Stripe & Apple & Google
     classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
     classDef client fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1.5px,rx:12,ry:12
     classDef identity fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px,rx:12,ry:12
     classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
     classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6,stroke-width:1.5px,rx:10,ry:10
     classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534,stroke-width:1.5px
-    classDef failure fill:#fff1f2,stroke:#f43f5e,color:#9f1239,stroke-width:1.5px,rx:10,ry:10
     classDef stripe fill:#635bff,stroke:#4f46e5,color:#ffffff,stroke-width:1.5px,rx:12,ry:12
     classDef apple fill:#27272a,stroke:#18181b,color:#ffffff,stroke-width:1.5px,rx:12,ry:12
     classDef google fill:#e8f0fe,stroke:#4285f4,color:#174ea6,stroke-width:1.5px,rx:12,ry:12
@@ -117,33 +109,69 @@ flowchart TB
     class Web,Mobile client
     class Auth0 identity
     class API,StripeHook,AppleHook,GoogleHook,Worker service
-    class Queue,Reconciliation queue
+    class Queue queue
     class DB data
     class Stripe stripe
     class Apple apple
     class Google,PubSub google
-    class Publisher,Consumer service
-    class Events queue
     style Host fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
 ```
 
-Publisher and log consumer are separate processes from the same
-`@premiumpass/outbox-publisher` workspace package.
+### Background work
 
-`pnpm dev` initializes Docker/the table, then starts API, Stripe/Apple webhooks,
-worker, Web, and the CLI reconciliation watcher. The watcher runs immediately
-and then every five minutes; it queues provider refreshes and due expiration
-work for the same worker. It stops with the grouped command.
-Stripe CLI, Mobile/Metro, HTTPS tunnels, Google ingress, and the optional outbox
-publisher/log consumer run separately.
-Apple and Google stay disabled until configured. API checkout and worker
-verification/completion call external provider APIs. Google ingress authenticates
-Pub/Sub push identity; the worker fetches fresh purchase state from Google.
+```mermaid
+---
+config:
+  theme: base
+  themeVariables:
+    fontFamily: Arial, Helvetica, sans-serif
+    fontSize: 14px
+    primaryTextColor: '#0f172a'
+    lineColor: '#64748b'
+    edgeLabelBackground: '#ffffff'
+    clusterBkg: '#f8fafc'
+    clusterBorder: '#cbd5e1'
+  flowchart:
+    curve: linear
+    nodeSpacing: 30
+    rankSpacing: 48
+---
+flowchart LR
+    Providers["Stripe / Apple / Google<br/>current state"]
+    subgraph Host["Your computer"]
+        DB[("DynamoDB Local")]
+        Reconciliation["Reconciliation watcher<br/>@premiumpass/cli · every 5 min"]
+        Queue[["ElasticMQ queue"]]
+        Worker["Subscription worker"]
+        Publisher["Outbox publisher<br/>@premiumpass/outbox-publisher"]
+        Events[["Event queue"]]
+        Consumer["Log consumer"]
+        DB -->|"Profiles, subscriptions, due expiry"| Reconciliation
+        Reconciliation -->|"Refresh / expiration jobs"| Queue --> Worker -->|"Atomic writes"| DB
+        DB -->|"Pending outbox entries"| Publisher --> Events --> Consumer
+    end
+    Reconciliation <-->|"Compare"| Providers
+    classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
+    classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6,stroke-width:1.5px,rx:10,ry:10
+    classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534,stroke-width:1.5px
+    classDef provider fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
+    linkStyle default stroke:#64748b,stroke-width:1.5px
+    class Worker,Publisher,Consumer service
+    class Queue,Events,Reconciliation queue
+    class DB data
+    class Providers provider
+    style Host fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
+```
 
-Docker provides storage/queue services; application code runs on the host.
-AWS credentials are not required locally. Enabled Google purchase processing uses
-its own service-account key file. [Commands](DEVELOPMENT.md#run-and-check) ·
-[Google setup](GOOGLE_PLAY.md).
+| Runs                  | Processes                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------- |
+| In Docker             | DynamoDB Local and ElasticMQ; all application code runs on your computer, without AWS credentials   |
+| Started by `pnpm dev` | API, Stripe and Apple webhooks, worker, Web, and the reconciliation watcher (now, then every 5 min) |
+| Started separately    | Stripe CLI, Metro (Mobile), HTTPS tunnels, Google webhook, outbox publisher and log consumer        |
+
+Apple and Google stay disabled until configured. The outbox publisher and log
+consumer are two processes from the same workspace package.
+[Commands](DEVELOPMENT.md#run-and-check) · [Google setup](GOOGLE_PLAY.md).
 
 ## AWS deployment topology
 
@@ -233,71 +261,71 @@ flowchart TB
     style AWS fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
 ```
 
-The CDK workspace [`@premiumpass/infra`](../infra/README.md) defines the AWS
-resources. The backend verifies Auth0; Gateway has no JWT/Lambda authorizer.
-Web and Mobile obtain access tokens directly from Auth0. The API verifies their
-signature, issuer, audience, and time claims using cached public keys from the
-configured issuer's fixed JWKS URL, then checks scopes and user ownership. Auth0
-is not called for every API request and does not store or grant Premium access.
-The API resolves verified `iss` / `sub` to its internal UUID; the
-[logical ER model](DYNAMODB_DATA_MODEL.md#logical-er-model) shows how that profile
-relates to subscriptions and processing records. This flow also applies locally.
-Provider ingress verifies event signatures or Google Pub/Sub identity. Apple and
-Google are disabled by default. Only the worker reads Apple/Google private keys;
-the Stripe webhook reads its signing secret. Lambda logs go to CloudWatch.
+The CDK workspace [`@premiumpass/infra`](../infra/README.md) defines these
+resources. The request flow is the same as locally:
 
-The stack prepares authenticated Google configuration, purchase/Restore sync, and
-owner-bound completion polling through the default API integration. The API uses
-the same Auth0 and scope checks as locally, enqueues references, and reads Google
-completion markers; verification, acknowledgement, and grant writes belong to
-the worker. Google API queue/marker permissions and worker secret/data permissions
-are conditional on explicit opt-in. Cloud Stripe checkout/cancellation, browser
-CORS, and authenticated Apple config/sync/completion remain incomplete.
-The stack also prepares Stripe/Apple/Google notification processing. Google topics, push
-subscriptions, and Play Console resources remain external setup. This diagram
-shows code wiring, not deployed or provider-verified evidence.
-One shared five-minute schedule has separate default-off switches for Stripe,
-Apple, and Google discovery. Three Lambda targets isolate failures and retries.
-Stripe discovery lists mapped customer subscriptions using its test secret;
-Apple/Google discovery only scans known owner references and receives no private
-key. Every repair uses fresh worker verification and atomic persistence. The
-shared discovery failure queue is separate from the worker DLQ. Configuration,
-small-table limits, retries, and preview belong to the
-[reconciliation guide](RECONCILIATION.md#cloud-reconciliation).
-See [AWS boundaries](../infra/README.md#resources-and-boundaries) and the sole
-[verification record](TASKS.md).
+- **Login:** Web and Mobile get access tokens directly from Auth0. Gateway has no
+  authorizer; the API verifies signature, issuer, audience, and time with cached
+  keys from the fixed JWKS URL, then checks scopes and ownership. Auth0 is not
+  called per request and never grants Premium.
+- **Identity:** the API maps verified `iss` / `sub` to an internal UUID; the
+  [logical ER model](DYNAMODB_DATA_MODEL.md#logical-er-model) shows the records.
+- **Webhooks:** each verifies its provider's signature (Google: Pub/Sub identity)
+  and only enqueues references. Only the worker reads Apple/Google private keys.
+- **Opt-in providers:** Apple, Google, and each reconciliation target are off by
+  default. Enabling one adds only the IAM permissions it needs.
+- **Reconciliation:** one five-minute rule with three separate Lambdas and its own
+  failure queue; see the [reconciliation guide](RECONCILIATION.md#cloud-reconciliation).
 
-## Worker boundaries
+Google topics, push subscriptions, and Play Console resources are external setup;
+CDK does not create them. IAM details: [AWS boundaries](../infra/README.md#resources-and-boundaries).
 
-[`runtime.ts`](../services/subscription-worker/src/runtime.ts) owns shared
-configuration/connections and a typed provider switch. Provider factories assemble
-the matching processor, source, and store; SDK clients and credentials load only
-when needed. `processor.ts`, `source.ts`, and `store.ts` live together
-under `packages/subscription-processing/src/providers/stripe`, `apple`, `google`,
-and `google-mock`. The [processing package](../packages/subscription-processing/README.md)
-owns shared provider and persistence code; the [worker guide](../services/subscription-worker/README.md)
-owns transport and runtime composition.
+## What runs where
 
-The [CLI](../apps/cli/README.md) owns prompts, commands, local demo edits, and
-local reconciliation discovery. It imports the processing package through public
-exports, without importing worker source. Both executables use the same verified
-processing and atomic commit paths. CLI provider settings come only from its own
-`.env` and overriding shell variables; its database and queue destinations stay fixed to Compose.
+The diagrams show code wiring. This table shows which paths exist locally and
+which the CDK stack prepares. Verification status lives only in [TASKS](TASKS.md).
 
-Complimentary Premium uses the processing package's `/admin-grants` entry.
-Its processor owns grant/revoke rules, audit receipts, idempotency, and retries;
-its store owns DynamoDB reads and atomic grant/access/audit/outbox writes. The
-CLI only translates flags, obtains the trusted OS actor, and presents results.
-The grant model and access policy remain in the domain package. A shared
-operation is not an authorization boundary; each caller must authorize its operator.
+| Feature                                  | Local                      | AWS stack                   |
+| ---------------------------------------- | -------------------------- | --------------------------- |
+| Login, profile, and access reads         | ✓                          | ✓                           |
+| Stripe checkout and cancellation         | ✓                          | — not wired                 |
+| Stripe notifications                     | ✓ via Stripe CLI           | ✓                           |
+| Apple purchase sync from the app         | ✓                          | — not wired                 |
+| Apple notifications                      | ✓ via ngrok                | ✓ opt-in                    |
+| Google purchase sync and Restore         | ✓                          | ✓ opt-in                    |
+| Google notifications (Pub/Sub push)      | ✓ via HTTPS tunnel         | ✓ opt-in                    |
+| Reconciliation for Stripe, Apple, Google | ✓ watcher in `pnpm dev`    | ✓ opt-in schedule           |
+| Expiration jobs                          | ✓                          | — (API still checks expiry) |
+| Google mock scenarios                    | ✓                          | —                           |
+| Outbox publication                       | ✓ ElasticMQ + log consumer | — EventBridge adapter only  |
+| Browser CORS for the website             | ✓                          | — not configured            |
+| Complimentary Premium (CLI)              | ✓                          | —                           |
 
-Provider stores prepare ownership checks, subscription writes, and processing
-markers. The shared [`DynamoDbProcessingStore`](../packages/subscription-processing/src/processing/dynamodb-processing.ts)
-combines these with the aggregate revision guard, profile check, access snapshot,
-and optional outbox entry in one atomic transaction. Every provider uses this
-shared commit path so concurrent updates preserve other valid grants.
-Apple finish and Google acknowledgement follow the commit; durable markers let
-retries resume completion. [Processing and retries](PAYMENTS.md#processing-and-retries).
+API access and expiry checks never wait for the outbox, an event consumer, or an
+expiration job.
+
+## Where the logic lives
+
+| Piece             | Code                                                                                                  | Responsibility                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Worker runtime    | [`runtime.ts`](../services/subscription-worker/src/runtime.ts)                                        | Configuration, connections, and the switch that picks a provider processor           |
+| Provider adapters | [`providers/<provider>/`](../packages/subscription-processing/src/providers/stripe/processor.ts)      | `processor.ts` (steps), `source.ts` (provider API), `store.ts` (keys and markers)    |
+| Retry loop        | [`retry.ts`](../packages/subscription-processing/src/processing/retry.ts)                             | Skip duplicates; retry a lost compare-and-swap race with fresh reads                 |
+| Shared commit     | [`dynamodb-processing.ts`](../packages/subscription-processing/src/processing/dynamodb-processing.ts) | Revision guard, profile check, access snapshot, and outbox entry in one transaction  |
+| Access rules      | [`subscriptions.ts`](../packages/domain/src/subscriptions.ts)                                         | Translate provider states and combine all grants; no I/O                             |
+| Admin grants      | [`admin-grants/`](../packages/subscription-processing/src/admin-grants/processor.ts)                  | Grant/revoke rules, audit receipts, idempotency                                      |
+| Developer CLI     | [`apps/cli`](../apps/cli/README.md)                                                                   | Prompts, local demo edits, local reconciliation; database and queue fixed to Compose |
+
+Three rules hold for every provider:
+
+- **One commit path.** All writers use the shared transaction, so concurrent
+  updates never drop another provider's valid grant.
+- **Commit first, then tell the store.** Apple finish and Google acknowledgement
+  run after the commit; a durable marker lets a retry resume that last step.
+- **Shared code is not a permission check.** The CLI and the worker use the same
+  processing package, but each caller authorizes its own operator.
+
+[Processing and retries](PAYMENTS.md#processing-and-retries) explains the failure cases.
 
 ## Follow a feature
 
@@ -307,28 +335,9 @@ retries resume completion. [Processing and retries](PAYMENTS.md#processing-and-r
 - [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 
-Local outbox publication uses a separate ElasticMQ queue and log consumer. The
-EventBridge adapter has no deployed bus/rule or cloud runtime wiring. Local
-reconciliation enqueues Stripe, known Apple Sandbox/Google Play test subscriptions,
-and Google mock refreshes plus due expiration jobs through the subscription worker.
-Independent Google mock state supports suppressed-event exercises. The opt-in
-cloud path prepares Stripe, Apple, and Google discovery on one shared schedule.
-Live reconciliation evidence remains outstanding in P09.
-API access and expiry checks do not depend on event publication or
-consumer success.
+## Maintaining the diagrams
 
-## Diagram presentation
-
-Mermaid source stays in the Markdown files. The diagrams use a base theme,
-`classDef` for fill/border/text colors, role-specific shapes, neutral runtime
-containers, and labeled solid/dashed connections.
-[Flowchart styling](https://mermaid.js.org/syntax/flowchart.html#classes) ·
-[Theme configuration](https://mermaid.js.org/config/theming.html).
-
-Mermaid also supports image/icon nodes, but icon packs must be registered by the
-renderer. A Markdown file cannot register those packs itself. The SVG overview
-therefore embeds Apple, Google, Auth0, and Stripe vector paths and requires no
-external image/font requests. It is a conceptual view; edit it alongside changes
-to component responsibilities. The Mermaid topologies own the detailed wiring.
-[Mermaid icon packs](https://mermaid.js.org/config/icons.html) ·
-[Embedded logo sources](https://github.com/iconify/icon-sets/blob/master/json/logos.json).
+Mermaid diagrams live in the Markdown files and define only the colors they use.
+The [SVG overview](images/architecture-overview.svg) embeds provider logos
+because Markdown renderers cannot load Mermaid icon packs; update it when a
+component's responsibility changes.

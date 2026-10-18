@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { hasBlockingSubscription } from '@premiumpass/api-contracts';
 import type { AccountState } from '../account/use-account';
 import { CancelSubscription } from './cancel-subscription';
 import { formatDate } from '../../lib/format-date';
@@ -39,10 +40,7 @@ export function SubscriptionStatus({
 
   const needsAttention =
     state.status === 'success' &&
-    (state.entitlements.warnings.length > 0 ||
-      state.subscriptions.some((subscription) =>
-        ['pending', 'past_due', 'paused'].includes(subscription.state),
-      ));
+    (state.entitlements.warnings.length > 0 || hasBlockingSubscription(state));
   return (
     <Card>
       <CardHeader>

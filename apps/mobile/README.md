@@ -3,11 +3,10 @@
 An Expo development app with Auth0 login, synthetic score history, and shared
 subscription access. Start with [Getting started](../../docs/GETTING_STARTED.md).
 Native purchase/restore is a separate [Apple Sandbox setup](../../docs/APPLE_PURCHASES.md).
-For the Android extension, follow [Google Play preparation](../../docs/GOOGLE_PLAY.md).
-Android build, login, and real purchase verification are tracked in
-[P12](../../docs/TASKS.md#p12-google-play-test-purchases). Android commands, upload
-signing, emulator networking, and Google configuration are in the
-[Android build guide](../../docs/GOOGLE_PLAY.md#local-android-build); the setup below covers iOS.
+For Android, follow [Google Play preparation](../../docs/GOOGLE_PLAY.md); Android
+commands, upload signing, emulator networking, and Google configuration are in
+the [Android build guide](../../docs/GOOGLE_PLAY.md#local-android-build). The
+setup below covers iOS.
 
 ## Configure the app
 

@@ -51,10 +51,6 @@ flowchart LR
     classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59,stroke-width:1.5px,rx:12,ry:12
     classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6,stroke-width:1.5px,rx:10,ry:10
     classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534,stroke-width:1.5px
-    classDef failure fill:#fff1f2,stroke:#f43f5e,color:#9f1239,stroke-width:1.5px,rx:10,ry:10
-    classDef stripe fill:#635bff,stroke:#4f46e5,color:#ffffff,stroke-width:1.5px,rx:12,ry:12
-    classDef apple fill:#27272a,stroke:#18181b,color:#ffffff,stroke-width:1.5px,rx:12,ry:12
-    classDef google fill:#e8f0fe,stroke:#4285f4,color:#174ea6,stroke-width:1.5px,rx:12,ry:12
     linkStyle default stroke:#64748b,stroke-width:1.5px
     class Clients client
     class Auth0 identity
@@ -65,59 +61,52 @@ flowchart LR
 
 ## Start here
 
-Follow **[Getting started](docs/GETTING_STARTED.md)** for a local website,
-Auth0 login, and your first Stripe test purchase. It includes prerequisites,
-configuration files, startup order, and checks after each step.
+1. Read **[Concepts](docs/CONCEPTS.md)**: the idea in one picture, plus a glossary.
+2. Follow **[Getting started](docs/GETTING_STARTED.md)**: local website, Auth0
+   login, and your first Stripe test purchase, with a check after each step.
+3. Continue with the learning path below.
 
 The first path needs no AWS account or Xcode. Docker runs DynamoDB Local and
 ElasticMQ; the API, webhooks, worker, and website run on your computer.
 Auth0 and Stripe remain real external services in development/test mode.
 
-| You want to…                                            | Continue here                              |
-| ------------------------------------------------------- | ------------------------------------------ |
-| Run the project with your own accounts                  | [Getting started](docs/GETTING_STARTED.md) |
-| Understand components and data flow                     | [Architecture](docs/ARCHITECTURE.md)       |
-| Run commands, inspect logs, or change local demo access | [Development](docs/DEVELOPMENT.md)         |
-| Stop, reset, or remove the environment                  | [Cleanup](docs/DEVELOPMENT.md#cleanup)     |
+## Learning path
 
-## Extend the demo
+Modules 1–6 run locally with Auth0, Stripe test mode, and Docker. Modules 7–8
+need store or AWS accounts. `T…` IDs refer to manual exercises in the linked guides.
 
-| Extension                                         | What you will add                                                                            |
-| ------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [Mobile](apps/mobile/README.md)                   | Expo development build, Auth0 login, and score dashboard on Simulator/iPhone                 |
-| [Google Play test purchases](docs/GOOGLE_PLAY.md) | Android build, native purchase/restore, verified backend access, and lifecycle notifications |
-| [Apple Sandbox](docs/APPLE_PURCHASES.md)          | Native purchase/restore and local Server Notifications through ngrok                         |
-| [AWS](infra/README.md)                            | CDK-managed API, provider webhooks, DynamoDB, and queue processing                           |
+| Module                    | You learn                                                     | Read                                                                                                  | Try                                                                                   |
+| ------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase           | [Auth0](docs/AUTH0_SETUP.md), [`auth.ts`](services/api/src/auth.ts)                                   | [T01–T03, T05](docs/AUTH0_SETUP.md#manual-verification)                               |
+| 2. First purchase         | Checkout, signed webhook, queue, worker verification          | [Payments](docs/PAYMENTS.md#payment-flow)                                                             | [T06–T09](docs/PAYMENTS.md#manual-checks)                                             |
+| 3. Consolidation          | Translate provider states, combine grants, check time         | [Concepts](docs/CONCEPTS.md), [Access policy](docs/PAYMENTS.md#access-policy)                         | [T04, T22](docs/PAYMENTS.md#manual-checks)                                            |
+| 4. Reliability            | Duplicates, revisions, atomic commit, outbox, DLQ             | [Processing and retries](docs/PAYMENTS.md#processing-and-retries)                                     | [T10–T18](docs/PAYMENTS.md#manual-checks), [outbox](docs/DEVELOPMENT.md#local-outbox) |
+| 5. Repair missed updates  | Reconciliation and expiration                                 | [Reconciliation](docs/RECONCILIATION.md)                                                              | [T20–T21](docs/DEVELOPMENT.md#local-reconciliation-and-expiration)                    |
+| 6. Complimentary Premium  | Access without a purchase, audited and revocable              | [Complimentary access](docs/PAYMENTS.md#complimentary-access)                                         | [CLI commands](docs/DEVELOPMENT.md#complimentary-premium)                             |
+| 7. Native store purchases | Mobile login, Google Play / Apple purchase, ownership binding | [Mobile](apps/mobile/README.md), [Google Play](docs/GOOGLE_PLAY.md), [Apple](docs/APPLE_PURCHASES.md) | [Apple device checks](docs/APPLE_PURCHASES.md#manual-device-checks)                   |
+| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks                | [Architecture](docs/ARCHITECTURE.md#aws-deployment-topology), [AWS](infra/README.md)                  | [Deployed checks](infra/README.md#verify-the-deployed-path)                           |
 
-Google Play is the next native test-purchase path; implementation and Apple's
-deferred account-dependent verification are tracked in [TASKS](docs/TASKS.md).
-Local features and cloud wiring differ. The AWS guide identifies the supported
-paths. Google cloud purchase/Restore endpoints and notification processing are
-prepared with default-off configuration. Stripe, Apple, and Google reconciliation
-share a five-minute schedule with separate opt-in switches; external setup and live verification
-remain outstanding. Cloud Stripe checkout and Apple client sync remain incomplete.
+Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove the environment.
 
-## Understand the system
+## Reference guides
 
 | Topic                                                      | Guide                                                                      |
 | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Login, permissions, and client configuration               | [Auth0](docs/AUTH0_SETUP.md)                                               |
-| Checkout, verified payments, retries, and access rules     | [Payments](docs/PAYMENTS.md)                                               |
-| Missed subscription updates and expiration                 | [Reconciliation](docs/RECONCILIATION.md)                                   |
+| Terms and the core idea                                    | [Concepts](docs/CONCEPTS.md)                                               |
+| Components, data flow, and what runs where                 | [Architecture](docs/ARCHITECTURE.md)                                       |
+| Commands, logs, and local demo tools                       | [Development](docs/DEVELOPMENT.md)                                         |
 | Entities, relationships, database keys, and atomic updates | [Data model and ER diagrams](docs/DYNAMODB_DATA_MODEL.md#logical-er-model) |
 | Product boundaries and learning goals                      | [Project plan](PROJECT_PLAN.md)                                            |
 | Why the project uses these approaches                      | [Decisions](docs/DECISIONS.md)                                             |
 
 The workspace separates `apps/` (Web, Mobile, and the developer CLI), `services/` (executables),
 `packages/` (shared code), and `infra/` (CDK and local queue definitions).
-Start with the architecture guide; each component README links to its code.
+Each component README links to its code.
 
-## Project progress
+## Project status
 
-[TASKS.md](docs/TASKS.md) is the sole implementation-status and verification
-record. It distinguishes local checks, device evidence, and live AWS/provider
-flows. Google provider mocks, outbox publication, and scheduled reconciliation
-are tracked there; diagrams do not imply those features are complete.
+Guides explain how the system works. Which parts are implemented and verified,
+locally or in AWS, is recorded only in [TASKS](docs/TASKS.md).
 
 For implementation work, read [AGENTS.md](AGENTS.md). Project text and code use
 English. The project has no automated test suite; verification uses formatting,

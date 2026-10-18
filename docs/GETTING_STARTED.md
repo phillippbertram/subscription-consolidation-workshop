@@ -133,10 +133,10 @@ redirect alone does not activate access. If Premium does not appear, follow
 
 ## 7. Continue or stop
 
-- Prepare [Google Play test purchases](GOOGLE_PLAY.md) for the next Android
-  extension. The [Mobile guide](../apps/mobile/README.md) covers the existing iOS
-  setup; [Apple Sandbox](APPLE_PURCHASES.md) remains available for later.
-- Explore [architecture](ARCHITECTURE.md) or [local development](DEVELOPMENT.md).
+- Follow the [learning path](../README.md#learning-path) module by module.
+- Add native purchases: [Mobile](../apps/mobile/README.md),
+  [Google Play](GOOGLE_PLAY.md), or [Apple Sandbox](APPLE_PURCHASES.md).
+- Explore [concepts](CONCEPTS.md), [architecture](ARCHITECTURE.md), or [local development](DEVELOPMENT.md).
 - Deploy supported components using the separate [AWS guide](../infra/README.md).
 - Finish with [Cleanup](DEVELOPMENT.md#cleanup): pause processes, reset local
   data, or remove the project-specific integrations.

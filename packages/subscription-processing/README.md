@@ -61,6 +61,9 @@ while preserving other providers. `commit` adds the aggregate revision guard,
 profile check, access snapshot, and optional outbox entry, then sends one DynamoDB
 transaction containing every write.
 
+Every processor runs its attempt through the shared
+[`retryOnRevisionConflict`](src/processing/retry.ts) loop: skip completed events,
+retry a lost compare-and-swap race with fresh reads, and rethrow anything else.
 Apple and Google processors commit access before finishing or acknowledging the
 purchase. A durable marker allows retries to resume provider completion without
 another domain/outbox update. Completion uses a separate conditional update.

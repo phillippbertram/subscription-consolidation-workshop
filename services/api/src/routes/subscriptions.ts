@@ -3,12 +3,10 @@ import type {
   Entitlements,
 } from '@premiumpass/api-contracts';
 import type { Hono } from 'hono';
+import type { SubscriptionStore } from '@premiumpass/domain';
+import { loadCurrentAccess } from '../access.js';
 import { type AppEnv, requireScopes } from '../auth.js';
 import type { UserStore } from '../users.js';
-import {
-  deriveEntitlements,
-  type SubscriptionStore,
-} from '@premiumpass/domain';
 
 export function registerSubscriptionsRoutes(
   app: Hono<AppEnv>,
@@ -20,29 +18,17 @@ export function registerSubscriptionsRoutes(
     // Ownership starts with the verified issuer/subject. A client-supplied userId
     // must never select another user's partition.
     const user = await users.getOrCreate(c.get('auth'));
-    const [subscriptions, adminGrant] = await Promise.all([
-      subscriptionStore.listForUser(user.userId),
-      subscriptionStore.getAdminGrant(user.userId),
-    ]);
-    return c.json({
-      subscriptions,
-      entitlements: deriveEntitlements(subscriptions, now(), adminGrant),
-    } satisfies SubscriptionOverview);
+    const access = await loadCurrentAccess(subscriptionStore, user.userId, now);
+    return c.json(access satisfies SubscriptionOverview);
   });
+
   app.get('/v1/me/entitlements', requireScopes('read:me'), async (c) => {
     const user = await users.getOrCreate(c.get('auth'));
-    const [subscriptions, adminGrant] = await Promise.all([
-      subscriptionStore.listForUser(user.userId),
-      subscriptionStore.getAdminGrant(user.userId),
-    ]);
-    // Sample time after the read: a persisted Premium snapshot may have expired
-    // without a webhook. Enforce that boundary again on every API request.
-    return c.json(
-      deriveEntitlements(
-        subscriptions,
-        now(),
-        adminGrant,
-      ) satisfies Entitlements,
+    const { entitlements } = await loadCurrentAccess(
+      subscriptionStore,
+      user.userId,
+      now,
     );
+    return c.json(entitlements satisfies Entitlements);
   });
 }

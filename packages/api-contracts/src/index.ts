@@ -82,6 +82,28 @@ export type Subscription = z.infer<typeof subscriptionSchema>;
 export type Entitlements = z.infer<typeof entitlementsSchema>;
 export type SubscriptionOverview = z.infer<typeof subscriptionOverviewSchema>;
 
+// Shared client presentation rules, so Web and Mobile offer purchases alike.
+// They only decide what to show: the API enforces the same blocks on checkout.
+const blockingStates = ['pending', 'past_due', 'paused'];
+
+/** An unfinished, unpaid, or paused Premium subscription must be resolved first. */
+export function hasBlockingSubscription(overview: SubscriptionOverview) {
+  return overview.subscriptions.some(
+    (subscription) =>
+      subscription.productId === 'premium_monthly' &&
+      blockingStates.includes(subscription.state),
+  );
+}
+
+/** Offer a purchase only to Free users without warnings or blocking records. */
+export function canPurchasePremium(overview: SubscriptionOverview) {
+  return (
+    overview.entitlements.tier === 'free' &&
+    overview.entitlements.warnings.length === 0 &&
+    !hasBlockingSubscription(overview)
+  );
+}
+
 export const checkoutRequestIdSchema = z.uuid();
 export const checkoutRequestSchema = z
   .object({

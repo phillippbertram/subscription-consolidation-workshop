@@ -3,17 +3,7 @@ import type {
   SubscriptionOverview,
 } from '@premiumpass/api-contracts';
 
-export function canPurchasePremium(overview: SubscriptionOverview): boolean {
-  return (
-    overview.entitlements.tier === 'free' &&
-    overview.entitlements.warnings.length === 0 &&
-    !overview.subscriptions.some(
-      (subscription) =>
-        subscription.productId === 'premium_monthly' &&
-        ['pending', 'past_due', 'paused'].includes(subscription.state),
-    )
-  );
-}
+export { canPurchasePremium } from '@premiumpass/api-contracts';
 
 export function describeSubscription(
   subscription: Subscription,

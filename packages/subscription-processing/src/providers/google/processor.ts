@@ -1,13 +1,15 @@
-import { setTimeout } from 'node:timers/promises';
 import type { GoogleJob } from '@premiumpass/billing-contracts';
 import type { DynamoDbGoogleStore } from './store.js';
 import type { GoogleSubscriptionSource } from './source.js';
-import {
-  ProcessingError,
-  RevisionConflict,
-} from '../../processing/contracts.js';
+import { ProcessingError } from '../../processing/contracts.js';
+import { retryOnRevisionConflict } from '../../processing/retry.js';
 import { hasSubscriptionChanged } from '../../processing/subscription-state.js';
 
+/**
+ * Google Play purchases and notifications follow the shared processor shape
+ * (load revision → read provider → translate → commit) plus one extra step:
+ * after the commit, acknowledge the purchase so Google does not refund it.
+ */
 export class GoogleSubscriptionProcessor {
   constructor(
     private readonly store: Pick<
@@ -23,9 +25,40 @@ export class GoogleSubscriptionProcessor {
 
   /** Commit once, then resume acknowledgement from the durable marker on retries. */
   async process(job: GoogleJob) {
-    const result = await this.commitAccess(job);
+    const result = await retryOnRevisionConflict({
+      isProcessed: async () => Boolean(await this.store.getProcessing(job)),
+      attempt: () => this.commitAccess(job),
+    });
     await this.acknowledgeCommittedPurchase(job);
     return result;
+  }
+
+  private async commitAccess(job: GoogleJob) {
+    // Client/internal jobs already name the authenticated owner. RTDN must
+    // first discover it from Google; all paths verify again after load().
+    const userId = job.userId ?? (await this.source.locate(job)).userId;
+    const aggregate = await this.store.load(userId);
+    const now = this.now();
+    // Re-read Google AFTER the aggregate revision, also after a conflict.
+    const verified = await this.source.read(
+      { ...job, userId },
+      aggregate.subscriptions,
+      now,
+    );
+    const changed = hasSubscriptionChanged(
+      aggregate,
+      verified.subscription,
+      now,
+    );
+    await this.store.commit(
+      aggregate,
+      verified.subscription,
+      job,
+      now,
+      changed,
+      verified.needsAcknowledgement,
+    );
+    return { outcome: changed ? 'changed' : 'verified', userId };
   }
 
   private async acknowledgeCommittedPurchase(job: GoogleJob) {
@@ -41,53 +74,5 @@ export class GoogleSubscriptionProcessor {
 
       await this.store.markCompleted(job, processing.userId, this.now());
     }
-  }
-
-  private async commitAccess(job: GoogleJob) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (await this.store.getProcessing(job)) {
-        return { outcome: 'duplicate' };
-      }
-
-      // Client/internal jobs already name the authenticated owner. RTDN must
-      // first discover it from Google; all paths verify again after load().
-      const userId = job.userId ?? (await this.source.locate(job)).userId;
-      const aggregate = await this.store.load(userId);
-      const now = this.now();
-      // Re-read Google AFTER the aggregate revision, also after a conflict.
-      const verified = await this.source.read(
-        { ...job, userId },
-        aggregate.subscriptions,
-        now,
-      );
-      const changed = hasSubscriptionChanged(
-        aggregate,
-        verified.subscription,
-        now,
-      );
-      try {
-        await this.store.commit(
-          aggregate,
-          verified.subscription,
-          job,
-          now,
-          changed,
-          verified.needsAcknowledgement,
-        );
-        return { outcome: changed ? 'changed' : 'verified', userId };
-      } catch (error) {
-        if (await this.store.getProcessing(job)) {
-          return { outcome: 'duplicate' };
-        }
-
-        if (!(error instanceof RevisionConflict)) {
-          throw error;
-        }
-
-        await setTimeout(25 + Math.random() * 75);
-      }
-    }
-
-    throw new ProcessingError('concurrency_retry_exhausted');
   }
 }

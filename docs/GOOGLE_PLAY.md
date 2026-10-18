@@ -1,9 +1,9 @@
 # Google Play test purchases
 
 Set up one Premium subscription for real Google Play **license-test purchases**.
-Start with the local [Getting started](GETTING_STARTED.md) path. Implementation
-and verification are tracked in [P12](TASKS.md#p12-google-play-test-purchases);
-the existing `pnpm cli google-mock` command remains a separate synthetic local exercise.
+Start with the local [Getting started](GETTING_STARTED.md) path. The
+`pnpm cli google-mock` command is a separate synthetic exercise that needs no
+Google account.
 
 Use your own development accounts, synthetic application data, and Google's test
 payment instruments. Do not make production purchases.
@@ -15,7 +15,7 @@ payment instruments. Do not make production purchases.
 | Now                      | Prepare the developer account, app, package name, and license testers                 | Account requirements are cleared and the identifiers are recorded    |
 | With the Android build   | Upload a signed Billing-enabled AAB to internal testing; configure the subscription   | Test release is available and the monthly base plan is active        |
 | With backend integration | Configure API access and lifecycle notifications                                      | Backend can verify purchases and receive authenticated notifications |
-| End to end               | Install, sign in, buy with a test instrument, restore, and exercise lifecycle changes | Recorded provider/device evidence satisfies P12                      |
+| End to end               | Install, sign in, buy with a test instrument, restore, and exercise lifecycle changes | Purchase, restore, and lifecycle checks behave as described below    |
 
 Console labels can vary by language and account. The linked official pages were
 reviewed on October 18, 2026.
@@ -241,8 +241,8 @@ offers/trials, additional base plans, and production purchases are rejected.
 The CDK stack includes protected Google billing routes in the API Lambda,
 `POST /v1/webhooks/google`, and a Google webhook Lambda.
 `GOOGLE_PLAY_ENABLED=false` is the default. Opting in enables the same test-only
-worker processing path with a dedicated credential secret. This is infrastructure
-preparation; deployment and Google account changes require their own setup.
+worker processing path with a dedicated credential secret. Deployment and Google
+account changes are separate steps.
 
 1. Store the dedicated billing service-account JSON from step 5 as an existing
    Secrets Manager secret in the selected AWS account/region. Required fields are
@@ -319,8 +319,6 @@ The native Android client needs no browser CORS change. The separate
 `RECONCILIATION_GOOGLE_ENABLED=true` switch enables Google discovery on the prepared
 [shared cloud reconciliation schedule](RECONCILIATION.md#cloud-reconciliation);
 `GOOGLE_PLAY_ENABLED=true` remains required for processing.
-Local checks and synthesis do not establish real Google
-delivery, deployed IAM, Android behavior, or purchase verification.
 
 ## Ready for the first integration run
 
@@ -336,7 +334,6 @@ must persist verified access before acknowledgement and retry failures durably.
 Use Play Billing Lab later for renewal, grace, and account-hold exercises.
 [Purchase testing and acknowledgement timing](https://developer.android.com/google/play/billing/test).
 
-Use [P12](TASKS.md#p12-google-play-test-purchases) for the full acceptance record.
 Pause through the internal-test track and cancel any retained test subscription
 when finished. Stopping local processes does not stop provider renewals or Cloud
 resources; remove only demo-specific subscriptions/topics/keys when retiring them.

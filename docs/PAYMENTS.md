@@ -2,10 +2,9 @@
 
 **Premium starts after backend verification.** A redirect, client badge, or scope
 alone grants nothing. This is the central guide for Stripe test payments and
-shared access rules. Start with [Getting started](GETTING_STARTED.md); native
-purchases are in [Apple Sandbox](APPLE_PURCHASES.md). Prepare the next Android
-extension with [Google Play test setup](GOOGLE_PLAY.md); its runtime integration
-and evidence are tracked in [P12](TASKS.md#p12-google-play-test-purchases).
+shared access rules. Start with [Getting started](GETTING_STARTED.md); the idea
+behind combining providers is in [Concepts](CONCEPTS.md). Native purchases are in
+[Google Play](GOOGLE_PLAY.md) and [Apple Sandbox](APPLE_PURCHASES.md).
 
 ## Payment flow
 
@@ -148,39 +147,45 @@ policy below applies to `premium_monthly`, which grants `score_history`.
 | Unknown product/status                                       | None; mapping warning remains visible                                                                          |
 | Provider outage                                              | Existing boundaries remain; no extension                                                                       |
 
-Boundaries are exclusive (`now < validUntil`); retries never restart grace.
-Google's `IN_GRACE_PERIOD` maps to `past_due`, with its provider-verified
-`expiryTime` stored directly in `accessUntil`; no extra grace is added.
-Google `CANCELED` maps to active with renewal disabled until that expiry;
-`ON_HOLD`/`PAUSED` map to paused and grant no Google access. The raw Google state
-is retained for consistency checks. [Google flow](GOOGLE_PLAY.md#7-enable-local-processing).
-All valid grants are combined: ending Apple cannot remove valid Stripe access.
-`effectiveUntil` is the next reevaluation boundary, not necessarily the end of
-all Premium access. Stripe custom cancellation dates can shorten a paid period;
-only the covered portion is granted. `verifiedAt` is the last successful check.
+Three rules apply to every row:
+
+- **Boundaries are exclusive:** access ends at `now >= validUntil`. Retries never
+  restart a grace period.
+- **All valid grants combine:** ending Apple cannot remove valid Stripe access.
+  `effectiveUntil` is the next re-check, not necessarily the end of Premium.
+- **Only paid time counts:** a Stripe custom cancellation date can shorten a paid
+  period; only the covered part is granted.
+
+Google needs no extra grace, because its verified expiry already includes it:
+
+| Google state        | Stored as                  | Access                               |
+| ------------------- | -------------------------- | ------------------------------------ |
+| `IN_GRACE_PERIOD`   | `past_due`                 | Until Google's verified `expiryTime` |
+| `CANCELED`          | `active`, renewal disabled | Until the verified expiry            |
+| `ON_HOLD`, `PAUSED` | `paused`                   | None                                 |
+
+The raw provider state stays stored for consistency checks. All mappings side by
+side: [Concepts](CONCEPTS.md#same-meaning-different-words).
 
 ### Complimentary access
 
-A local administrator can grant the same Premium features without payment using
-[the CLI](DEVELOPMENT.md#complimentary-premium). One independent grant per user
-can be active until a specified UTC expiry or until revoked. `null` expiry means
-unbounded **only for an active admin grant**; a provider record with no verified
-access boundary still grants nothing. At the exact expiry, API access stops
-without waiting for a worker. Login and API scopes remain required.
+An administrator can grant Premium without a purchase through
+[the CLI](DEVELOPMENT.md#complimentary-premium).
 
-Access is the union of valid paid and admin grants. Reconciliation, cancellation,
-and provider failure never change the admin grant; its revocation never changes
-a provider contract or removes another valid source. Web/Mobile show
-“Complimentary Premium” separately from subscriptions. Audit reasons/actors are
-local administration data and are not returned by the user API.
+| Question                             | Answer                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------ |
+| How many grants per user?            | One, active until a UTC expiry or until revoked                                |
+| What does `null` expiry mean?        | Unbounded, but **only** for an admin grant; a purchase always needs a boundary |
+| What happens at the expiry?          | The API stops access immediately; no worker needs to run                       |
+| Does it replace login or scopes?     | No, both remain required                                                       |
+| Can provider changes affect it?      | No; reconciliation, cancellation, and outages never change the admin grant     |
+| Does revoking it affect purchases?   | No; other valid sources keep granting access                                   |
+| What do Web and Mobile show?         | “Complimentary Premium”, separate from subscriptions                           |
+| Who sees the audit reason and actor? | Local administrators only; the user API does not return them                   |
 
-The CLI delegates to shared admin-grant processing, which atomically persists
-grant, audit receipt, entitlement snapshot, and outbox intent; revision checks
-serialize these changes with provider updates. The audit
-receipt makes retries with the same request ID safe even after a later change.
-The local expiration runner recalculates due snapshots through the same path;
-indefinite grants do not require a timer. `effectiveUntil` remains the earliest
-finite boundary across all sources, or `null` if none remains.
+The grant, its audit receipt, the access snapshot, and the outbox entry commit in
+one transaction, guarded by the same revision as provider updates. Reusing a
+request ID is safe: the audit receipt turns the retry into a no-op.
 
 ## Manual checks
 
@@ -202,7 +207,7 @@ lack the required ownership mappings.
 
 For access-only scenarios, use the [local subscription CLI](DEVELOPMENT.md#local-subscription-cli).
 Isolated clocks/fixtures are not real provider evidence. T06 needs a real Stripe
-test payment; T16/T17 also need AWS evidence for cloud acceptance.
+test payment; T16/T17 can also be repeated in AWS.
 
 If access stays Free, check listener forwarding → `webhook.queued` → worker
 `subscription.processed` → subscription records in DynamoDB Admin. Match event
@@ -212,8 +217,9 @@ body to the work queue, and delete the DLQ copy only after successful send.
 
 ## Register the cloud webhook
 
-Cloud Stripe billing initiation is not wired; cloud notifications need matching owners
-in the AWS table. Local records are not copied to AWS.
+The AWS stack processes Stripe notifications but does not start checkout (see
+[what runs where](ARCHITECTURE.md#what-runs-where)). Cloud notifications need
+matching owners in the AWS table; local records are not copied to AWS.
 
 1. In the intended AWS account/region, create a Secrets Manager JSON secret with
    `secretKey`, `priceId`, `webhookSecret`, using the default encryption key.
@@ -229,7 +235,7 @@ in the AWS table. Local records are not copied to AWS.
 4. Replace `webhookSecret` with that destination's secret. It differs from the
    CLI secret; runtime caches can take five minutes to refresh.
 5. Verify delivery, worker completion, and owned subscription/access records
-   separately. Record actual evidence in [P06](TASKS.md#p06-stripe-purchase-and-reliable-processing).
+   separately.
 
 ## Cleanup
 

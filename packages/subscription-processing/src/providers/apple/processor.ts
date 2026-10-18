@@ -1,13 +1,15 @@
-import { setTimeout } from 'node:timers/promises';
 import type { AppleProcessingJob } from '@premiumpass/billing-contracts';
 import type { DynamoDbAppleStore } from './store.js';
 import type { AppleSubscriptionSource } from './source.js';
 import { hasSubscriptionChanged } from '../../processing/subscription-state.js';
-import {
-  ProcessingError,
-  RevisionConflict,
-} from '../../processing/contracts.js';
+import { ProcessingError } from '../../processing/contracts.js';
+import { retryOnRevisionConflict } from '../../processing/retry.js';
 
+/**
+ * Apple purchases and notifications follow the shared processor shape
+ * (load revision → read provider → translate → commit) plus one extra step:
+ * after the commit, tell Apple the transaction was handled ("finish").
+ */
 export class AppleSubscriptionProcessor {
   constructor(
     private readonly store: Pick<
@@ -22,9 +24,37 @@ export class AppleSubscriptionProcessor {
     // Delivery has two durable milestones: our access commit and Apple's finish.
     // They cannot be atomic across systems. Store the finish target with the
     // commit so a retry can resume the second step before queue acknowledgement.
-    const result = await this.commitAccess(job);
+    const result = await retryOnRevisionConflict({
+      isProcessed: async () => Boolean(await this.store.getProcessing(job)),
+      attempt: () => this.commitAccess(job),
+    });
     await this.finishCommittedTransaction(job);
     return result;
+  }
+
+  private async commitAccess(job: AppleProcessingJob) {
+    // Load the revision BEFORE fetching Apple state, including after conflicts.
+    const aggregate = await this.store.load(job.userId);
+    const now = this.now();
+    const { subscription, finishTransactionId } = await this.source.read(
+      job,
+      aggregate.subscriptions,
+      now,
+    );
+    const changed = hasSubscriptionChanged(aggregate, subscription, now);
+    await this.store.commit(
+      aggregate,
+      subscription,
+      job,
+      now,
+      changed,
+      finishTransactionId,
+    );
+    return {
+      outcome: changed ? 'changed' : 'verified',
+      userId: job.userId,
+      revision: aggregate.revision + 1,
+    };
   }
 
   private async finishCommittedTransaction(job: AppleProcessingJob) {
@@ -43,50 +73,5 @@ export class AppleSubscriptionProcessor {
         this.now(),
       );
     }
-  }
-
-  private async commitAccess(job: AppleProcessingJob) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (await this.store.getProcessing(job)) {
-        return { outcome: 'duplicate' };
-      }
-
-      // Load the revision BEFORE fetching Apple state, including after conflicts.
-      const aggregate = await this.store.load(job.userId);
-      const now = this.now();
-      const { subscription, finishTransactionId } = await this.source.read(
-        job,
-        aggregate.subscriptions,
-        now,
-      );
-      const changed = hasSubscriptionChanged(aggregate, subscription, now);
-      try {
-        await this.store.commit(
-          aggregate,
-          subscription,
-          job,
-          now,
-          changed,
-          finishTransactionId,
-        );
-        return {
-          outcome: changed ? 'changed' : 'verified',
-          userId: job.userId,
-          revision: aggregate.revision + 1,
-        };
-      } catch (error) {
-        if (await this.store.getProcessing(job)) {
-          return { outcome: 'duplicate' };
-        }
-
-        if (!(error instanceof RevisionConflict)) {
-          throw error;
-        }
-
-        await setTimeout(25 + Math.random() * 75);
-      }
-    }
-
-    throw new ProcessingError('concurrency_retry_exhausted');
   }
 }

@@ -16,8 +16,6 @@ notification arrives. Both use the existing subscription worker.
 
 For startup, preview, provider selection, and stopping the watcher, follow
 [local commands](DEVELOPMENT.md#local-reconciliation-and-expiration).
-Implementation status and verification evidence live only in
-[P09](TASKS.md#p09-reconciliation-and-expiration).
 
 ## What can be repaired?
 
@@ -62,82 +60,67 @@ verification paths. Google mock and expiration jobs remain local-only.
 
 ## Cloud reconciliation
 
-One EventBridge rule runs every five minutes with three independently enabled
-Lambda targets. Separate invocations isolate each provider's timeout and retries.
-The schedule stays disabled while all three switches are false. Enabling a
-provider's purchase processing does not automatically enable its reconciliation.
-No HTTP route or Auth0 scope is added; manual invocation uses AWS IAM.
+One EventBridge rule runs every five minutes and calls up to three Lambdas, one
+per provider, so a slow or failing provider cannot block the others.
 
-| Environment switch (default `false`) | CloudFormation parameter      | Additional requirement                           |
-| ------------------------------------ | ----------------------------- | ------------------------------------------------ |
-| `RECONCILIATION_STRIPE_ENABLED`      | `ReconciliationStripeEnabled` | Existing Stripe test secret/customer mappings    |
-| `RECONCILIATION_APPLE_ENABLED`       | `ReconciliationAppleEnabled`  | `APPLE_ENABLED=true` and configured worker       |
-| `RECONCILIATION_GOOGLE_ENABLED`      | `ReconciliationGoogleEnabled` | `GOOGLE_PLAY_ENABLED=true` and configured worker |
+- Each provider has its own switch (default `false`). The rule stays disabled
+  while all three are off.
+- Enabling purchase processing does not enable reconciliation automatically.
+- No HTTP route or Auth0 scope is added; manual runs use AWS IAM.
 
-Disabled providers are removed from the rule's targets, receive no discovery
-policy, and return `disabled` on manual invocation before reading state or keys.
-The deploy wrapper and CloudFormation rules reject Apple/Google reconciliation
-without the corresponding provider enabled. Each Lambda has fixed
-`RECONCILIATION_PROVIDER` and `RECONCILIATION_ENABLED` settings; the event cannot
-select or enable another provider.
+| Environment switch              | CloudFormation parameter      | Also requires                                      |
+| ------------------------------- | ----------------------------- | -------------------------------------------------- |
+| `RECONCILIATION_STRIPE_ENABLED` | `ReconciliationStripeEnabled` | Existing Stripe test secret and customer mappings  |
+| `RECONCILIATION_APPLE_ENABLED`  | `ReconciliationAppleEnabled`  | `APPLE_ENABLED=true` and a configured worker       |
+| `RECONCILIATION_GOOGLE_ENABLED` | `ReconciliationGoogleEnabled` | `GOOGLE_PLAY_ENABLED=true` and a configured worker |
 
-| Provider         | Discovery and cloud preview                                                                                                                                                                        | Additional discovery permissions                                                      |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Stripe test      | Scan completed `USER#…` / `CUSTOMER#stripe` mappings; verify both mapping directions, load stored subscriptions, fully list the mapped customer's Stripe subscriptions, and queue the union of IDs | `GetItem` / `Query` on user/customer key families and the existing Stripe test secret |
-| Apple Sandbox    | Scan `PROVIDER#apple#SUB#Sandbox:…` / `OWNER`; validate owner UUID and original transaction ID                                                                                                     | None; no Apple API or private key                                                     |
-| Google Play test | Scan package-scoped `PROVIDER#google#SUB#<package>:…` / `OWNER`; validate owner UUID, package, token, and digest                                                                                   | None; no Google API or service-account key                                            |
+### What each provider discovers
 
-All discovery roles have conditional table `Scan`, work-queue `SendMessage`, and
-logging/failure-delivery permissions, with no database writes. Stripe uses only
-subscription-list API reads, including in preview; it never modifies contracts.
-Apple/Google discovery has no Secrets Manager access. Fresh provider verification,
-atomic access/completion/outbox writes, Apple finish, and Google acknowledgement
-remain in the existing worker.
+| Provider         | Discovery                                                                                      | Extra permissions                              |
+| ---------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Stripe test      | Customer mappings; lists each customer's Stripe subscriptions and queues stored plus found IDs | Read user/customer records; Stripe test secret |
+| Apple Sandbox    | Known `PROVIDER#apple#SUB#Sandbox:…` owner records                                             | None; no Apple API or key                      |
+| Google Play test | Known package-scoped `PROVIDER#google#SUB#…` owner records                                     | None; no Google API or key                     |
 
-Stripe can recover a missed initial webhook only after customer mapping exists.
-Apple and Google refresh previously verified owner references; unknown initial
-purchases still need purchase/Restore or a signed notification/RTDN. Apple uses the
-original transaction ID to fetch current signed state, then finishes the exact
-verified transaction after commit. Missing, partial, or unavailable provider
-state never deletes a subscription or adds access.
+Only Stripe can find a purchase we never stored, and only once its customer
+mapping exists. Apple and Google refresh known purchases; an unknown first
+purchase still needs purchase/Restore or a signed notification.
 
-The scheduled event UUID is `runId` / `correlationId`, shared across enabled
-providers. Each provider builds stable per-subscription event IDs for redelivery;
-a later tick gets a new ID to verify new state. Provider marker namespaces keep
-these jobs distinct. Queue acceptance means pending work, not worker completion.
+### Safety rules
 
-Each Lambda has a 60-second timeout and reserved concurrency 1. Scans paginate
-100 evaluated items, including empty filtered pages. With less than ten seconds
-remaining, the run stops starting reads/sends and fails. Invalid references,
-unconfirmed sends, and partial failures fail that provider invocation while
-other valid references can still queue. A Stripe customer's full listing must
-pass test-mode and ownership checks before any of its jobs queue; other
-customers can still succeed.
+- Discovery never writes to the database. It only scans and queues jobs; the
+  worker verifies fresh provider state and commits, as for any notification.
+- Stripe discovery only lists subscriptions, even in preview; it never changes a contract.
+- A disabled provider has no rule target and no discovery permissions, and a
+  manual call returns `disabled` before reading anything. The event cannot
+  switch a Lambda to another provider.
+- Missing, partial, or unavailable provider state never deletes a subscription
+  or adds access.
+- The schedule's event UUID becomes `runId` / `correlationId`. Job IDs are stable
+  within a run and new in the next run, so later ticks re-verify.
 
-Retry starts discovery from the beginning with the same event ID. This deliberate
-small-demo design has no durable cursor or secondary index. A scan filter is not
-an IAM partition boundary and consumes capacity for all evaluated items. A table
-or Stripe listing that cannot fit one invocation needs indexed/resumable discovery
-before it can be supported; a repeated timeout is not successful reconciliation.
+### Limits of the demo design
 
-EventBridge delivery and asynchronous Lambda execution each allow two retries
-with a one-hour event age. Both retain exhausted failures in the shared
-`ReconciliationDlqUrl`. Delivery failures include target metadata; execution
-failures use an invocation envelope with `requestPayload` and function ARN.
-Replay only the affected provider's function with the original event ID. Worker
-job failures continue through the separate subscription work queue/DLQ. These are
-[separate AWS failure stages](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-retry-policy.html),
-with [Lambda execution retries configured independently](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-configuring.html).
+- Each Lambda has 60 seconds and a concurrency of 1. Scans read 100 items per
+  page; with less than ten seconds left, the run stops and fails.
+- A retry starts from the beginning: there is no durable cursor or index. A
+  table that does not fit one invocation needs resumable discovery first.
+- An invalid reference or failed send fails that provider's invocation, while
+  other valid references can still be queued. A Stripe customer's jobs queue only
+  after its full listing passed the test-mode and ownership checks.
 
-For outputs, manual preview, and stopping discovery, see
-[AWS verification](../infra/README.md#cloud-reconciliation). `dryRun=true` reports
-refresh jobs with no sends, database writes, Apple finish, or Google acknowledgement.
-It does not predict provider discrepancies. Only Stripe listing reads an external
-provider. Logs contain provider/run IDs, counts, user UUIDs, and reference IDs
-(Google digests), never purchase tokens, keys, or raw SDK errors.
-Live AWS delivery/IAM and real store lifecycle repair remain separate evidence in
-[P09](TASKS.md#p09-reconciliation-and-expiration) and
-[P12](TASKS.md#p12-google-play-test-purchases).
+### Failures and retries
+
+EventBridge delivery and Lambda execution each retry twice within one hour. Both
+then land in the shared `ReconciliationDlqUrl`, separate from the worker DLQ.
+Replay only the affected provider's function with the original event ID.
+[EventBridge retries](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-rule-retry-policy.html)
+· [Lambda async retries](https://docs.aws.amazon.com/lambda/latest/dg/invocation-async-configuring.html).
+
+`dryRun=true` lists refresh jobs without sends, writes, Apple finish, or Google
+acknowledgement; it does not predict differences. Logs contain IDs and counts,
+never purchase tokens, keys, or raw SDK errors. Outputs, manual preview, and
+pausing: [AWS guide](../infra/README.md#cloud-reconciliation).
 
 ## Follow a run
 
@@ -196,6 +179,5 @@ For Apple configuration and a targeted refresh, use
 | [Google reference store](../packages/subscription-processing/src/providers/google/reconciliation-store.ts) | Paginated owner-reference discovery and token/digest validation             |
 | [Worker](../services/subscription-worker/src/runtime.ts)                                                   | Provider selection, fresh verification and existing processing paths        |
 
-The local runner creates no AWS schedule. The opt-in CDK rule prepares cloud
-scheduling for Stripe, Apple, and Google; it does not imply deployment or live
-provider/device evidence.
+The local runner creates no AWS schedule; the opt-in CDK rule is the cloud
+counterpart.

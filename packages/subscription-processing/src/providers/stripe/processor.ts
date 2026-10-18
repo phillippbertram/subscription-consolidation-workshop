@@ -1,8 +1,5 @@
-import { setTimeout } from 'node:timers/promises';
-import {
-  ProcessingError,
-  RevisionConflict,
-} from '../../processing/contracts.js';
+import { ProcessingError } from '../../processing/contracts.js';
+import { retryOnRevisionConflict } from '../../processing/retry.js';
 import type {
   StripeSource,
   StripeProcessingStore,
@@ -24,82 +21,65 @@ export class StripeSubscriptionProcessor {
   /**
    * Refresh current provider state and commit verified access for a queued event.
    * Return early for completed events or references without a subscription.
-   * Revision conflicts repeat local/provider reads within a bounded retry budget;
-   * unresolved failures throw so the transport can retry instead of acknowledging.
+   * Unresolved failures throw so the transport can retry instead of acknowledging.
    */
   async process(job: StripeProcessingJob) {
-    for (let attempt = 0; attempt < 3; attempt++) {
+    return retryOnRevisionConflict({
       // Fast path for repeated delivery. The transaction also guards the marker:
       // two workers can both observe it as absent before either commits.
-      if (await this.store.isProcessed(job.eventId)) {
-        return { outcome: 'duplicate' };
-      }
+      isProcessed: () => this.store.isProcessed(job.eventId),
+      attempt: () => this.refresh(job),
+    });
+  }
 
-      // locate resolves references only. Its earlier provider read must not be
-      // reused as state after the local revision has been loaded.
-      const target = await this.source.locate(job);
-      // A one-off invoice has no subscription and cannot grant access.
-      if (!target) {
-        return { outcome: 'ignored_non_subscription' };
-      }
-
-      const userId = await this.store.owner(target.customerId);
-      if (job.eventType === 'reconciliation' && userId !== job.expectedUserId) {
-        throw new ProcessingError('reconciliation_owner_mismatch');
-      }
-
-      const aggregate = await this.store.load(userId);
-      // Never reuse a pre-conflict snapshot: both local and provider reads repeat.
-      const now = this.now();
-      const snapshot = await this.source.read(target, userId, now);
-      const previous = aggregate.subscriptions.find(
-        (candidate) =>
-          candidate.provider === 'stripe' &&
-          candidate.providerSubscriptionId === target.subscriptionId,
-      );
-      const subscription = normalizeStripeSubscription(
-        userId,
-        snapshot,
-        previous,
-        now,
-      );
-      // Complete a fresh verification even when business fields are unchanged,
-      // but emit an outbox event only for source changes or a due access boundary.
-      const changed = hasSubscriptionChanged(aggregate, subscription, now);
-      try {
-        await this.store.commit(
-          aggregate,
-          subscription,
-          target.customerId,
-          job,
-          now,
-          changed,
-        );
-        return {
-          outcome: changed ? 'changed' : 'verified',
-          userId,
-          revision: aggregate.revision + 1,
-          ...(changed
-            ? { domainEventId: `${userId}:${aggregate.revision + 1}` }
-            : {}),
-        };
-      } catch (error) {
-        // Another worker may have completed the event, or the commit response
-        // may have been lost. Durable completion evidence resolves both cases.
-        if (await this.store.isProcessed(job.eventId)) {
-          return { outcome: 'duplicate' };
-        }
-
-        if (!(error instanceof RevisionConflict)) {
-          throw error;
-        }
-
-        // Jitter avoids repeated lockstep collisions. After this bounded loop,
-        // SQS owns further retries and eventual DLQ routing.
-        await setTimeout(25 + Math.random() * 75);
-      }
+  private async refresh(job: StripeProcessingJob) {
+    // locate resolves references only. Its earlier provider read must not be
+    // reused as state after the local revision has been loaded.
+    const target = await this.source.locate(job);
+    // A one-off invoice has no subscription and cannot grant access.
+    if (!target) {
+      return { outcome: 'ignored_non_subscription' };
     }
 
-    throw new ProcessingError('concurrency_retry_exhausted');
+    const userId = await this.store.owner(target.customerId);
+    if (job.eventType === 'reconciliation' && userId !== job.expectedUserId) {
+      throw new ProcessingError('reconciliation_owner_mismatch');
+    }
+
+    // Load the revision BEFORE reading Stripe, so a concurrent write is detected.
+    const aggregate = await this.store.load(userId);
+    const now = this.now();
+    const snapshot = await this.source.read(target, userId, now);
+    const previous = aggregate.subscriptions.find(
+      (candidate) =>
+        candidate.provider === 'stripe' &&
+        candidate.providerSubscriptionId === target.subscriptionId,
+    );
+    const subscription = normalizeStripeSubscription(
+      userId,
+      snapshot,
+      previous,
+      now,
+    );
+
+    // Complete a fresh verification even when business fields are unchanged,
+    // but emit an outbox event only for source changes or a due access boundary.
+    const changed = hasSubscriptionChanged(aggregate, subscription, now);
+    await this.store.commit(
+      aggregate,
+      subscription,
+      target.customerId,
+      job,
+      now,
+      changed,
+    );
+
+    const revision = aggregate.revision + 1;
+    return {
+      outcome: changed ? 'changed' : 'verified',
+      userId,
+      revision,
+      ...(changed ? { domainEventId: `${userId}:${revision}` } : {}),
+    };
   }
 }

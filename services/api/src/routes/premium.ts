@@ -1,11 +1,9 @@
 import type { ScoreHistory } from '@premiumpass/api-contracts';
 import type { Hono } from 'hono';
+import type { SubscriptionStore } from '@premiumpass/domain';
+import { loadCurrentAccess } from '../access.js';
 import { type AppEnv, requireScopes } from '../auth.js';
 import type { UserStore } from '../users.js';
-import {
-  deriveEntitlements,
-  type SubscriptionStore,
-} from '@premiumpass/domain';
 
 export function registerPremiumRoutes(
   app: Hono<AppEnv>,
@@ -18,11 +16,11 @@ export function registerPremiumRoutes(
     requireScopes('read:premium'),
     async (c) => {
       const user = await users.getOrCreate(c.get('auth'));
-      const [subscriptions, adminGrant] = await Promise.all([
-        subscriptionStore.listForUser(user.userId),
-        subscriptionStore.getAdminGrant(user.userId),
-      ]);
-      const entitlements = deriveEntitlements(subscriptions, now(), adminGrant);
+      const { entitlements } = await loadCurrentAccess(
+        subscriptionStore,
+        user.userId,
+        now,
+      );
       // Scope permits calling the API; an entitlement proves current product
       // access. A valid JWT with read:premium alone is not a paid subscription.
       if (!entitlements.features.includes('score_history')) {

@@ -1,12 +1,8 @@
-import { setTimeout } from 'node:timers/promises';
 import { GetCommand, type DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { ExpirationJob } from '@premiumpass/billing-contracts';
 import type { DynamoDbProcessingStore } from './dynamodb-processing.js';
-import {
-  expirationDue,
-  ProcessingError,
-  RevisionConflict,
-} from './contracts.js';
+import { expirationDue, ProcessingError } from './contracts.js';
+import { retryOnRevisionConflict } from './retry.js';
 
 // Keep the stored snapshot and downstream events up to date when time passes
 // without a provider notification. API reads already enforce expiration, so a
@@ -41,18 +37,15 @@ export class ExpirationProcessor {
       return Boolean(item);
     };
 
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (await completed()) {
-        return { outcome: 'duplicate' };
-      }
+    return retryOnRevisionConflict({
+      isProcessed: completed,
+      attempt: async () => {
+        const aggregate = await this.store.load(job.userId);
+        const now = this.now();
+        if (!expirationDue(aggregate, now)) {
+          return { outcome: 'not_due' };
+        }
 
-      const aggregate = await this.store.load(job.userId);
-      const now = this.now();
-      if (!expirationDue(aggregate, now)) {
-        return { outcome: 'not_due' };
-      }
-
-      try {
         // Recompute the snapshot only. Do not invent a provider status, erase
         // a subscription, or change verifiedAt/accessUntil on a timer.
         await this.store.commit(
@@ -79,20 +72,8 @@ export class ExpirationProcessor {
           outcome: 'expired',
           domainEventId: `${job.userId}:${aggregate.revision + 1}`,
         };
-      } catch (error) {
-        if (await completed()) {
-          return { outcome: 'duplicate' };
-        }
-
-        if (!(error instanceof RevisionConflict)) {
-          throw error;
-        }
-
-        await setTimeout(25 + Math.random() * 75);
-      }
-    }
-
-    throw new ProcessingError('concurrency_retry_exhausted');
+      },
+    });
   }
 }
 

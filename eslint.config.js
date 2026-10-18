@@ -10,7 +10,6 @@ export default defineConfig(
       '**/build/**',
       '**/coverage/**',
       '**/cdk.out/**',
-      '.agents/**',
       '**/.expo/**',
       'apps/mobile/ios/**',
       'apps/mobile/android/**',

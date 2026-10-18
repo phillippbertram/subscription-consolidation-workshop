@@ -27,14 +27,11 @@ permission is added. These policies limit key families, while code still enforce
 individual ownership. Existing API profile-write permissions cover `USER#*`;
 the API's stores remain responsible for never writing entitlement records.
 
-The stack prepares profile/access reads, provider notification processing, and
-authenticated Google config, purchase/Restore sync, and completion polling.
-Google stays disabled by default and requires the external setup in the
+Which features the stack wires up, and which run only locally, is listed in
+[what runs where](../docs/ARCHITECTURE.md#what-runs-where). Google stays disabled
+by default and needs the external setup in the
 [Google guide](../docs/GOOGLE_PLAY.md#authenticated-cloud-purchase-and-restore).
-Cloud Stripe checkout/cancellation, browser CORS, and authenticated Apple
-config/sync/completion wiring remain incomplete. Stripe, Apple, and Google reconciliation have separate default-off switches on
-one shared schedule. Expiration discovery remains local-only. It creates no VPC or EventBridge outbox publisher. See
-[TASKS](../docs/TASKS.md) for verification status.
+The stack creates no VPC and no EventBridge outbox publisher.
 
 ## Synthesize locally
 
@@ -207,13 +204,12 @@ needed logs first. Table and queues survive and may continue to incur charges.**
 
 4. Inspect and handle the remaining resources individually:
 
-   | Remaining resource        | Deliberate cleanup                                                                              |
-   | ------------------------- | ----------------------------------------------------------------------------------------------- |
-   | DynamoDB table (`RETAIN`) | Export needed synthetic records, then delete the exact recorded table; all its records are lost |
-
-| Work queue, worker DLQ, reconciliation DLQ (`RETAIN`) | Inspect needed messages, then delete the exact recorded queues; queued work is lost |
-| Referenced Stripe/Apple/Google secrets | Preserve shared secrets; schedule deletion only for dedicated unused ones with a recovery window |
-| CDK bootstrap stack/assets | Preserve when used by other projects; review asset bucket/repository retention before separate removal |
+   | Remaining resource                                    | Deliberate cleanup                                                                                     |
+   | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+   | DynamoDB table (`RETAIN`)                             | Export needed synthetic records, then delete the exact recorded table; all its records are lost        |
+   | Work queue, worker DLQ, reconciliation DLQ (`RETAIN`) | Inspect needed messages, then delete the exact recorded queues; queued work is lost                    |
+   | Referenced Stripe/Apple/Google secrets                | Preserve shared secrets; schedule deletion only for dedicated unused ones with a recovery window       |
+   | CDK bootstrap stack/assets                            | Preserve when used by other projects; review asset bucket/repository retention before separate removal |
 
 [Secrets Manager deletion](https://docs.aws.amazon.com/secretsmanager/latest/userguide/manage_delete-secret.html).
 

@@ -83,10 +83,11 @@ export function createWebhookApp(
       return c.json({ error: 'queue_unavailable' }, 503);
     }
   });
-  app.onError(() => cUnavailable());
+  // Unexpected failures return 503 so Stripe retries the delivery later.
+  app.onError(() => webhookUnavailable());
   return app;
 }
 
-function cUnavailable() {
+function webhookUnavailable() {
   return Response.json({ error: 'webhook_unavailable' }, { status: 503 });
 }

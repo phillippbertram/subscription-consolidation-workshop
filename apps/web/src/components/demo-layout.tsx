@@ -36,6 +36,8 @@ interface Props {
 }
 
 export function DemoLayout(props: Props) {
+  // The offer stays visible for every Free user so an open checkout attempt can
+  // be resumed. The API rejects a new purchase while a subscription blocks it.
   const showOffer =
     !props.signedIn ||
     (props.accountState?.status === 'success' &&
