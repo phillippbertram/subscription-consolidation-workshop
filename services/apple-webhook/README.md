@@ -1,5 +1,11 @@
 # Apple webhook
 
+Receives Apple subscription events, such as renewals and cancellations, so changes
+in Apple Sandbox are reflected in the PremiumPass database. It verifies each
+notification and queues it for the [subscription worker](../subscription-worker/README.md),
+which checks the current Apple state and updates subscriptions and access in the
+database.
+
 Verifies App Store Server Notifications V2 using public Apple certificates and
 enqueues Sandbox subscription references. It needs no Auth0 token, database
 access, or private key. Verified TEST notifications are acknowledged without jobs.

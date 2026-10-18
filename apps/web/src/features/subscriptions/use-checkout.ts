@@ -30,6 +30,8 @@ export function useCheckout(userId: string | undefined) {
     setMessage('Preparing your Stripe test checkout…');
     try {
       // Retain only the request identifier, never credentials or checkout URLs.
+      // A lost HTTP response does not mean checkout creation failed. Reusing
+      // this tab's attempt ID lets the backend recover the same purchase intent.
       const requestId =
         sessionStorage.getItem(storageKey) ?? crypto.randomUUID();
       sessionStorage.setItem(storageKey, requestId);

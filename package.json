@@ -35,6 +35,9 @@
     "dev:apple-webhook": "pnpm --filter @premiumpass/apple-webhook run dev",
     "lint:fix": "eslint . --fix --max-warnings 0",
     "subscription": "pnpm --filter @premiumpass/subscription-worker run subscription",
+    "outbox:publish": "pnpm --filter @premiumpass/outbox-publisher run publish",
+    "dev:outbox": "pnpm --filter @premiumpass/outbox-publisher run dev",
+    "dev:events": "pnpm --filter @premiumpass/outbox-publisher run consume",
     "reconcile": "pnpm --filter @premiumpass/subscription-worker run reconcile",
     "dev:reconcile": "pnpm --filter @premiumpass/subscription-worker run reconcile --watch",
     "google-mock": "pnpm --filter @premiumpass/subscription-worker run google-mock"

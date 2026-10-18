@@ -603,6 +603,55 @@ importers:
         specifier: 6.0.3
         version: 6.0.3
 
+  services/outbox-publisher:
+    dependencies:
+      '@aws-sdk/client-dynamodb':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/client-eventbridge':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/client-sqs':
+        specifier: 3.1149.0
+        version: 3.1149.0
+      '@aws-sdk/lib-dynamodb':
+        specifier: 3.1149.0
+        version: 3.1149.0(@aws-sdk/client-dynamodb@3.1149.0)
+      '@premiumpass/aws-clients':
+        specifier: workspace:*
+        version: link:../../packages/aws-clients
+      '@premiumpass/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@premiumpass/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
+      '@premiumpass/persistence':
+        specifier: workspace:*
+        version: link:../../packages/persistence
+      pino:
+        specifier: 10.4.0
+        version: 10.4.0
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
+    devDependencies:
+      '@types/node':
+        specifier: 24.19.2
+        version: 24.19.2
+      commander:
+        specifier: 15.0.0
+        version: 15.0.0
+      esbuild:
+        specifier: 0.28.2
+        version: 0.28.2
+      tsx:
+        specifier: 4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+
   services/stripe-webhook:
     dependencies:
       '@aws-sdk/client-secrets-manager':
@@ -770,6 +819,10 @@ packages:
 
   '@aws-sdk/client-dynamodb@3.1149.0':
     resolution: {integrity: sha512-4rQKa/Y9C4p1QFGPni2OjDiLLyIZi2niGiWUktzxZl5dxMZycz7bKjzt6c7kQ5CA0KzCcz8hu/huyXneYTBEkg==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-eventbridge@3.1149.0':
+    resolution: {integrity: sha512-mYN5XT0u/g0cDMi7NoHEwrfIr5tIyJEbyc5mbMTU+oi3BKdHl+rUAO0PMALaaMqzzKdECLyAhxVWONftsciKtQ==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-secrets-manager@3.1149.0':
@@ -6579,6 +6632,18 @@ snapshots:
       '@aws-sdk/credential-provider-node': 3.972.85
       '@aws-sdk/dynamodb-codec': 3.973.47
       '@aws-sdk/middleware-endpoint-discovery': 3.972.32
+      '@aws-sdk/types': 3.974.6
+      '@smithy/core': 3.35.2
+      '@smithy/fetch-http-handler': 5.8.0
+      '@smithy/node-http-handler': 4.12.1
+      '@smithy/types': 4.19.0
+      tslib: 2.8.1
+
+  '@aws-sdk/client-eventbridge@3.1149.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.2
+      '@aws-sdk/credential-provider-node': 3.972.85
+      '@aws-sdk/signature-v4-multi-region': 3.996.48
       '@aws-sdk/types': 3.974.6
       '@smithy/core': 3.35.2
       '@smithy/fetch-http-handler': 5.8.0

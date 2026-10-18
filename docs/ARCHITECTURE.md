@@ -6,13 +6,14 @@ subscriptions in DynamoDB. [Product overview](../README.md) · [Setup](GETTING_S
 
 ## Responsibilities
 
-| Layer           | Responsibility                                                                         | Start reading                                                                                                                                                                                                                                                              |
-| --------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Clients         | Login, display backend access, initiate purchases                                      | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                                                                                                                                                           |
-| API             | Verify Auth0 tokens/scopes, resolve user, serve profile/access, initiate local billing | [API](../services/api/README.md)                                                                                                                                                                                                                                           |
-| Webhooks        | Verify provider signatures and enqueue references                                      | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md)                                                                                                                                                                               |
-| Worker          | Verify current provider state/ownership; persist atomically                            | [Worker](../services/subscription-worker/README.md)                                                                                                                                                                                                                        |
-| Shared packages | Domain rules, persistence, contracts, SDK construction, logging                        | [Domain](../packages/domain/src/subscriptions.ts), [HTTP contracts](../packages/api-contracts/README.md), [queue contracts](../packages/billing-contracts/README.md), [AWS clients](../packages/aws-clients/README.md), [Apple adapter](../packages/apple-store/README.md) |
+| Layer                       | Responsibility                                                                         | Start reading                                                                                                                                                                                                                                                              |
+| --------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clients                     | Login, display backend access, initiate purchases                                      | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                                                                                                                                                           |
+| API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, initiate local billing | [API](../services/api/README.md)                                                                                                                                                                                                                                           |
+| Webhooks                    | Verify provider signatures and enqueue references                                      | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md)                                                                                                                                                                               |
+| Worker                      | Verify current provider state/ownership; persist atomically                            | [Worker](../services/subscription-worker/README.md)                                                                                                                                                                                                                        |
+| Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                 | [Outbox](../services/outbox-publisher/README.md)                                                                                                                                                                                                                           |
+| Shared packages             | Domain rules, persistence, contracts, SDK construction, logging                        | [Domain](../packages/domain/src/subscriptions.ts), [HTTP contracts](../packages/api-contracts/README.md), [queue contracts](../packages/billing-contracts/README.md), [AWS clients](../packages/aws-clients/README.md), [Apple adapter](../packages/apple-store/README.md) |
 
 Hono belongs to HTTP services. Domain code receives ordinary values and a clock,
 not HTTP contexts. Each executable owns its configuration and local/Lambda entry
@@ -33,13 +34,16 @@ flowchart TB
         API -->|"Read access"| DB
         API -->|"Apple sync"| Queue
         Hooks --> Queue --> Worker -->|"Atomic writes"| DB
+        DB -->|"Pending outbox"| Publisher["Outbox publisher"]
+        Publisher --> Events["Separate ElasticMQ event queue"] --> Consumer["Log consumer"]
     end
     Clients -->|"Loopback / LAN"| API
     Forward --> Hooks
 ```
 
 `pnpm dev` starts the five app processes and Docker/table initialization.
-Stripe CLI, Mobile, and ngrok run separately. Apple stays disabled until
+Stripe CLI, Mobile, ngrok, the optional outbox publisher/log consumer, and the
+local reconciliation watcher run separately. Apple stays disabled until
 configured. API checkout and worker verification call external provider APIs.
 No AWS credentials are required. Docker provides storage/queue
 services; application code runs on the host. [Commands](DEVELOPMENT.md#run-and-check).
@@ -86,11 +90,10 @@ and the sole [verification record](TASKS.md).
 - [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 
-Outbox publication to EventBridge, scheduled reconciliation, and independent
-Google mock provider state are extensions tracked in P07–P09. Pending outbox
-records already exist; API expiry checks do not depend on those future jobs.
-
-Local reconciliation enqueues Stripe, known Apple Sandbox, and Google mock refreshes
-plus due expiration jobs through the subscription worker. Independent Google mock
-state supports suppressed-event exercises. See the [Reconciliation guide](RECONCILIATION.md)
-for discovery, processing, and the local/cloud boundary.
+Local outbox publication uses a separate ElasticMQ queue and log consumer. The
+EventBridge adapter has no deployed bus/rule or cloud runtime wiring. Local
+reconciliation enqueues Stripe, known Apple Sandbox, and Google mock refreshes
+plus due expiration jobs through the subscription worker. Independent Google mock state supports
+suppressed-event exercises; cloud reconciliation remains outstanding in P09.
+API access and expiry checks do not depend on event publication or
+consumer success.

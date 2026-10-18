@@ -49,6 +49,8 @@ export function useDashboard(enabled: boolean) {
     function checkExpiry() {
       const remaining = deadline - Date.now();
       if (remaining > 0) {
+        // JavaScript timers cannot represent arbitrary subscription lifetimes;
+        // wake in bounded chunks and compare against the same deadline again.
         timer = setTimeout(checkExpiry, Math.min(remaining, 2_147_483_647));
         return;
       }
@@ -74,6 +76,8 @@ export function useDashboard(enabled: boolean) {
           : 'Unable to load your profile. Please retry.',
     };
   } else if (expired) {
+    // Cached data can survive a failed/offline refresh. Hide stale Premium UI
+    // until reverified; the API independently enforces access on every request.
     state = overview.isFetching
       ? { status: 'loading' }
       : {

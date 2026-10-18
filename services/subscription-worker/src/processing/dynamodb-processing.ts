@@ -392,7 +392,8 @@ export class DynamoDbProcessingStore {
       },
       ...writes,
       // Save publication intent with state to close the save-then-publish crash
-      // window. P08 will publish pending entries; API access never waits for it.
+      // window. The separate outbox publisher sends pending entries; API access
+      // never waits for publication or downstream consumers.
       ...(event
         ? [
             {

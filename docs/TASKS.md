@@ -19,7 +19,7 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P05 | Subscription and entitlement domain rules  | P01, P02, P03 local                  | complete |
 | P06 | Stripe purchase and reliable processing    | P02, P03, P05                        | partial  |
 | P07 | Apple sandbox and Google mocks             | P04, P05, P06 local processing       | partial  |
-| P08 | Outbox publisher and EventBridge           | P06                                  | open     |
+| P08 | Outbox publisher and EventBridge           | P06                                  | partial  |
 | P09 | Reconciliation and expiration              | P07, P08                             | partial  |
 | P10 | CI/CD, operations, and final demo          | P04, P06–P09                         | open     |
 | P11 | Self-service subscription cancellation     | P06; P07 for stores                  | partial  |
@@ -45,6 +45,16 @@ evidence. AWS deployment and verification remain a separately authorized path.
   Compared setup with code and official provider guides; `pnpm format`,
   `pnpm check`, Markdown formatting, 160 local links/anchors, and diff checks
   passed (same Web bundle warning). No fresh-account setup or device run performed.
+
+- **Workshop readability, October 15:** recorded the code-as-learning-material
+  rule in `AGENTS.md`; added targeted explanations to 13 source files covering
+  checkout recovery, access expiration, Apple completion, reconciliation,
+  outbox delivery, and client caching. Comments identify demo tradeoffs and
+  concrete production considerations. `pnpm format`, `pnpm check` (including
+  iOS JavaScript export), and a TypeScript syntax comparison with comments
+  removed passed; executable code and types are unchanged from the starting
+  working tree. The Web bundle-size warning remains. No new automated tests,
+  device runs, provider requests, or AWS verification were needed or performed.
 
 ## P01 Local HTTP skeleton
 
@@ -215,8 +225,33 @@ evidence. AWS deployment and verification remain a separately authorized path.
   entries pending; crash-after-send retry loses nothing and duplicates retain the
   same domain event ID. Trace a live outbox event into the consumer log. Access
   must not depend on consumer success.
-- **Status:** no publisher/consumer implementation or live evidence yet; pending
-  outbox writes already exist. See [target behavior](../PROJECT_PLAN.md#remaining-target-behavior).
+- **Implemented, October 15:** separate local publisher and log consumer; paginated
+  pending-record scan, ten-entry batches, stable domain IDs, conditional sent
+  markers, per-entry acceptance, dry-run and repeat mode. Dedicated ElasticMQ
+  queue/DLQ is the local transport substitute. Official EventBridge SDK adapter
+  checks the bus and individual responses; local commands never target AWS.
+- **Local evidence, October 15:** `pnpm format` and `pnpm check` passed (existing
+  Web bundle-size warning), as did Markdown formatting, 60 relative links/anchors,
+  and diff checks. Disposable DynamoDB/ElasticMQ resources exercised the existing
+  atomic writer through publication to consumer logging, unchanged snapshots/access,
+  empty scan pages, batches of ten, dry-run, invalid-record isolation, missing
+  receipts, outages, concurrent publishers, lost update responses, and crash-after-
+  send retries with stable IDs. Substituted EventBridge SDK responses covered
+  HTTP-200 partial failure and missing-bus rejection. Queue recreation after
+  deletion and built-process startup/SIGTERM passed. Temporary resources were
+  removed; the real local table was only previewed (14 pending, zero writes).
+  No automated tests or AWS requests/deployment were added.
+- **Commit verification, October 18:** `pnpm format`, `pnpm check`, changed-file
+  Markdown formatting, 196 relative links/anchors, CLI help, and diff checks passed.
+  A disposable DynamoDB Local table and ElasticMQ queues verified zero-write
+  preview, atomic worker outbox publication to consumer logging, unchanged access,
+  crash-after-send retry IDs, missing receipts, and isolated EventBridge partial
+  responses/bus failures. Temporary resources were removed; no real provider or
+  AWS requests/deployment were performed. Cloud acceptance remains outstanding.
+- **Outstanding:** cloud runtime/CDK bus/rule and separate target-delivery versus
+  Lambda-execution failure handling; deployment/IAM and a live EventBridge trace.
+  Local ElasticMQ acceptance is not AWS evidence and messages do not survive a
+  broker restart. [Local operation](../services/outbox-publisher/README.md).
 
 ## P09 Reconciliation and expiration
 

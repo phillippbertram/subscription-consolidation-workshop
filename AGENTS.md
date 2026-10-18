@@ -19,6 +19,14 @@ Read [README.md](README.md) first, followed by [docs/DECISIONS.md](docs/DECISION
 - Use English throughout the project: code, identifiers, comments, runtime messages, configuration examples, documentation, and task records. Keep existing technical identifiers and product names where appropriate.
 - Always use braces for conditionals and loops. Separate logical phases with blank lines; keep related declarations, calls, and results together when they form one logical step. Prefer clear names and focused functions over decorative section comments. Run `pnpm format` to apply ESLint structure fixes and Prettier, then `pnpm check` to verify the result. Do not disable style rules to avoid formatting a file.
 
+## Code as learning material
+
+- Treat existing and future code as workshop/tutorial material. Prefer readable names, explicit control flow, and focused functions that a learner can follow over clever shortcuts or unnecessary abstractions.
+- Add concise English comments where the reasoning is not obvious: why a step exists, why order matters, what invariant it protects, and how it connects to the next component. Do not narrate self-explanatory syntax or comment every line.
+- Explain deliberate demo simplifications at the relevant implementation. Mention an alternative and why the simpler approach fits this project when that comparison helps understanding.
+- Where a simplification matters for production, identify the concrete missing decision or requirement. Clearly distinguish current guarantees from future considerations; a comment is not authorization to implement production features.
+- Keep explanations next to the code they describe and update them when behavior changes. Use a short function-level overview for multi-step flows and inline comments for individual decisions; avoid duplicating whole architecture guides.
+
 ## Architecture rules
 
 - Auth0 handles login. Access token verification and scope checks run in the backend before protected handlers. Do not configure a JWT or Lambda authorizer in API Gateway.

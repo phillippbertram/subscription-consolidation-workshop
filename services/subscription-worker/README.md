@@ -1,8 +1,15 @@
 # Subscription worker
 
-Consumes billing jobs, verifies current provider state and ownership, then commits
-subscriptions, all-provider access, completion markers, and pending outbox changes
-atomically. It has no HTTP framework. [Processing rules](../../docs/PAYMENTS.md#processing-and-retries).
+Processes subscription updates from PremiumPass's billing queue: Amazon SQS in
+AWS, or ElasticMQ locally. The Stripe and Apple webhook services add jobs after
+verifying incoming events. Locally, Apple purchase/restore requests through the
+API, reconciliation runs, and Google mock tools also add jobs to this queue.
+
+The worker checks the current subscription state and which user it belongs to,
+then updates subscriptions and Premium access in DynamoDB. It saves these changes
+together with completion markers and pending outgoing events in one atomic write
+so retries remain safe. It runs in the background without an HTTP framework.
+[Processing rules](../../docs/PAYMENTS.md#processing-and-retries).
 
 For Apple, the worker then finishes the verified transaction and records
 `finishedAt` before acknowledging the job. Retries of a committed event resume
@@ -16,7 +23,7 @@ this step without another domain/outbox write. [Apple recovery](../../docs/APPLE
 | `src/processing/`                             | Provider reads, normalization, idempotency and transactions           |
 | `scripts/subscription-cli.ts`, `src/cli/`     | CLI lifecycle, commands, prompts and presentation                     |
 | `src/local-admin/`                            | Fixed local database edits, seeding and reconciliation setup          |
-| `scripts/reconcile.ts`, `src/reconciliation/` | Local paginated discovery, five-minute runner and provider refreshes   |
+| `scripts/reconcile.ts`, `src/reconciliation/` | Local paginated discovery, five-minute runner and provider refreshes  |
 | `scripts/google-mock.ts`                      | Independent Google mock changes and optional notification suppression |
 | `src/reconciliation/stripe.ts`                | Reusable Stripe discovery through the existing processor              |
 

@@ -83,6 +83,11 @@ export function normalizeProviderStatus(
 
 export const GRACE_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Turn verified provider records into access at one explicit point in time.
+ * The injected time keeps API reads and background workers on the same policy;
+ * callers need no provider request to enforce an already-known expiration.
+ */
 export function deriveEntitlements(
   subscriptions: readonly Subscription[],
   now: Date,

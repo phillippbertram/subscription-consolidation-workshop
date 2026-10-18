@@ -5,9 +5,13 @@ export function createQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
+        // These tune refetching and memory use, not how long Premium is valid.
+        // The dashboard separately expires the backend's access snapshot.
         staleTime: 30_000,
         gcTime: 5 * 60_000,
         retry: (failureCount, error) => {
+          // Retry only transient read failures. Repeating a permission denial
+          // or invalid response cannot repair it and would delay useful feedback.
           if (failureCount >= 2 || !(error instanceof ApiError)) {
             return false;
           }
@@ -20,6 +24,8 @@ export function createQueryClient() {
           );
         },
       },
+      // A failed response may hide a completed write. Each mutation needs an
+      // explicit recovery/idempotency strategy before automatic retries are safe.
       mutations: { retry: false },
     },
   });

@@ -7,6 +7,11 @@ import {
   type CheckoutSession,
 } from './contracts.js';
 
+/**
+ * Reserve a purchase intent locally, create/recover it at Stripe, then return
+ * its URL. Stripe and DynamoDB cannot share one transaction, so durable intent
+ * plus repeatable provider calls lets retries resume after an interrupted step.
+ */
 export class CheckoutService {
   constructor(
     private readonly store: BillingStore,

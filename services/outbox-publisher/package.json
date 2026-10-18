@@ -1,0 +1,31 @@
+{
+  "name": "@premiumpass/outbox-publisher",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/local.ts --watch",
+    "publish": "tsx src/local.ts",
+    "consume": "tsx src/local-consumer.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "esbuild src/local.ts src/local-consumer.ts --bundle --platform=node --target=node24 --format=esm --outdir=dist --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1149.0",
+    "@aws-sdk/client-eventbridge": "3.1149.0",
+    "@aws-sdk/client-sqs": "3.1149.0",
+    "@aws-sdk/lib-dynamodb": "3.1149.0",
+    "@premiumpass/aws-clients": "workspace:*",
+    "@premiumpass/domain": "workspace:*",
+    "@premiumpass/logging": "workspace:*",
+    "@premiumpass/persistence": "workspace:*",
+    "pino": "10.4.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "commander": "15.0.0",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3"
+  }
+}

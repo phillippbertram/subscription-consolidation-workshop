@@ -12,6 +12,8 @@ work, local diagnostics, and cleanup. Commands run from the repository root.
 | `pnpm dev:api` / `pnpm dev:api:lan`                     | API on loopback / all IPv4 interfaces                                                          |
 | `pnpm dev:webhook` / `pnpm dev:apple-webhook`           | Individual Stripe / Apple ingress                                                              |
 | `pnpm dev:worker` / `pnpm web:dev`                      | Individual worker / website                                                                    |
+| `pnpm outbox:publish --dry-run` / `pnpm outbox:publish` | Preview / publish pending local outbox events                                                  |
+| `pnpm dev:outbox` / `pnpm dev:events`                   | Watch local outbox / run its separate log consumer                                             |
 | `pnpm reconcile --dry-run` / `pnpm reconcile`           | Preview / enqueue local reconciliation across all users                                        |
 | `pnpm dev:reconcile`                                    | Repeat local reconciliation every five minutes                                                 |
 | `pnpm google-mock --help`                               | Change independent local Google mock state                                                     |
@@ -58,6 +60,22 @@ tokens are not automatically logged; use synthetic request data only.
 | Checkout succeeds but access stays Free | [Payment checks](PAYMENTS.md#manual-checks)                                                   |
 | iPhone cannot reach API                 | API LAN binding, device permission, and Mac address; not phone localhost                      |
 | Apple notification fails                | [ngrok and notification checks](APPLE_PURCHASES.md#receive-apple-notifications-through-ngrok) |
+
+## Local outbox
+
+Start `pnpm dev:events` in one terminal and `pnpm dev:outbox` in another after
+`pnpm local:up`. These services are separate from `pnpm dev`. No Apple, Stripe,
+or AWS credentials are needed. The publisher reads the fixed local table and
+creates a separate ElasticMQ event queue/DLQ on demand.
+
+Use `pnpm outbox:publish --dry-run` to preview pending IDs without writes, then
+`pnpm outbox:publish` for one pass. Match `domainEventId` in `outbox.sent` and
+`subscription.changed` logs. Failed entries remain pending; a one-pass failure
+returns a nonzero exit code. Consumer failure does not undo publication or access.
+
+ElasticMQ is a local transport substitute, not EventBridge. Accepted messages
+are lost on container restart even if the outbox is already marked sent. Keep
+the broker running during verification. [Publisher behavior and cloud boundary](../services/outbox-publisher/README.md).
 
 ## Local subscription CLI
 
@@ -121,15 +139,15 @@ own runs. Stop with `Ctrl+C`; these commands are separate from `pnpm dev`.
 Follow [run diagnostics](RECONCILIATION.md#follow-a-run) to distinguish queue
 acceptance from completed repair.
 
-| Option                      | Effect                                                       |
-| --------------------------- | ------------------------------------------------------------ |
-| `--user <internal-user-id>` | Limit discovery to one existing local profile                |
+| Option                      | Effect                                                                            |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| `--user <internal-user-id>` | Limit discovery to one existing local profile                                     |
 | `--provider all`            | Stripe test, known Apple Sandbox subscriptions, and managed Google mocks; default |
-| `--provider stripe`         | Stripe test only                                             |
-| `--provider apple`          | Known Apple Sandbox subscriptions only                       |
-| `--provider google_mock`    | Independent Google mock state only; no provider keys         |
-| `--provider none`           | Expiration only; no provider keys                            |
-| `--dry-run`                 | Read and report differences without database or queue writes |
+| `--provider stripe`         | Stripe test only                                                                  |
+| `--provider apple`          | Known Apple Sandbox subscriptions only                                            |
+| `--provider google_mock`    | Independent Google mock state only; no provider keys                              |
+| `--provider none`           | Expiration only; no provider keys                                                 |
+| `--dry-run`                 | Read and report differences without database or queue writes                      |
 
 Expiration is included with every provider selection. It recalculates due
 entitlement snapshots from stored verified boundaries without changing provider

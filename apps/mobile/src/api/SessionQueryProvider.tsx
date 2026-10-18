@@ -19,6 +19,8 @@ export function SessionQueryProvider({
   const [client] = useState(createQueryClient);
 
   useEffect(() => {
+    // React Native has app/network events instead of browser focus events.
+    // Forward them so cached account data can refresh on return or reconnect.
     focusManager.setFocused(AppState.currentState === 'active');
     const appState = AppState.addEventListener('change', (state) => {
       focusManager.setFocused(state === 'active');
@@ -31,6 +33,8 @@ export function SessionQueryProvider({
     });
     void Network.getNetworkStateAsync()
       .then((state) => {
+        // The initial async lookup can finish after a newer network event;
+        // never let that older snapshot overwrite the live listener's result.
         if (current && !receivedNetworkEvent) {
           onlineManager.setOnline(state.isConnected !== false);
         }

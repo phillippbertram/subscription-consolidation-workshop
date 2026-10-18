@@ -47,8 +47,8 @@ and [Apple setup](APPLE_PURCHASES.md#enable-local-processing).
    all-provider access, completion marker, and any domain-change outbox event.
    Expiration jobs use stored boundaries instead of a provider request.
 4. **Complete delivery.** Apple finishes the verified transaction after commit
-   and records `finishedAt` before queue acknowledgement. Outbox publication is a
-   separate path tracked in P08; access does not wait for an event consumer.
+   and records `finishedAt` before queue acknowledgement. Outbox publication runs
+   separately; access does not wait for an event consumer.
 
 The queue payload never proves a purchase or grants access. Internal refresh
 schemas remain separate from notification/client ingress. Local Apple

@@ -118,7 +118,12 @@ Separate consistent reads alone are not an atomic snapshot.
 A duplicate event makes no writes. An unchanged new verification updates the
 aggregate/verification metadata without another domain-change outbox event.
 Grant source revisions can therefore differ from the aggregate revision.
-Outbox publication is P08; pending records have no automatic TTL cleanup.
+The local publisher scans pending events and conditionally changes only their
+status to `sent`, adding `sentAt` and `publishedEventId` after transport acceptance.
+The stable `domainEventId` survives retries; the transport ID can change. A crash
+after acceptance but before the update can publish a duplicate. No subscription,
+aggregate, or completion marker changes during publication. Outbox records have
+no automatic TTL cleanup. [Publisher behavior](../services/outbox-publisher/README.md).
 
 ## Apple sandbox records
 
@@ -161,21 +166,24 @@ Processing markers and outbox records have no automatic cleanup or TTL.
 
 ## Access patterns
 
-| Operation                                            | Pattern                                                                                                     |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                            |
-| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                        |
-| Identity creation                                    | Conditional transaction for mapping + profile                                                               |
-| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                |
-| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                    |
+| Operation                                            | Pattern                                                                                                                                                 |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity/profile/customer/checkout/completion lookup | Consistent `GetItem` by full key                                                                                                                        |
+| All subscriptions for a user                         | Paginated consistent `Query`, `pk=USER#U`, `begins_with(sk, 'SUB#')`                                                                                    |
+| Identity creation                                    | Conditional transaction for mapping + profile                                                                                                           |
+| Customer/checkout reservation                        | Conditional puts/transactions with owner/request comparisons                                                                                            |
+| Provider commit                                      | Transaction: subscription, aggregate, owner, completion, optional outbox                                                                                |
 | Local reconciliation discovery                       | Paginated profile `Scan` and subscription `Query`, then Stripe customer/provider discovery, known Apple lineage refresh, and Google mock source `Query` |
-| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows           |
+| Local outbox discovery                               | Paginated consistent `Scan` filtered by `OUTBOX#`, `EVENT`, and pending status; reads the whole table                                                   |
+| Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance                                                             |
+| Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows                                                       |
 
-User-facing flows use no table scan. Local reconciliation scans the small demo
-table for profiles and queries their subscriptions, then uses provider-specific
-discovery and the shared processor. Cloud scheduling, production discovery indexes,
-and outbox publication remain separate work. Direct DynamoDB Admin edits bypass
-these guarantees.
+User-facing flows use no table scan. Local outbox discovery scans the small demo
+table without an index; filters do not reduce read capacity. Local Stripe
+reconciliation discovers provider subscriptions through the stored customer and
+reuses processing. The local five-minute reconciliation watcher also scans
+profiles; a cloud scheduler and production-scale discovery indexes are not wired.
+Direct DynamoDB Admin edits bypass these guarantees.
 
 Sources: [user store](../services/api/src/dynamodb-users.ts),
 [checkout store](../services/api/src/billing/dynamodb-billing.ts),

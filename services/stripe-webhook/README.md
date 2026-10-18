@@ -1,5 +1,10 @@
 # Stripe webhook
 
+Receives Stripe events so subscription and payment changes in Stripe are reflected
+in the PremiumPass database. It verifies each event and queues it for the
+[subscription worker](../subscription-worker/README.md), which checks the current
+Stripe state and updates subscriptions and access in the database.
+
 Verifies Stripe signatures against unchanged bytes and enqueues minimal references
 before acknowledging supported events. It grants no access and has no database
 or Auth0 dependency. [Payment processing](../../docs/PAYMENTS.md#processing-and-retries).
