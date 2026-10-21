@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  stripePlanIdSchema,
+  type StripePlanId,
+} from '@premiumpass/api-contracts';
 
 export class CheckoutError extends Error {
   constructor(
@@ -23,6 +27,8 @@ export const attemptSchema = z.object({
   fingerprint: z.string(),
   customerId: z.string().startsWith('cus_'),
   priceId: z.string().startsWith('price_'),
+  // Records created before daily billing were always monthly. Keep their intent.
+  planId: stripePlanIdSchema.default('premium_monthly'),
   successUrl: z.url(),
   cancelUrl: z.url(),
   createdAt: z.number().int(),
@@ -101,6 +107,7 @@ export interface CheckoutSession {
   userId: string;
   requestId: string;
   status: 'open' | 'complete' | 'expired';
+  planId: StripePlanId;
   /** Hosted checkout URL, or null when Stripe provides no redirect target. */
   url: string | null;
   /** Provider-confirmed session expiration in Unix seconds. */
@@ -114,8 +121,12 @@ export interface CheckoutSession {
  * grants entitlements; subscription verification belongs to the worker.
  */
 export interface BillingProvider {
-  /** Reject prices/products outside the supported active monthly test plan. */
-  validatePrice(priceId: string): Promise<void>;
+  /** Resolve the current offer and reject prices outside the allowed test product. */
+  resolvePrice(
+    productId: string,
+    priceLookupKey: string,
+    planId: StripePlanId,
+  ): Promise<string>;
 
   /**
    * Create using the persisted intent's requestId as the basis for provider

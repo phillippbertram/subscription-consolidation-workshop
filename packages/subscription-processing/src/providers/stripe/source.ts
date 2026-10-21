@@ -17,7 +17,7 @@ function stripeObjectId(value: string | { id: string } | null | undefined) {
 export class StripeSubscriptionSource implements StripeSource {
   constructor(
     private readonly stripe: Stripe,
-    private readonly priceId: string,
+    private readonly productId: string,
   ) {}
 
   async locate(
@@ -94,18 +94,30 @@ export class StripeSubscriptionSource implements StripeSource {
     }
 
     const item = subscription.items.data[0];
-    // Metadata alone cannot turn an arbitrary price into Premium. Unknown
-    // billing configurations remain visible but do not grant access.
+    const planId = subscription.metadata.planId;
+    const supportedPlan =
+      planId === 'premium_daily' || planId === 'premium_monthly';
+    const expectedInterval = planId === 'premium_daily' ? 'day' : 'month';
+    // The configured product grants Premium across price generations. A lookup
+    // key only selects new offers: old prices may lose that key or be archived
+    // while their subscriptions keep renewing. Do not require an active price.
+    // Metadata alone cannot grant access; ownership, product and supported
+    // billing period must match before we examine paid service periods.
     const mapped =
+      supportedPlan &&
       !subscription.items.has_more &&
       subscription.items.data.length === 1 &&
-      item?.price.id === this.priceId &&
+      stripeObjectId(item?.price.product) === this.productId &&
+      item !== undefined &&
       item.quantity === 1 &&
       !item.price.livemode &&
-      item.price.recurring?.interval === 'month' &&
+      item.price.type === 'recurring' &&
+      item.price.billing_scheme === 'per_unit' &&
+      item.price.unit_amount !== null &&
+      item.price.unit_amount > 0 &&
+      item.price.recurring?.interval === expectedInterval &&
       item.price.recurring.interval_count === 1 &&
-      item.price.recurring.usage_type === 'licensed' &&
-      subscription.metadata.planId === 'premium_monthly';
+      item.price.recurring.usage_type === 'licensed';
     let paidEnd: number | null = null;
     if (
       mapped &&
@@ -148,7 +160,10 @@ export class StripeSubscriptionSource implements StripeSource {
 
         for (const line of invoice.lines.data) {
           // Paid invoices can contain adjustments or unrelated lines. Only the
-          // matching recurring item proves the service period we can grant.
+          // matching recurring item and its actual price prove the service period
+          // we can grant. Accepting every price of the product here would confuse
+          // old adjustments with payment for the current item. Mid-cycle plan
+          // changes/prorations need a separate policy and are outside this demo.
           const parent = line.parent?.subscription_item_details;
           if (
             !parent ||
@@ -156,7 +171,7 @@ export class StripeSubscriptionSource implements StripeSource {
             parent.subscription !== target.subscriptionId ||
             parent.subscription_item !== item.id ||
             stripeObjectId(line.pricing?.price_details?.price) !==
-              this.priceId ||
+              item.price.id ||
             line.quantity !== 1 ||
             line.amount <= 0
           ) {
@@ -197,7 +212,7 @@ export class StripeSubscriptionSource implements StripeSource {
 
     return {
       providerSubscriptionId: subscription.id,
-      productId: mapped ? 'premium_monthly' : 'unmapped_product',
+      productId: mapped ? planId : 'unmapped_product',
       status: subscription.status,
       // Stripe leaves its boolean false for a custom cancel_at even when that
       // date is now the item period end. Normalize both as an ending period.

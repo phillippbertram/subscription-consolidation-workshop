@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 const credentialsSchema = z.object({
   secretKey: z.string().regex(/^sk_test_[A-Za-z0-9]+$/),
-  priceId: z.string().regex(/^price_[A-Za-z0-9]+$/),
+  productId: z.string().regex(/^prod_[A-Za-z0-9]+$/),
 });
 export type StripeCredentials = z.infer<typeof credentialsSchema>;
 
@@ -16,11 +16,11 @@ export async function readStripeCredentials(
   if (local) {
     const parsed = credentialsSchema.safeParse({
       secretKey: env.STRIPE_SECRET_KEY,
-      priceId: env.STRIPE_PRICE_ID,
+      productId: env.STRIPE_PRODUCT_ID,
     });
     if (!parsed.success) {
       throw new Error(
-        'Configure STRIPE_SECRET_KEY (test mode) and STRIPE_PRICE_ID in the calling app or worker environment.',
+        'Configure STRIPE_SECRET_KEY (test mode) and STRIPE_PRODUCT_ID in the calling app or worker environment.',
       );
     }
 

@@ -29,7 +29,7 @@ const messages: Record<string, string> = {
   auth0_profile_identity_mismatch:
     'Your Auth0 profile does not match this session. Sign out and sign in again.',
   checkout_unavailable:
-    'Checkout is not configured. Add the Stripe test values to services/api/.env and restart the local API.',
+    'Checkout is not configured. Add the Stripe test values to config/.env, run pnpm config:sync, and restart the local API.',
   insufficient_scope:
     'Your token needs read:me, read:premium, and write:checkout, plus the openid and email scopes. Check Auth0 permissions and sign in again.',
   premium_required:

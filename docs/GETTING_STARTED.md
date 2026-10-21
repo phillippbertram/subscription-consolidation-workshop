@@ -28,28 +28,34 @@ pnpm install --frozen-lockfile
 
 **Check:** `node --version` and `pnpm --version` match the table. Start Docker
 and confirm both `docker compose version` and `docker info` work. Run `nvm use`
-in each new terminal. AWS and Xcode are not required for this path.
+in each new terminal. AWS and Xcode are not required for this path. The AWS and
+store accounts for later modules are listed in [What you need](../README.md#what-you-need).
 
 **Data:** no import or seed is required. First login creates the local profile;
 checkout creates the owned Stripe customer/subscription. Score history is a
 synthetic fixture in the API. Use fictional names and test payment details;
 the login email must reach a mailbox you control for verification.
 
-## 2. Create local configuration files
+## 2. Create the configuration
 
-This loop copies examples only when the corresponding file does not exist:
+All settings live in one ignored file, `config/.env`. Create it from the
+template only when it does not exist yet:
 
 ```sh
-for directory in services/api services/stripe-webhook services/apple-webhook services/subscription-worker apps/web; do
-  if [ ! -e "$directory/.env" ]; then
-    cp "$directory/.env.example" "$directory/.env"
-  fi
-done
+[ -e config/.env ] || cp config/.env.example config/.env
 ```
 
-Edit these ignored files with your own values in the next steps. Keep Apple
-settings disabled (`APPLE_ENABLED=false`) for the initial Stripe path.
-Each process loads its own `.env`; existing shell variables take precedence.
+Edit only this file in the next steps. `pnpm config:sync` writes the `.env`
+file of every app and service from it, each with only the settings that
+program reads ([who gets what](../config/targets.mjs)), and `pnpm dev` runs the
+sync first on its own. Keep `APPLE_ENABLED=false` and
+`GOOGLE_PLAY_ENABLED=false` for the initial Stripe path. Existing shell
+variables still take precedence over the generated files.
+
+Coming from an earlier version with one `.env` per service? Run
+`pnpm config:import` once instead of copying the template: it builds
+`config/.env` from those files and reports conflicting values by file name,
+never by value.
 
 ## 3. Set up Auth0
 
@@ -63,43 +69,46 @@ different values; neither is a client secret.
 
 ## 4. Set up Stripe
 
-Complete [Stripe test setup](PAYMENTS.md#stripe-test-setup). Create the monthly
-price, sign into the CLI, and start `pnpm stripe:listen` in a separate terminal.
-Keep it running and copy its signing secret into the webhook configuration.
+Complete [Stripe test setup](PAYMENTS.md#stripe-test-setup). Create the daily and monthly
+prices with lookup keys `premium_daily` and `premium_monthly`, sign into the CLI, and start `pnpm stripe:listen` in a separate terminal.
+Keep it running and copy its signing secret into `STRIPE_WEBHOOK_SECRET` in
+`config/.env`.
 
-**Check:** API and worker use the same Stripe test environment and price.
+**Check:** API and worker use the same Stripe test environment and product.
 The listener secret belongs to the local CLI, not a Dashboard webhook endpoint.
 
 ## 5. Connect the configuration
 
-Replace placeholders in these files. Browser values are public; Stripe keys
-and signing secrets belong only in the indicated backend files. In
-`services/api/.env`, remove the leading `#` from **both** `STRIPE_SECRET_KEY`
-and `STRIPE_PRICE_ID`; commented lines leave checkout disabled. Save values as
-`NAME=value`, without placeholders, and restart services after later edits.
+Replace the placeholders in `config/.env`. Browser values are public; the sync
+sends Stripe keys and signing secrets only to the backend programs listed in
+[config/targets.mjs](../config/targets.mjs). Remove the leading `#` from
+`STRIPE_SECRET_KEY`, `STRIPE_PRODUCT_ID`, `STRIPE_MONTHLY_PRICE_LOOKUP_KEY`, and
+`STRIPE_DAILY_PRICE_LOOKUP_KEY`; commented lines leave checkout disabled. Save
+values as `NAME=value`, without placeholders. After later edits, run
+`pnpm config:sync` (or restart `pnpm dev`) and restart the affected processes.
 
-| Value / source                                                       | Destination                                                |
-| -------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Auth0 domain, e.g. `your-tenant.eu.auth0.com`                        | `apps/web/.env`: `VITE_AUTH0_DOMAIN`                       |
-| Same domain as HTTPS issuer, ending in `/`                           | `services/api/.env`: `AUTH0_ISSUER`                        |
-| Custom API identifier                                                | API: `AUTH0_AUDIENCE`; Web: `VITE_AUTH0_AUDIENCE`          |
-| SPA Client ID                                                        | Web: `VITE_AUTH0_CLIENT_ID`                                |
-| Stripe test secret key                                               | API and worker: `STRIPE_SECRET_KEY`                        |
-| Stripe recurring price ID                                            | API and worker: `STRIPE_PRICE_ID`                          |
-| Signing secret printed by the running listener                       | Stripe webhook: `STRIPE_WEBHOOK_SECRET`                    |
-| Website origin `http://localhost:5173`                               | API: `WEB_ORIGIN`; Auth0 SPA allowlists                    |
-| API address `http://127.0.0.1:3000`                                  | Web: `VITE_API_URL`                                        |
-| Local table `premiumpass-local` and endpoint `http://127.0.0.1:8000` | API and worker: `DYNAMODB_TABLE_NAME`, `DYNAMODB_ENDPOINT` |
-| Local queue from the examples                                        | Both webhooks, API, and worker: `SUBSCRIPTION_QUEUE_URL`   |
+| Value / source                                          | Setting in `config/.env`          | Programs that receive it                                  |
+| ------------------------------------------------------- | --------------------------------- | --------------------------------------------------------- |
+| Auth0 domain, e.g. `your-tenant.eu.auth0.com`           | `AUTH0_DOMAIN`                    | Web and Mobile; API and AWS as issuer `https://<domain>/` |
+| Custom API identifier                                   | `AUTH0_AUDIENCE`                  | API, Web, Mobile, AWS                                     |
+| SPA Client ID                                           | `WEB_AUTH0_CLIENT_ID`             | Web                                                       |
+| Stripe test secret key                                  | `STRIPE_SECRET_KEY`               | API, worker, CLI                                          |
+| Stripe product ID (`prod_...`) from the product details | `STRIPE_PRODUCT_ID`               | API, worker, CLI                                          |
+| Monthly lookup key (`premium_monthly`)                  | `STRIPE_MONTHLY_PRICE_LOOKUP_KEY` | API only                                                  |
+| Daily lookup key (`premium_daily`)                      | `STRIPE_DAILY_PRICE_LOOKUP_KEY`   | API only                                                  |
+| Signing secret printed by the running listener          | `STRIPE_WEBHOOK_SECRET`           | Stripe webhook only                                       |
+| Website origin `http://localhost:5173`                  | `WEB_ORIGIN`                      | API; also add it to the Auth0 SPA allowlists              |
+| API address `http://127.0.0.1:3000`                     | `WEB_API_URL`                     | Web                                                       |
 
-Keep API `PORT=3000` and `HOST=127.0.0.1`. The examples already contain the local
-database and queue defaults. Omitting the database endpoint selects AWS
-credential resolution, so retain it for this local path.
+Keep `API_PORT=3000` and `API_HOST=127.0.0.1`. The template already contains
+the local database and queue defaults. Omitting `DYNAMODB_ENDPOINT` selects AWS
+credential resolution, so retain it for this local path. The subscription CLI
+receives the same Stripe key and product ID and needs no lookup key
+([provider configuration](../apps/cli/README.md#configuration)).
 
-For optional subscription CLI tools, copy `apps/cli/.env.example` to
-`apps/cli/.env` and configure the same Stripe test key and price there. The CLI
-has its own [provider configuration](../apps/cli/README.md#configuration) and
-does not read the worker's `.env`.
+**Check:** `pnpm config:sync` writes every file, and `pnpm config:check` then
+reports that the configuration is valid and every generated file is current.
+Both name settings and files, never values.
 
 ## 6. Start and make a test purchase
 

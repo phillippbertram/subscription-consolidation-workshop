@@ -1,5 +1,6 @@
 import {
   GRACE_MS,
+  isPremiumSubscription,
   normalizeProviderStatus,
   subscriptionSchema,
   type Subscription,
@@ -17,12 +18,17 @@ export function normalizeStripeSubscription(
 ): Subscription {
   const state =
     normalizeProviderStatus('stripe', snapshot.status) ?? snapshot.status;
-  const mapped = snapshot.productId === 'premium_monthly';
+  const mapped = isPremiumSubscription({
+    provider: 'stripe',
+    productId: snapshot.productId,
+  });
   const accessUntil = mapped
     ? state === 'trialing'
       ? snapshot.trialUntil
       : snapshot.paidUntil
     : null;
+  // Daily billing still uses the existing 24-hour failed-renewal grace policy.
+  // Access comes from invoice boundaries, never by adding a day/month locally.
   const next = subscriptionSchema.parse({
     userId,
     provider: 'stripe',

@@ -50,6 +50,9 @@ export class ApiError extends Error {
     message: string,
     readonly code: ApiErrorCode,
     readonly status?: number,
+    // Technical facts for the screen: the request, the transport code, and the
+    // backend's error code. Never headers, tokens, or response payloads.
+    readonly detail?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -100,11 +103,14 @@ export class ApiClient {
           if (!token.trim()) {
             throw new Error('No access token.');
           }
-        } catch {
+        } catch (cause) {
           // Do not expose SDK errors, which may contain authentication details.
+          // Their class name and type are safe and show which step failed.
           throw new ApiError(
             'Unable to restore your session. Sign out and sign in again.',
             'authentication_required',
+            undefined,
+            describeCause(cause),
           );
         }
 
@@ -157,10 +163,20 @@ export class ApiClient {
     });
     const result = await schema.safeParseAsync(response.data);
     if (!result.success) {
+      // Field paths and rule names reveal a contract mismatch between app and
+      // backend. Zod's messages describe the expected shape, not the received
+      // values, so no customer data reaches the screen.
+      const issues = result.error.issues
+        .slice(0, 3)
+        .map(
+          (issue) => `${issue.path.join('.') || 'response'}: ${issue.message}`,
+        )
+        .join('; ');
       const failure = new ApiError(
         'The backend returned an unexpected response.',
         'invalid_response',
         response.status,
+        `${method} ${path} → ${issues}`,
       );
       this.logs.get(response.config)?.error(failure);
       throw failure;
@@ -274,10 +290,21 @@ function normalizeError(error: unknown): ApiError {
 
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
+    // The target URL exposes a wrong API address, and the backend's error code
+    // and request ID find the matching entry in the API log. Both are safe to
+    // show: the URL has no query string, and the backend sends no payload.
+    const request = `${(error.config?.method ?? 'get').toUpperCase()} ${error.config?.baseURL ?? ''}${error.config?.url ?? ''}`;
+    const backend = describeBackendError(
+      error.response?.data,
+      error.response?.headers['x-request-id'],
+    );
+    const detail = [request, ...backend].join(', ');
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       return new ApiError(
         'The request timed out. Check the backend and retry.',
         'timeout',
+        undefined,
+        `${request}: ${error.code}`,
       );
     }
 
@@ -286,6 +313,7 @@ function normalizeError(error: unknown): ApiError {
         'The backend rejected this session. Sign out and sign in again.',
         'authentication_required',
         status,
+        detail,
       );
     }
 
@@ -296,6 +324,7 @@ function normalizeError(error: unknown): ApiError {
           'Premium access is required. Reload your status after changing the local scenario.',
           'premium_required',
           status,
+          detail,
         );
       }
 
@@ -303,6 +332,7 @@ function normalizeError(error: unknown): ApiError {
         'Access was denied. Check the required Auth0 API permissions.',
         'forbidden',
         status,
+        detail,
       );
     }
 
@@ -311,12 +341,51 @@ function normalizeError(error: unknown): ApiError {
         'The backend could not complete the request. Check the backend and DynamoDB, then retry.',
         'http_error',
         status,
+        detail,
       );
     }
+
+    // No response at all: the transport code (ERR_NETWORK, ...) says why.
+    return new ApiError(
+      'Cannot reach the backend. Check pnpm dev and the API URL, then retry.',
+      'network_error',
+      undefined,
+      `${request}: ${error.code ?? 'no response'}`,
+    );
   }
 
   return new ApiError(
     'Cannot reach the backend. Check pnpm dev and the API URL, then retry.',
     'network_error',
+    undefined,
+    describeCause(error),
   );
+}
+
+function describeBackendError(body: unknown, requestIdHeader: unknown) {
+  const parsed = apiErrorSchema.safeParse(body);
+  const details: string[] = [];
+  if (parsed.success) {
+    details.push(`error=${parsed.data.error.code}`);
+  }
+
+  const requestId =
+    (parsed.success ? parsed.data.error.requestId : undefined) ??
+    (typeof requestIdHeader === 'string' ? requestIdHeader : undefined);
+  if (requestId) {
+    details.push(`requestId=${requestId}`);
+  }
+
+  return details;
+}
+
+// Class name and error type only. SDK messages may contain credentials.
+function describeCause(cause: unknown) {
+  if (!(cause instanceof Error)) {
+    return 'unknown error';
+  }
+
+  const type =
+    'type' in cause && typeof cause.type === 'string' ? ` (${cause.type})` : '';
+  return `${cause.name}${type}`;
 }

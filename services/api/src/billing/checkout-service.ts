@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { StripePlanId } from '@premiumpass/api-contracts';
 import {
   CheckoutError,
   type BillingProvider,
@@ -16,7 +17,11 @@ export class CheckoutService {
   constructor(
     private readonly store: BillingStore,
     private readonly provider: BillingProvider,
-    private readonly config: { priceId: string; webOrigin: string },
+    private readonly config: {
+      productId: string;
+      priceLookupKeys: Record<StripePlanId, string>;
+      webOrigin: string;
+    },
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -54,7 +59,8 @@ export class CheckoutService {
     if (
       session.customerId !== attempt.customerId ||
       session.userId !== attempt.userId ||
-      session.requestId !== attempt.requestId
+      session.requestId !== attempt.requestId ||
+      session.planId !== attempt.planId
     ) {
       throw new CheckoutError('checkout_ownership_conflict', 409);
     }
@@ -87,32 +93,32 @@ export class CheckoutService {
   ): Promise<{ sessionId: string; url: string; expiresAt: string }> {
     const successUrl = `${this.config.webOrigin}/?checkout=success`;
     const cancelUrl = `${this.config.webOrigin}/?checkout=cancel`;
-    // One idempotency key represents one immutable purchase intent. The hash
-    // detects retries that reuse it with different effective parameters.
-    const fingerprint = createHash('sha256')
-      .update(
-        JSON.stringify({
-          planId,
-          priceId: this.config.priceId,
-          successUrl,
-          cancelUrl,
-        }),
-      )
-      .digest('hex');
+    // Keep the original hash format so stored attempts remain recoverable.
+    // Retries use their persisted price, even after the lookup key moves. The
+    // requested plan and return URLs must still match the original intent.
+    const fingerprintFor = (priceId: string) =>
+      createHash('sha256')
+        .update(
+          JSON.stringify({
+            planId,
+            priceId,
+            successUrl,
+            cancelUrl,
+          }),
+        )
+        .digest('hex');
     let attempt = await this.store.getAttempt(userId, requestId);
-    if (attempt && attempt.fingerprint !== fingerprint) {
+    if (attempt && attempt.fingerprint !== fingerprintFor(attempt.priceId)) {
       throw new CheckoutError('idempotency_conflict', 409);
     }
 
-    if (planId !== 'premium_monthly') {
+    if (planId !== 'premium_monthly' && planId !== 'premium_daily') {
       throw new CheckoutError('unsupported_plan', 400);
     }
 
     const customerId = await this.customer(userId, verifiedEmail);
 
     if (!attempt) {
-      // Fail before reserving a purchase when the configured price is unusable.
-      await this.provider.validatePrice(this.config.priceId);
       const previousId = await this.store.getActiveAttemptId(userId);
       if (previousId) {
         // A concurrent call may have reserved this same request since our read.
@@ -138,13 +144,21 @@ export class CheckoutService {
         throw new CheckoutError('subscription_already_exists', 409);
       }
 
+      // Resolve only after recovery/blocking checks, and before reserving intent.
+      // Stripe session retries below always use the winning reservation's price.
+      const priceId = await this.provider.resolvePrice(
+        this.config.productId,
+        this.config.priceLookupKeys[planId],
+        planId,
+      );
       const createdAt = this.seconds();
       const candidate: CheckoutAttempt = {
         userId,
         requestId,
-        fingerprint,
+        fingerprint: fingerprintFor(priceId),
         customerId,
-        priceId: this.config.priceId,
+        priceId,
+        planId,
         successUrl,
         cancelUrl,
         createdAt,
@@ -160,7 +174,9 @@ export class CheckoutService {
           throw new CheckoutError('checkout_in_progress', 409);
         }
 
-        if (attempt.fingerprint !== fingerprint) {
+        // A concurrent request may have resolved the offer before a price change.
+        // Adopt its persisted price, rather than comparing it with our lookup.
+        if (attempt.fingerprint !== fingerprintFor(attempt.priceId)) {
           throw new CheckoutError('idempotency_conflict', 409);
         }
       }

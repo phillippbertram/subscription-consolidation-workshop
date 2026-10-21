@@ -47,6 +47,10 @@ complete. AWS deployment and verification remain a separately authorized path.
   errors, checks/build, and importable Lambda handler without an open HTTP port.
 - **Done:** Hono local/Lambda entries, pnpm workspace, shared HTTP/queue
   contracts, AWS factories, client feature folders, and a separate CLI workspace.
+  `pnpm webhooks:listen` starts Stripe forwarding and a shared Apple/Google ngrok
+  tunnel; local routing, unchanged bytes/authorization, failure responses, and
+  process cleanup verified with synthetic CLI/receiver fixtures. Formatting,
+  lint, types, and builds passed; no live provider/tunnel delivery checked.
 
 ## P02 Backend Auth0 token verification
 
@@ -93,8 +97,24 @@ complete. AWS deployment and verification remain a separately authorized path.
 - **Done:** owned checkout with idempotent attempts, signature-verified webhook,
   worker with paid-period verification, atomic commit, retry/DLQ configuration.
   A real Stripe test purchase (October 10) produced Premium in Web and iOS.
-- **Open:** real cancellation/renewal/failed-payment and delayed-event scenarios;
-  cloud billing secret/IAM/CORS; deployed SQS/DLQ/redrive; the 30-second target.
+  Lookup-key checkout and product-based access (October 19): local fixtures
+  verified old-price retries/recovery, concurrent reservations across an offer
+  change, archived-price access, invalid offers/invoices, and matching worker/CLI
+  results with no dry-run writes. Formatting, lint, types, builds, and CDK
+  synthesis passed; the template uses the new `productId` secret contract.
+  Daily/monthly Web selection, persisted plan/price, access, cancellation and
+  reconciliation now support both periods. Disposable local scenarios verified
+  exact daily expiry/grace, other-provider access, metadata/interval rejection,
+  immutable retries and worker/CLI agreement without dry-run writes. An isolated
+  browser preview verified selection, reload/retry preservation, a fresh choice
+  after expiry and legacy monthly recovery; no real authentication or payment.
+  API `.env` now has separate monthly/daily lookup keys. Read-only Stripe checks
+  resolved the existing EUR 4.99/month and EUR 1.00/day test prices through the
+  backend adapter. No checkout or payment was created during those checks.
+- **Open:** real daily purchase/access and cancellation/renewal/failed-payment
+  and delayed-event scenarios; restart local processes; actual sandbox
+  lookup-key transfer and archived-price renewal; cloud billing secret/IAM/CORS;
+  deployed SQS/DLQ/redrive; the 30-second target.
 
 ## P07 Apple sandbox and Google mocks
 

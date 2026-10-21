@@ -122,7 +122,9 @@ export function AccountPage({
               any subscription.
             </CardDescription>
           </CardHeader>
-          <CardFooter className="border-t-0 bg-transparent px-6 pb-0">
+          {/* The footer supplies the bottom padding that a card with a footer
+              drops (see Card); pb-0 here would clip the button. */}
+          <CardFooter className="border-t-0 bg-transparent px-6 pb-6">
             <Button variant="outline" onClick={onSignOut}>
               <LogOut /> Sign out
             </Button>

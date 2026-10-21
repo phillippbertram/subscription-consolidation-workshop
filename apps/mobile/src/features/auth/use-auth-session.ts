@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth0 } from 'react-native-auth0';
 import { authErrorMessage } from './auth-errors';
+import { authScheme } from './auth-scheme';
 
 export function useAuthSession(audience: string) {
   const { authorize, clearSession, user, isLoading } = useAuth0();
@@ -17,7 +18,7 @@ export function useAuthSession(audience: string) {
           scope: 'openid profile email read:me read:premium write:checkout',
           additionalParameters: { prompt: 'login' },
         },
-        { customScheme: 'premiumpass' },
+        { customScheme: authScheme },
       );
     } catch (cause) {
       setError(authErrorMessage(cause, 'Sign-in'));
@@ -31,7 +32,7 @@ export function useAuthSession(audience: string) {
     setIsBusy(true);
     try {
       // The SDK clears its browser session and secure credentials on success.
-      await clearSession({}, { customScheme: 'premiumpass' });
+      await clearSession({}, { customScheme: authScheme });
     } catch (cause) {
       setError(authErrorMessage(cause, 'Sign-out'));
     } finally {

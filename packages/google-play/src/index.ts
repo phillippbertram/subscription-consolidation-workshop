@@ -13,6 +13,7 @@ export {
 import {
   purchaseTokenSchema,
   GooglePlayError,
+  describeInvalidSettings,
   type GoogleSettings,
 } from './contracts.js';
 
@@ -190,7 +191,17 @@ export function readGooglePushSettings(
       subscription: env.GOOGLE_PLAY_PUSH_SUBSCRIPTION,
     });
   if (!parsed.success) {
-    throw new GooglePlayError('google_push_configuration_invalid');
+    console.error(parsed.error.message);
+    throw new GooglePlayError(
+      'google_push_configuration_invalid',
+      describeInvalidSettings(parsed.error.issues, {
+        audience: 'GOOGLE_PLAY_PUSH_AUDIENCE (an HTTPS URL)',
+        serviceAccountEmail:
+          'GOOGLE_PLAY_PUSH_SERVICE_ACCOUNT_EMAIL (an email address)',
+        subscription:
+          'GOOGLE_PLAY_PUSH_SUBSCRIPTION (the full name projects/<project-id>/subscriptions/<subscription-id>, not just the ID)',
+      }),
+    );
   }
 
   return parsed.data;

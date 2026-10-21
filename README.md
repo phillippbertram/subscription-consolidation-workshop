@@ -49,11 +49,36 @@ Each challenge is something you can trigger yourself in the demo.
 | **Unreliable events:** webhooks arrive late, twice, or never                         | Idempotent processing and scheduled repair     | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
 | **Time matters:** a subscription ends without any notification                       | Every request compares the end time with _now_ | [Exercise 3](docs/exercises/03-consolidation.md)          |
 
+## What you need
+
+**Prior knowledge:** experience with app and cloud development. You should be
+comfortable with TypeScript, a web or React Native app, HTTP APIs, and basic
+cloud concepts such as functions, queues, and permissions. The workshop explains
+subscriptions and their pitfalls, not these fundamentals.
+
+**Accounts:** the local path needs only Auth0 and Stripe. The other accounts are
+needed only to test against the real stores or AWS; every module has a part
+that runs without them.
+
+| Account                                                                     | What you set up there                                                                       | Needed for                                              |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [Auth0](https://auth0.com/) tenant (free)                                   | API, applications, and synthetic test users                                                 | Always                                                  |
+| [Stripe](https://stripe.com/) account with a sandbox                        | Premium product, prices, and test API keys; no real payments                                | Always                                                  |
+| [AWS](https://aws.amazon.com/) account for development                      | CDK deployment of the backend; creates billable resources                                   | Testing in AWS ([Exercise 8](docs/exercises/08-aws.md)) |
+| [Apple Developer Program](https://developer.apple.com/programs/) membership | A demo app with your bundle ID, the subscription, and a Sandbox tester in App Store Connect | Apple purchases ([guide](docs/APPLE_PURCHASES.md))      |
+| [Google Play developer account](https://play.google.com/console/)           | A demo app with your package name, the subscription, license testers, and a test release    | Google Play purchases ([guide](docs/GOOGLE_PLAY.md))    |
+
+Both stores only offer subscriptions for an app registered in your developer
+account, so you create your own demo app there first. Store accounts cost a
+registration fee and their verification can take days: register before the
+workshop. Apple purchases also need a Mac with Xcode and a physical iPhone;
+Google Play purchases need Android Studio and a device or Play-enabled emulator.
+
 ## Quick start
 
-You need Node and pnpm (versions in `.nvmrc` / `package.json`), Docker, a free
-[Auth0](https://auth0.com/) tenant, and a [Stripe](https://stripe.com/) account
-in test mode. No AWS account and no Xcode for the first steps.
+Besides Auth0 and Stripe, you need Node and pnpm (versions in `.nvmrc` /
+`package.json`) and Docker. No AWS account, store account, or Xcode for the
+first steps.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -68,7 +93,7 @@ after each step, up to your first test purchase.
 
 Eight modules, each with a short [exercise sheet](docs/exercises/README.md):
 steps to try, code to read, and questions with answers. Modules 1–6 run fully
-locally; 7–8 need store or AWS accounts for their optional parts.
+locally; 7–8 need [store or AWS accounts](#what-you-need) for their optional parts.
 
 | Module                    | You learn                                             | Exercise                                                  |
 | ------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |

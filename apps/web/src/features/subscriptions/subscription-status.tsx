@@ -174,7 +174,9 @@ export function MembershipSummary({ state }: { state: AccountState }) {
           </>
         )}
       </CardContent>
-      <CardFooter className="mt-auto border-t-0 bg-transparent px-6 pb-0">
+      {/* A card with a footer drops its own bottom padding (see Card), so the
+          footer supplies it; without it the button is clipped at the edge. */}
+      <CardFooter className="mt-auto border-t-0 bg-transparent px-6 pb-6">
         <Button
           asChild
           variant={

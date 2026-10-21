@@ -10,6 +10,7 @@ import {
   type AppleSettings,
 } from '@premiumpass/apple-store';
 import type { Logger } from 'pino';
+import { summarizeAppleNotification } from './log-summary.js';
 
 export function createAppleWebhookApp(
   settings: AppleSettings | undefined,
@@ -23,7 +24,13 @@ export function createAppleWebhookApp(
     c.json({ status: 'ok', appleEnabled: Boolean(settings) }),
   );
   app.post('/v1/webhooks/apple', async (c) => {
+    const correlationId = randomUUID();
     if (!settings || !verifier) {
+      log.warn({
+        event: 'apple.notification_rejected',
+        correlationId,
+        reason: 'apple_not_configured',
+      });
       return c.json({ error: 'apple_not_configured' }, 503);
     }
 
@@ -32,27 +39,51 @@ export function createAppleWebhookApp(
       .strict()
       .safeParse(await c.req.json<unknown>().catch(() => null));
     if (!body.success) {
+      log.warn({
+        event: 'apple.notification_rejected',
+        correlationId,
+        reason: 'invalid_body',
+      });
       return c.json({ error: 'invalid_notification' }, 400);
     }
 
-    const correlationId = randomUUID();
     let job: AppleJob;
     try {
       const notification = await verifier.verifyAndDecodeNotification(
         body.data.signedPayload,
       );
+      // Apple's own "Request a test notification" call reaches us as TEST.
       if (notification.notificationType === 'TEST') {
+        log.info({
+          event: 'apple.notification_ignored',
+          correlationId,
+          reason: 'test',
+          ...summarizeAppleNotification(notification),
+        });
         return c.json({ received: true, test: true });
       }
 
       if (!notification.data?.signedTransactionInfo) {
+        log.info({
+          event: 'apple.notification_ignored',
+          correlationId,
+          reason: 'no_transaction',
+          ...summarizeAppleNotification(notification),
+        });
         return c.json({ received: true, ignored: true });
       }
 
       const transaction = await verifier.verifyAndDecodeTransaction(
         notification.data.signedTransactionInfo,
       );
+      const summary = summarizeAppleNotification(notification, transaction);
       if (transaction.productId !== settings.productId) {
+        log.info({
+          event: 'apple.notification_ignored',
+          correlationId,
+          reason: 'other_product',
+          ...summary,
+        });
         return c.json({ received: true, ignored: true });
       }
 
@@ -66,12 +97,28 @@ export function createAppleWebhookApp(
         receivedAt: new Date().toISOString(),
         correlationId,
       });
+      // Verified and accepted as a job: log what Apple said before queueing.
+      log.info({
+        event: 'apple.notification_received',
+        correlationId,
+        ...summary,
+      });
     } catch (error) {
-      // Certificate-status outages are retryable; payloads/SDK errors stay out of logs.
+      // Certificate-status outages are retryable. The reason is the SDK's
+      // status name or "invalid_job"; payloads and SDK messages stay out of logs.
       const retry =
         error instanceof VerificationException &&
         error.status === VerificationStatus.RETRYABLE_VERIFICATION_FAILURE;
-      log.warn({ event: 'apple.notification_rejected', correlationId, retry });
+      const reason =
+        error instanceof VerificationException
+          ? VerificationStatus[error.status]
+          : 'invalid_job';
+      log.warn({
+        event: 'apple.notification_rejected',
+        correlationId,
+        reason,
+        retry,
+      });
       return c.json(
         { error: retry ? 'verification_unavailable' : 'invalid_notification' },
         retry ? 503 : 400,

@@ -178,7 +178,7 @@ Records are written by verified processing or explicitly local demo tools.
 | Field                                          | Meaning                                                                                             |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `userId`, `provider`, `providerSubscriptionId` | Owner and namespaced source identity                                                                |
-| `productId`                                    | Internal mapping; only `premium_monthly` grants access                                              |
+| `productId`                                    | Internal plan: `premium_monthly`, or Stripe `premium_daily`, grants access                          |
 | `state`, `providerStatus`                      | Normalized state and original provider state                                                        |
 | `cancelAtPeriodEnd`                            | Renewal disabled; not immediate revocation                                                          |
 | `accessUntil`, `graceUntil`                    | Verified UTC access/grace boundaries or null; [provider-specific limits](PAYMENTS.md#access-policy) |
@@ -233,17 +233,22 @@ records stay stored; expiry is checked on every read.
 
 ## Stripe customer and checkout records
 
-| PK / SK                                | Fields beyond keys                                                                                              |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `USER#U` / `CUSTOMER#stripe`           | `userId`, creation `requestId`, `createdAt`, optional `customerId`                                              |
-| `PROVIDER#stripe#CUSTOMER#C` / `OWNER` | `userId`, `customerId`                                                                                          |
-| `CHECKOUT#U#Q` / `REQUEST`             | Owner/request IDs, fingerprint, customer/price IDs, return URLs, `createdAt`, `expiresAt`, optional `sessionId` |
-| `USER#U` / `CHECKOUT#ACTIVE`           | `userId`, `requestId`                                                                                           |
+| PK / SK                                | Fields beyond keys                                                                                                        |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `USER#U` / `CUSTOMER#stripe`           | `userId`, creation `requestId`, `createdAt`, optional `customerId`                                                        |
+| `PROVIDER#stripe#CUSTOMER#C` / `OWNER` | `userId`, `customerId`                                                                                                    |
+| `CHECKOUT#U#Q` / `REQUEST`             | Owner/request IDs, fingerprint, `planId`, customer/price IDs, return URLs, `createdAt`, `expiresAt`, optional `sessionId` |
+| `USER#U` / `CHECKOUT#ACTIVE`           | `userId`, `requestId`                                                                                                     |
 
 - The customer creation intent is stored first; forward and reverse mappings
   then bind atomically.
 - A new checkout must compare the active pointer; attaching a session requires
   the same request fingerprint.
+- The selected `planId`, concrete `priceId`, and fingerprint belong to the purchase attempt. A lookup
+  key can move to a new offer; retries still use the stored price, including when
+  a concurrent request wins the reservation. The existing hash format already
+  includes the plan. Records without `planId` are read as `premium_monthly`,
+  preserving older monthly attempts without a database migration.
 - A missing provider reference means unfinished work, not permission to buy again.
 - Times here are Unix seconds. Checkout URLs, payment payloads, and emails are
   never stored. [Recovery behavior](PAYMENTS.md#checkout-and-recovery).

@@ -27,7 +27,7 @@ export function createParameters(scope: Construct) {
     type: 'String',
     noEcho: true,
     description:
-      'Existing Secrets Manager JSON secret: secretKey (sk_test_), priceId, webhookSecret. No secret value in CloudFormation.',
+      'Existing Secrets Manager JSON secret: secretKey (sk_test_), productId, webhookSecret. No secret value in CloudFormation.',
     allowedPattern: '^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$',
   });
   // Reference an existing secret; CDK never reads or embeds its contents.

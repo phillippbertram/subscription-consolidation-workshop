@@ -10,7 +10,8 @@ import {
   type Purchase,
 } from 'expo-iap';
 import type { SubscriptionOverview } from '@premiumpass/api-contracts';
-import { ApiError, type ApiClient } from '../../../api/api-client';
+import type { ApiClient } from '../../../api/api-client';
+import { describeFailure, withDetails } from '../../../api/failure-details';
 import { useApiClient } from '../../../api/use-api-client';
 import { canPurchasePremium } from '../subscription-presentation';
 import {
@@ -110,13 +111,17 @@ export function useApplePurchase({
       const task = work()
         .catch((failure: unknown) => {
           if (!signal.aborted) {
+            // PurchaseSyncError texts are already specific; anything else
+            // shows its technical cause below a short summary.
             dispatch({
               type: 'verificationFailed',
               error:
-                failure instanceof ApiError ||
                 failure instanceof PurchaseSyncError
                   ? failure.message
-                  : 'Unable to verify your purchase. Please retry.',
+                  : withDetails(
+                      'Unable to verify your purchase. Please retry.',
+                      describeFailure(failure),
+                    ),
             });
           }
         })
@@ -141,16 +146,19 @@ export function useApplePurchase({
         return;
       }
 
-      dispatch({
-        type:
-          failure.code === ErrorCode.UserCancelled
-            ? 'purchaseCancelled'
-            : 'purchaseFailed',
-      });
+      // StoreKit's own reason is the most useful part of a failed purchase.
+      dispatch(
+        failure.code === ErrorCode.UserCancelled
+          ? { type: 'purchaseCancelled' }
+          : { type: 'purchaseFailed', detail: describeFailure(failure) },
+      );
     },
-    onError: () => {
+    onError: (failure) => {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'connectionFailed' });
+        dispatch({
+          type: 'connectionFailed',
+          detail: describeFailure(failure),
+        });
       }
     },
   });
@@ -183,10 +191,7 @@ export function useApplePurchase({
         if (!controller.signal.aborted) {
           dispatch({
             type: 'configurationFailed',
-            error:
-              failure instanceof ApiError
-                ? failure.message
-                : 'Apple purchases are unavailable. Check the local Apple configuration and reload the app.',
+            detail: describeFailure(failure),
           });
         }
       }
@@ -255,7 +260,9 @@ export function useApplePurchase({
       }
 
       if (current.appAccountToken !== config.appAccountToken) {
-        throw new Error();
+        throw new PurchaseSyncError(
+          'The account token changed since this screen loaded. Reload the app and retry.',
+        );
       }
 
       const mayOverride =
@@ -280,9 +287,9 @@ export function useApplePurchase({
           },
         },
       });
-    } catch {
+    } catch (failure) {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'checkoutFailed' });
+        dispatch({ type: 'checkoutFailed', detail: describeFailure(failure) });
       }
     }
   }
@@ -313,9 +320,9 @@ export function useApplePurchase({
       for (const purchase of relevant) {
         await verify(purchase);
       }
-    } catch {
+    } catch (failure) {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'restoreFailed' });
+        dispatch({ type: 'restoreFailed', detail: describeFailure(failure) });
       }
     } finally {
       if (!lifetime.current.signal.aborted) {
@@ -354,9 +361,12 @@ export function useApplePurchase({
       if (!signal.aborted) {
         dispatch({ type: 'managementSucceeded' });
       }
-    } catch {
+    } catch (failure) {
       if (!signal.aborted) {
-        dispatch({ type: 'managementFailed' });
+        dispatch({
+          type: 'managementFailed',
+          detail: describeFailure(failure),
+        });
       }
     } finally {
       if (!signal.aborted) {

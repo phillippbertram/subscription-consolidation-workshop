@@ -8,6 +8,7 @@ import {
   jobSchema,
   type StripeJob,
 } from '@premiumpass/billing-contracts';
+import { summarizeStripeEvent } from './log-summary.js';
 
 // Stripe is the caller, so its signature replaces the user JWT boundary.
 // This app deliberately avoids the API user-auth middleware and body logger.
@@ -22,6 +23,11 @@ export function createWebhookApp(
     const correlationId = randomUUID();
     const signature = c.req.header('stripe-signature');
     if (!signature) {
+      log.warn({
+        event: 'webhook.rejected',
+        correlationId,
+        code: 'missing_signature',
+      });
       return c.json({ error: 'invalid_signature' }, 400);
     }
 
@@ -40,10 +46,27 @@ export function createWebhookApp(
     }
 
     if (event.livemode !== false || event.account) {
+      log.warn({
+        event: 'webhook.rejected',
+        correlationId,
+        code: 'unsupported_account',
+        providerEventId: event.id,
+        livemode: event.livemode,
+        connectedAccount: Boolean(event.account),
+      });
       return c.json({ error: 'unsupported_account' }, 400);
     }
 
     if (!eventTypes.some((type) => type === event.type)) {
+      // Stripe sends every event type the endpoint subscribes to. Logging the
+      // ignored ones explains why nothing happened after a test trigger.
+      log.info({
+        event: 'webhook.ignored',
+        correlationId,
+        providerEventId: event.id,
+        eventType: event.type,
+        reason: 'event_type_not_handled',
+      });
       return c.json({ received: true, ignored: true });
     }
 
@@ -58,8 +81,24 @@ export function createWebhookApp(
       correlationId,
     });
     if (!parsed.success) {
+      log.warn({
+        event: 'webhook.rejected',
+        correlationId,
+        code: 'invalid_event',
+        providerEventId: event.id,
+        eventType: event.type,
+      });
       return c.json({ error: 'invalid_event' }, 400);
     }
+
+    // The signature is valid, so this is what Stripe really sent. Log the safe
+    // summary before queueing: if the handoff fails, the log still shows what
+    // arrived.
+    log.info({
+      event: 'webhook.received',
+      correlationId,
+      ...summarizeStripeEvent(event),
+    });
 
     try {
       // Await acceptance before 200, otherwise a crash could lose the event.

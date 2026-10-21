@@ -12,7 +12,11 @@ export async function handler(event: SQSEvent): Promise<SQSBatchResponse> {
     const { processor } = workerRuntime(false);
     for (const record of event.Records) {
       try {
-        await processMessage(processor, record.body, log);
+        await processMessage(processor, record.body, log, {
+          messageId: record.messageId,
+          receiveCount:
+            Number(record.attributes.ApproximateReceiveCount) || undefined,
+        });
       } catch {
         log.warn({ event: 'queue.retry', messageId: record.messageId });
         batchItemFailures.push({ itemIdentifier: record.messageId });

@@ -1,4 +1,5 @@
 import type { AppleConfig } from '@premiumpass/api-contracts';
+import { withDetails } from '../../../api/failure-details';
 
 interface ApplePurchaseState {
   config: AppleConfig | undefined;
@@ -11,26 +12,32 @@ interface ApplePurchaseState {
 
 type ApplePurchaseAction =
   | { type: 'configLoaded'; config: AppleConfig }
-  | { type: 'configurationFailed' | 'verificationFailed'; error: string }
+  | { type: 'verificationFailed'; error: string }
   | { type: 'duplicatePurchaseChanged'; allowed: boolean }
+  // Failures carry the technical cause (see describeFailure) for the screen.
+  | {
+      type:
+        | 'configurationFailed'
+        | 'checkoutFailed'
+        | 'purchaseFailed'
+        | 'connectionFailed'
+        | 'restoreFailed'
+        | 'managementFailed';
+      detail: string;
+    }
   | {
       type:
         | 'checkoutStarted'
-        | 'checkoutFailed'
         | 'eligibilityChanged'
         | 'purchaseCancelled'
-        | 'purchaseFailed'
-        | 'connectionFailed'
         | 'verificationStarted'
         | 'verificationSucceeded'
         | 'verificationsSettled'
         | 'restoreStarted'
         | 'restoreEmpty'
-        | 'restoreFailed'
         | 'managementStarted'
         | 'managementRefreshStarted'
         | 'managementSucceeded'
-        | 'managementFailed'
         | 'nativeActionFinished';
     };
 
@@ -56,7 +63,13 @@ export function applePurchaseReducer(
     case 'configLoaded':
       return { ...state, config: action.config };
     case 'configurationFailed':
-      return { ...state, error: action.error };
+      return {
+        ...state,
+        error: withDetails(
+          'Apple purchases are unavailable. Check the local Apple configuration and reload the app.',
+          action.detail,
+        ),
+      };
     case 'duplicatePurchaseChanged':
       return { ...state, allowDuplicatePurchase: action.allowed };
     case 'checkoutStarted':
@@ -65,8 +78,10 @@ export function applePurchaseReducer(
       return {
         ...state,
         busy: false,
-        error:
+        error: withDetails(
           'Unable to start the purchase. Check your session and sandbox account.',
+          action.detail,
+        ),
       };
     case 'eligibilityChanged':
       return {
@@ -81,13 +96,18 @@ export function applePurchaseReducer(
         ...state,
         busy: false,
         message: null,
-        error: 'Apple could not complete the purchase. Please retry.',
+        error: withDetails(
+          'Apple could not complete the purchase. Please retry.',
+          action.detail,
+        ),
       };
     case 'connectionFailed':
       return {
         ...state,
-        error:
+        error: withDetails(
           'Cannot connect to the App Store. Check your sandbox account and retry.',
+          action.detail,
+        ),
       };
     case 'verificationStarted':
       return {
@@ -119,8 +139,10 @@ export function applePurchaseReducer(
       return {
         ...state,
         message: null,
-        error:
+        error: withDetails(
           'Unable to restore purchases. Check your sandbox account and retry.',
+          action.detail,
+        ),
       };
     case 'managementStarted':
       return { ...state, nativeAction: true, error: null, message: null };
@@ -132,8 +154,10 @@ export function applePurchaseReducer(
       return {
         ...state,
         message: null,
-        error:
+        error: withDetails(
           'Unable to open or refresh Apple subscription management. Please retry.',
+          action.detail,
+        ),
       };
     case 'nativeActionFinished':
       return { ...state, nativeAction: false };

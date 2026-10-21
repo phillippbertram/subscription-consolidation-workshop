@@ -29,11 +29,12 @@ explains direct Stripe repair versus queued provider refreshes.
 
 ## Configuration
 
-Only provider reconciliation loads credentials. Copy [.env.example](.env.example)
-to `apps/cli/.env` and configure the providers you use. Existing shell variables
-override this file. The CLI does not load another application's `.env`; existing
-worker settings must also be configured explicitly for the CLI. The file is
-optional when all required provider settings are supplied through the shell.
+Only provider reconciliation loads credentials. `pnpm config:sync` writes
+`apps/cli/.env` from `config/.env` with the same Stripe, Apple, and Google
+settings the worker uses; enabled providers are reconciled. Existing shell
+variables override this file. The CLI does not load another application's
+`.env`. The file is optional when all required provider settings are supplied
+through the shell.
 Paths resolve relative to the application, including when running built entries
 from another directory. Use absolute paths for provider credential files.
 

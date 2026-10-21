@@ -1,4 +1,7 @@
-import type { SubscriptionStore } from '@premiumpass/domain';
+import {
+  isPremiumSubscription,
+  type SubscriptionStore,
+} from '@premiumpass/domain';
 import {
   CheckoutError,
   type BillingStore,
@@ -22,7 +25,7 @@ export class CancellationService {
         item.userId === userId &&
         item.provider === 'stripe' &&
         item.providerSubscriptionId === subscriptionId &&
-        item.productId === 'premium_monthly',
+        isPremiumSubscription(item),
     );
     const mapping = await this.billing.getCustomer(userId);
     if (

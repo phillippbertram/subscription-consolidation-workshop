@@ -25,12 +25,18 @@ while (!stopping) {
         QueueUrl: queueUrl,
         MaxNumberOfMessages: 1,
         WaitTimeSeconds: 10,
+        // Lets the log show whether a message is a retry.
+        MessageSystemAttributeNames: ['ApproximateReceiveCount'],
       }),
       { abortSignal: polling.signal },
     );
     for (const message of page.Messages ?? []) {
       try {
-        await processMessage(processor, message.Body ?? '', log);
+        await processMessage(processor, message.Body ?? '', log, {
+          messageId: message.MessageId,
+          receiveCount:
+            Number(message.Attributes?.ApproximateReceiveCount) || undefined,
+        });
         await sqs.send(
           new DeleteMessageCommand({
             QueueUrl: queueUrl,

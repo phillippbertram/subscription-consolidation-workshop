@@ -23,6 +23,25 @@ export function GoogleSubscriptionActions(props: Props) {
   );
 }
 
+function subscribeLabel(
+  busy: boolean,
+  offer: { displayPrice: string } | undefined,
+  offerProblem: string | null,
+) {
+  if (busy) {
+    return 'Processing…';
+  }
+
+  if (offer) {
+    return `Subscribe · ${offer.displayPrice} / month`;
+  }
+
+  // The reason is shown below the button; this label only says it is blocked.
+  return offerProblem
+    ? 'Subscription unavailable'
+    : 'Waiting for the Google Play base plan…';
+}
+
 /** Buttons and messages only; the purchase flow lives in useGooglePurchase. */
 function GoogleStoreActions({ overview, onVerified, children }: Props) {
   const google = useGooglePurchase({ overview, onVerified });
@@ -36,21 +55,20 @@ function GoogleStoreActions({ overview, onVerified, children }: Props) {
           Monthly subscription · Google Play license test
         </Text>
         {google.offerPurchase && (
-          <Button
-            className="min-h-12 rounded-xl"
-            isDisabled={!connected || !config || !offer || busy}
-            onPress={() => {
-              void google.buy();
-            }}
-          >
-            <ButtonText>
-              {busy
-                ? 'Processing…'
-                : offer
-                  ? `Subscribe · ${offer.displayPrice} / month`
-                  : 'Waiting for the Google Play base plan…'}
-            </ButtonText>
-          </Button>
+          <>
+            <Button
+              className="min-h-12 rounded-xl"
+              isDisabled={!connected || !config || !offer || busy}
+              onPress={() => {
+                void google.buy();
+              }}
+            >
+              <ButtonText>
+                {subscribeLabel(busy, offer, google.offerProblem)}
+              </ButtonText>
+            </Button>
+            <ErrorMessage message={google.offerProblem} />
+          </>
         )}
         {google.canManage && (
           <Button

@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { ApiError } from '../../api/api-client';
+import { describeFailure, withDetails } from '../../api/failure-details';
 import { useScoreHistory } from '../../api/use-account-queries';
 import { ErrorMessage } from '../../components/ErrorMessage';
 import { Badge } from '../../components/Brand';
@@ -29,9 +29,10 @@ export function ScoreHistoryCard({
   const history = hasAccess && query.isSuccess ? query.data : null;
   const errorMessage = query.isPaused
     ? 'You are offline. Reconnect to load your score history.'
-    : query.error instanceof ApiError
-      ? query.error.message
-      : 'Unable to load your score history. Please retry.';
+    : withDetails(
+        'Unable to load your score history. Please retry.',
+        describeFailure(query.error),
+      );
   const latest = history?.points.at(-1);
   const previous = history?.points.at(-2);
   const change = latest && previous ? latest.score - previous.score : null;

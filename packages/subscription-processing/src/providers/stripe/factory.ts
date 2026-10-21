@@ -18,6 +18,6 @@ export async function createStripeProcessor(
   });
   return new StripeSubscriptionProcessor(
     new DynamoDbStripeStore(store),
-    new StripeSubscriptionSource(stripe, credentials.priceId),
+    new StripeSubscriptionSource(stripe, credentials.productId),
   );
 }

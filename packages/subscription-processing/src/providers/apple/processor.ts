@@ -54,6 +54,7 @@ export class AppleSubscriptionProcessor {
       outcome: changed ? 'changed' : 'verified',
       userId: job.userId,
       revision: aggregate.revision + 1,
+      subscription,
     };
   }
 

@@ -76,13 +76,14 @@ flowchart TB
     Web["Web :5173<br/>@premiumpass/web"] <-->|"Login / API access token"| Auth0["Auth0 tenant"]
     Mobile["Mobile: iOS / Android<br/>@premiumpass/mobile"] <-->|"Login / API access token"| Auth0
     Stripe["Stripe test"] --> StripeCLI["Stripe CLI"]
-    Apple["Apple Sandbox"] --> AppleTunnel["HTTPS tunnel"]
-    Google["Google Play license tests"] --> PubSub["Pub/Sub push"] --> GoogleTunnel["HTTPS tunnel"]
+    Apple["Apple Sandbox"] --> StoreTunnel["Shared ngrok HTTPS tunnel"]
+    Google["Google Play license tests"] --> PubSub["Pub/Sub push"] --> StoreTunnel
     subgraph Host["Your computer"]
         API["API :3000<br/>@premiumpass/api"]
         StripeHook["Stripe webhook :3002"]
         AppleHook["Apple webhook :3003"]
         GoogleHook["Google webhook :3004"]
+        WebhookRouter["Webhook router :3005<br/>Apple / Google POST paths only"]
         Queue[["ElasticMQ queue + DLQ"]]
         Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
         DB[("DynamoDB Local")]
@@ -94,8 +95,8 @@ flowchart TB
     Web & Mobile -->|"Bearer token"| API
     API -.->|"Fetch JWKS"| Auth0
     StripeCLI --> StripeHook
-    AppleTunnel --> AppleHook
-    GoogleTunnel --> GoogleHook
+    StoreTunnel --> WebhookRouter
+    WebhookRouter --> AppleHook & GoogleHook
     classDef default fill:#f8fafc,stroke:#94a3b8,color:#0f172a,stroke-width:1.5px,rx:10,ry:10
     classDef client fill:#eff6ff,stroke:#3b82f6,color:#1e3a8a,stroke-width:1.5px,rx:12,ry:12
     classDef identity fill:#fff7ed,stroke:#f97316,color:#9a3412,stroke-width:2px,rx:12,ry:12
@@ -108,7 +109,7 @@ flowchart TB
     linkStyle default stroke:#64748b,stroke-width:1.5px
     class Web,Mobile client
     class Auth0 identity
-    class API,StripeHook,AppleHook,GoogleHook,Worker service
+    class API,StripeHook,AppleHook,GoogleHook,WebhookRouter,Worker service
     class Queue queue
     class DB data
     class Stripe stripe
@@ -163,11 +164,14 @@ flowchart LR
     style Host fill:#f8fafc,stroke:#cbd5e1,stroke-width:1.5px,rx:16,ry:16
 ```
 
-| Runs                  | Processes                                                                                           |
-| --------------------- | --------------------------------------------------------------------------------------------------- |
-| In Docker             | DynamoDB Local and ElasticMQ; all application code runs on your computer, without AWS credentials   |
-| Started by `pnpm dev` | API, Stripe and Apple webhooks, worker, Web, and the reconciliation watcher (now, then every 5 min) |
-| Started separately    | Stripe CLI, Metro (Mobile), HTTPS tunnels, Google webhook, outbox publisher and log consumer        |
+| Runs                  | Processes                                                                                                   |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| In Docker             | DynamoDB Local and ElasticMQ; all application code runs on your computer, without AWS credentials           |
+| Started by `pnpm dev` | API, Stripe, Apple and Google webhooks, worker, Web, and the reconciliation watcher (now, then every 5 min) |
+| Started separately    | Stripe CLI, Metro (Mobile), HTTPS tunnels, outbox publisher and log consumer                                |
+
+`pnpm webhooks:listen` starts Stripe CLI and the shared ngrok tunnel together;
+its local router forwards only Apple/Google notification POSTs to their receivers.
 
 Apple and Google stay disabled until configured. The outbox publisher and log
 consumer are two processes from the same workspace package.

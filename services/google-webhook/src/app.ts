@@ -8,10 +8,12 @@ import {
   type GoogleJob,
 } from '@premiumpass/billing-contracts';
 import {
+  googleSubscriptionId,
   purchaseTokenSchema,
   type GoogleSettings,
   type GooglePushSettings,
 } from '@premiumpass/google-play';
+import { summarizeGoogleNotification } from './log-summary.js';
 
 const envelopeSchema = z.object({
   subscription: z.string(),
@@ -23,6 +25,8 @@ const envelopeSchema = z.object({
 const notificationSchema = z
   .object({
     packageName: z.string(),
+    // Only read for the log summary; it never decides anything.
+    eventTimeMillis: z.union([z.string(), z.number()]).optional(),
     subscriptionNotification: z
       .object({
         purchaseToken: purchaseTokenSchema,
@@ -62,7 +66,20 @@ export function createGoogleWebhookApp(
     c.json({ status: 'ok', googleEnabled: Boolean(settings) }),
   );
   app.post('/v1/webhooks/google', async (c) => {
+    const correlationId = randomUUID();
+    // Every rejection below names its reason, so the log answers "why did
+    // Pub/Sub get a 4xx?" without reading the code. Tokens and bodies are
+    // never logged.
+    const reject = (reason: string, extra: Record<string, string> = {}) =>
+      log.warn({
+        event: 'google.notification_rejected',
+        correlationId,
+        reason,
+        ...extra,
+      });
+
     if (!settings || !push || !verify) {
+      reject('google_not_configured');
       return c.json({ error: 'google_not_configured' }, 503);
     }
 
@@ -70,22 +87,39 @@ export function createGoogleWebhookApp(
       c.req.header('Authorization') ?? '',
     )?.[1];
     if (!bearer) {
+      reject('authentication_required');
       return c.json({ error: 'authentication_required' }, 401);
     }
 
     try {
       await verify(bearer);
     } catch {
+      reject('invalid_push_identity');
       return c.json({ error: 'invalid_push_identity' }, 401);
     }
 
     const envelope = envelopeSchema.safeParse(
       await c.req.json<unknown>().catch(() => null),
     );
-    if (!envelope.success || envelope.data.subscription !== push.subscription) {
+    if (!envelope.success) {
+      // Usually payload unwrapping is on, so the body is not Pub/Sub's envelope.
+      reject('invalid_envelope');
       return c.json({ error: 'invalid_notification' }, 400);
     }
 
+    if (envelope.data.subscription !== push.subscription) {
+      // Both names are resource identifiers, and comparing them is the fix.
+      reject('subscription_mismatch', {
+        receivedSubscription: envelope.data.subscription,
+        expectedSubscription: push.subscription,
+      });
+      return c.json({ error: 'invalid_notification' }, 400);
+    }
+
+    const pubsub = {
+      messageId: envelope.data.message.messageId,
+      subscription: envelope.data.subscription,
+    };
     let notification;
     try {
       notification = notificationSchema.parse(
@@ -94,14 +128,26 @@ export function createGoogleWebhookApp(
         ) as unknown,
       );
     } catch {
+      reject('invalid_message', { pubsubMessageId: pubsub.messageId });
       return c.json({ error: 'invalid_notification' }, 400);
     }
 
     if (notification.packageName !== settings.packageName) {
+      reject('package_mismatch', {
+        receivedPackage: notification.packageName,
+        expectedPackage: settings.packageName,
+        pubsubMessageId: pubsub.messageId,
+      });
       return c.json({ error: 'package_mismatch' }, 400);
     }
 
     if (notification.testNotification) {
+      log.info({
+        event: 'google.notification_ignored',
+        correlationId,
+        reason: 'test',
+        ...summarizeGoogleNotification(notification, pubsub),
+      });
       return c.json({ received: true, test: true });
     }
 
@@ -111,10 +157,27 @@ export function createGoogleWebhookApp(
         ? notification.voidedPurchaseNotification.purchaseToken
         : undefined);
     if (!purchaseToken) {
+      log.info({
+        event: 'google.notification_ignored',
+        correlationId,
+        reason: 'not_a_subscription_event',
+        ...summarizeGoogleNotification(notification, pubsub),
+      });
       return c.json({ received: true, ignored: true });
     }
 
-    const correlationId = randomUUID();
+    // Log what Google said before queueing. The digest replaces the token and
+    // matches the subscription ID that the worker and the database use.
+    log.info({
+      event: 'google.notification_received',
+      correlationId,
+      ...summarizeGoogleNotification(
+        notification,
+        pubsub,
+        googleSubscriptionId(settings, purchaseToken),
+      ),
+    });
+
     const eventId = `rtdn_${createHash('sha256').update(`${push.subscription}:${envelope.data.message.messageId}`).digest('hex')}`;
     const job = googleJobSchema.parse({
       provider: 'google',

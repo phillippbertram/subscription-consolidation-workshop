@@ -58,7 +58,11 @@ export class GoogleSubscriptionProcessor {
       changed,
       verified.needsAcknowledgement,
     );
-    return { outcome: changed ? 'changed' : 'verified', userId };
+    return {
+      outcome: changed ? 'changed' : 'verified',
+      userId,
+      subscription: verified.subscription,
+    };
   }
 
   private async acknowledgeCommittedPurchase(job: GoogleJob) {

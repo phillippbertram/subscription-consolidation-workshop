@@ -122,7 +122,7 @@ export function readLocalAppleCredentials(
   const path = env.APPLE_IAP_PRIVATE_KEY_PATH;
   if (!path || !isAbsolute(path)) {
     throw new Error(
-      'Configure an absolute APPLE_IAP_PRIVATE_KEY_PATH in services/subscription-worker/.env.',
+      'Configure an absolute APPLE_IAP_PRIVATE_KEY_PATH in config/.env and run pnpm config:sync.',
     );
   }
 

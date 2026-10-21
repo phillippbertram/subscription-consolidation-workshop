@@ -7,7 +7,7 @@ function required(name: string): string {
   const value = process.env[name];
   if (!value || value.trim() !== value) {
     throw new Error(
-      `${name} is required without surrounding whitespace. Configure infra/.env.`,
+      `${name} is required without surrounding whitespace. Set it in config/.env (config/targets.mjs shows its name there) and run pnpm config:sync.`,
     );
   }
 

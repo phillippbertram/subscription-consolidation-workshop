@@ -36,7 +36,7 @@ export interface LocalReconciliationOptions {
   local: LocalSubscriptionStore;
   log: Logger;
   enqueue: (job: SubscriptionJob) => Promise<void>;
-  stripe: () => Promise<{ stripe: Stripe; priceId: string }>;
+  stripe: () => Promise<{ stripe: Stripe; productId: string }>;
   apple: () =>
     | Pick<AppleSubscriptionSource, 'read'>
     | Promise<Pick<AppleSubscriptionSource, 'read'>>;

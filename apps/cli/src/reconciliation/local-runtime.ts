@@ -45,7 +45,7 @@ export async function localStripeReader() {
       maxNetworkRetries: 1,
       timeout: 5_000,
     }),
-    priceId: credentials.priceId,
+    productId: credentials.productId,
   };
 }
 

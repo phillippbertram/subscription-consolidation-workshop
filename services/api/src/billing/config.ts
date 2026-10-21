@@ -16,21 +16,43 @@ export function readWebOrigin(env: NodeJS.ProcessEnv) {
 
 export function readStripeConfig(env: NodeJS.ProcessEnv) {
   const secretKey = env.STRIPE_SECRET_KEY;
-  const priceId = env.STRIPE_PRICE_ID;
-  if (!secretKey && !priceId) {
+  const productId = env.STRIPE_PRODUCT_ID;
+  const monthlyLookupKey = env.STRIPE_MONTHLY_PRICE_LOOKUP_KEY;
+  const dailyLookupKey = env.STRIPE_DAILY_PRICE_LOOKUP_KEY;
+  if (
+    !secretKey &&
+    !productId &&
+    !monthlyLookupKey &&
+    !dailyLookupKey &&
+    !env.STRIPE_PRICE_ID &&
+    !env.STRIPE_PRICE_LOOKUP_KEY
+  ) {
     return null;
   }
 
   if (
     !secretKey ||
     !/^sk_test_[A-Za-z0-9]+$/.test(secretKey) ||
-    !priceId ||
-    !/^price_[A-Za-z0-9]+$/.test(priceId)
+    !productId ||
+    !/^prod_[A-Za-z0-9]+$/.test(productId) ||
+    !monthlyLookupKey ||
+    monthlyLookupKey.trim() !== monthlyLookupKey ||
+    !dailyLookupKey ||
+    dailyLookupKey.trim() !== dailyLookupKey ||
+    monthlyLookupKey === dailyLookupKey
   ) {
     throw new Error(
-      'Set STRIPE_SECRET_KEY to a test secret key and STRIPE_PRICE_ID to a monthly test price, or leave both unset to disable checkout.',
+      'Set STRIPE_SECRET_KEY (test mode), STRIPE_PRODUCT_ID, STRIPE_MONTHLY_PRICE_LOOKUP_KEY, and STRIPE_DAILY_PRICE_LOOKUP_KEY with distinct lookup keys, or leave all unset to disable checkout. STRIPE_PRICE_ID and STRIPE_PRICE_LOOKUP_KEY are no longer used.',
     );
   }
 
-  return { secretKey, priceId, webOrigin: readWebOrigin(env) };
+  return {
+    secretKey,
+    productId,
+    priceLookupKeys: {
+      premium_monthly: monthlyLookupKey,
+      premium_daily: dailyLookupKey,
+    },
+    webOrigin: readWebOrigin(env),
+  };
 }

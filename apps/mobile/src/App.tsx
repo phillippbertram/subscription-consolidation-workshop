@@ -19,11 +19,16 @@ function ConfiguredApp() {
   let config: MobileConfig;
   try {
     config = readMobileConfig();
-  } catch {
+  } catch (problem) {
+    // readMobileConfig names the variables that are wrong, never their values.
+    const reason =
+      problem instanceof Error
+        ? problem.message
+        : 'Set the public Auth0 and API settings in config/.env, run pnpm config:sync, then reload the app.';
     return (
       <Screen
         title="Setup required"
-        description="Set the public Auth0 domain, Native Client ID, API audience, and API URL in apps/mobile/.env. Reload the app after saving. Rebuild the iOS app if the Auth0 domain changes."
+        description={`${reason} Rebuild the iOS app if the Auth0 domain changes.`}
       />
     );
   }

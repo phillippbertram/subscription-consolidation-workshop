@@ -1,6 +1,6 @@
 # Google Play notification ingress
 
-Local Hono service on `127.0.0.1:3004`, started separately with
+Local Hono service on `127.0.0.1:3004`, started by `pnpm dev` or alone with
 `pnpm dev:webhook:google`. Follow [Google Play setup](../../docs/GOOGLE_PLAY.md).
 
 `POST /v1/webhooks/google` accepts wrapped, authenticated Pub/Sub push messages.
@@ -15,9 +15,11 @@ rereads Google, requires a license-test purchase and verified owner, and commits
 before purchase acknowledgement. Raw tokens remain in the private queue and
 backend provider record; ingress logs contain IDs only.
 
-Copy `.env.example` to `.env` if absent; set the shared Google product settings
-and push identity values there. This ingress needs no Google billing private key.
-Expose only this service through an HTTPS tunnel; keep database and queue private.
+Set the shared Google product settings and the push identity values in
+`config/.env`; `pnpm config:sync` writes this service's `.env`. This ingress
+receives no Google billing private key.
+Use [shared forwarding](../../docs/DEVELOPMENT.md#receive-provider-webhooks-together)
+to expose the Apple/Google webhook paths; keep database and queue private.
 Pub/Sub must use the normal wrapped message format, not payload unwrapping.
 
 `GET /health` reports process liveness and configuration enablement. It does not

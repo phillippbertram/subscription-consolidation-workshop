@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { ApiError } from '../../api/api-client';
+import { describeFailure, withDetails } from '../../api/failure-details';
 import type {
   SubscriptionOverview,
   UserProfile,
@@ -70,10 +70,11 @@ export function useDashboard(enabled: boolean) {
   } else if (error) {
     state = {
       status: 'error',
-      message:
-        error instanceof ApiError
-          ? error.message
-          : 'Unable to load your profile. Please retry.',
+      // The details line carries the API error's own hint and technical cause.
+      message: withDetails(
+        'Unable to load your profile. Please retry.',
+        describeFailure(error),
+      ),
     };
   } else if (expired) {
     // Cached data can survive a failed/offline refresh. Hide stale Premium UI

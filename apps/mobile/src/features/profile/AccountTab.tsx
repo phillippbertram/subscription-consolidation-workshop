@@ -9,6 +9,7 @@ import { Icon } from '../../components/Icon';
 import { Button, ButtonText } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Text } from '../../components/ui/text';
+import { DeviceInfoCard } from './DeviceInfoCard';
 import { Avatar, displayName } from './identity';
 
 function Row({
@@ -133,6 +134,8 @@ export function AccountTab({
         </View>
         <DeveloperDetails>{developerTools}</DeveloperDetails>
       </Card>
+
+      <DeviceInfoCard />
 
       <Card className="gap-4 rounded-2xl p-5">
         <View className="gap-1">

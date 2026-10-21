@@ -177,7 +177,7 @@ if (!unsigned) {
     !/^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/.test(env.ANDROID_PACKAGE_NAME)
   ) {
     fail(
-      'Set the final ANDROID_PACKAGE_NAME before creating an upload bundle.',
+      'Set the final GOOGLE_PLAY_PACKAGE_NAME in config/.env (the app receives it as ANDROID_PACKAGE_NAME) before creating an upload bundle.',
     );
   }
 
@@ -188,9 +188,7 @@ if (!unsigned) {
     'ANDROID_UPLOAD_KEY_PASSWORD',
   ]) {
     if (!env[name]) {
-      fail(
-        `Set ${name} in the ignored mobile environment before creating an upload bundle.`,
-      );
+      fail(`Set ${name} in config/.env before creating an upload bundle.`);
     }
   }
 

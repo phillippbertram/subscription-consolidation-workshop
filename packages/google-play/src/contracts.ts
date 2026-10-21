@@ -7,10 +7,27 @@ export const packageNameSchema = z
 export const purchaseTokenSchema = z.string().min(1).max(4096).regex(/^\S+$/);
 
 export class GooglePlayError extends Error {
-  constructor(readonly code: string) {
-    super(code);
+  // `detail` tells a developer what to fix. It names settings, never values.
+  constructor(
+    readonly code: string,
+    detail?: string,
+  ) {
+    super(detail ? `${code}: ${detail}` : code);
     this.name = 'GooglePlayError';
   }
+}
+
+/**
+ * Turn failed schema fields into the environment variables to fix. A bare
+ * "configuration invalid" sends people searching through every setting, and the
+ * values (URLs, identifiers) have no place in an error message.
+ */
+export function describeInvalidSettings(
+  issues: readonly { path: readonly PropertyKey[] }[],
+  variableNames: Record<string, string>,
+) {
+  const fields = new Set(issues.map((issue) => String(issue.path[0])));
+  return `fix ${[...fields].map((field) => variableNames[field] ?? field).join(', ')}`;
 }
 
 export interface GoogleSettings {
@@ -27,7 +44,10 @@ export function readGoogleSettings(
   }
 
   if (env.GOOGLE_PLAY_ENABLED !== 'true') {
-    throw new GooglePlayError('google_configuration_invalid');
+    throw new GooglePlayError(
+      'google_configuration_invalid',
+      'GOOGLE_PLAY_ENABLED must be true or false',
+    );
   }
 
   const parsed = z
@@ -42,7 +62,16 @@ export function readGoogleSettings(
       basePlanId: env.GOOGLE_PLAY_BASE_PLAN_ID,
     });
   if (!parsed.success) {
-    throw new GooglePlayError('google_configuration_invalid');
+    throw new GooglePlayError(
+      'google_configuration_invalid',
+      describeInvalidSettings(parsed.error.issues, {
+        packageName:
+          'GOOGLE_PLAY_PACKAGE_NAME (for example com.yourcompany.app)',
+        productId:
+          'GOOGLE_PLAY_PRODUCT_ID (lowercase, for example premium_monthly)',
+        basePlanId: 'GOOGLE_PLAY_BASE_PLAN_ID (lowercase, for example monthly)',
+      }),
+    );
   }
 
   return parsed.data;

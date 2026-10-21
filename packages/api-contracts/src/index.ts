@@ -90,7 +90,9 @@ const blockingStates = ['pending', 'past_due', 'paused'];
 export function hasBlockingSubscription(overview: SubscriptionOverview) {
   return overview.subscriptions.some(
     (subscription) =>
-      subscription.productId === 'premium_monthly' &&
+      (subscription.productId === 'premium_monthly' ||
+        (subscription.provider === 'stripe' &&
+          subscription.productId === 'premium_daily')) &&
       blockingStates.includes(subscription.state),
   );
 }
@@ -104,10 +106,14 @@ export function canPurchasePremium(overview: SubscriptionOverview) {
   );
 }
 
+// Billing choices share Premium access; only Stripe currently offers daily billing.
+export const stripePlanIdSchema = z.enum(['premium_daily', 'premium_monthly']);
+export type StripePlanId = z.infer<typeof stripePlanIdSchema>;
+
 export const checkoutRequestIdSchema = z.uuid();
 export const checkoutRequestSchema = z
   .object({
-    planId: z.string().min(1).max(64),
+    planId: stripePlanIdSchema,
   })
   .strict();
 export const checkoutSessionSchema = z.object({

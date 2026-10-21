@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth0, type Credentials } from 'react-native-auth0';
+import { describeFailure, withDetails } from '../../api/failure-details';
 
 type SessionDetails = Pick<
   Credentials,
@@ -47,12 +48,14 @@ export function useSessionDetails() {
           },
         });
       })
-      .catch(() => {
+      .catch((failure: unknown) => {
         if (active) {
           setState({
             status: 'error',
-            message:
+            message: withDetails(
               'Unable to read session details. Sign out and sign in again if your session has expired.',
+              describeFailure(failure),
+            ),
           });
         }
       });

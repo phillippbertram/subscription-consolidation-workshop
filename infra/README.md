@@ -82,15 +82,16 @@ template does not establish deployed IAM, event delivery, or purchases.
    configure its named profile instead. Check budget and service quotas, including
    capacity for the configured Lambda concurrency reservations.
 
-2. Copy `infra/.env.example` to `infra/.env` only if absent. Set:
+2. Set these in `config/.env`; `pnpm config:sync` writes them to `infra/.env`,
+   which the deploy scripts read:
 
-   | Setting                                                                                                 | Source                                                                                                        |
-   | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-   | `AWS_PROFILE`, `AWS_REGION`, `AWS_ACCOUNT_ID`                                                           | Your profile, region, and expected 12-digit account                                                           |
-   | `AUTH0_ISSUER`, `AUTH0_AUDIENCE`                                                                        | Same Custom API/issuer as the clients                                                                         |
-   | `STRIPE_SECRET_ARN`                                                                                     | Existing same-account/region secret from [Stripe cloud setup](../docs/PAYMENTS.md#register-the-cloud-webhook) |
-   | Optional `APPLE_ENABLED`, `APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_SECRET_ARN`                     | [Apple cloud configuration](../docs/APPLE_PURCHASES.md#aws-notification-processing)                           |
-   | Optional `GOOGLE_PLAY_ENABLED`, package/product/base plan, secret ARN, push audience/email/subscription | [Google cloud configuration](../docs/GOOGLE_PLAY.md#aws-notification-processing)                              |
+   | Setting                                                                                           | Source                                                                                                        |
+   | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+   | `AWS_PROFILE`, `AWS_REGION`, `AWS_ACCOUNT_ID`                                                     | Your profile, region, and expected 12-digit account                                                           |
+   | `AUTH0_DOMAIN`, `AUTH0_AUDIENCE`                                                                  | Shared with the clients; AWS receives the issuer `https://<domain>/`                                          |
+   | `STRIPE_SECRET_ARN`                                                                               | Existing same-account/region secret from [Stripe cloud setup](../docs/PAYMENTS.md#register-the-cloud-webhook) |
+   | Optional `CLOUD_APPLE_ENABLED`, `APPLE_BUNDLE_ID`, `APPLE_PRODUCT_ID`, `APPLE_SECRET_ARN`         | [Apple cloud configuration](../docs/APPLE_PURCHASES.md#aws-notification-processing)                           |
+   | Optional `CLOUD_GOOGLE_PLAY_ENABLED`, secret ARN, `CLOUD_` push audience/subscription; shared IDs | [Google cloud configuration](../docs/GOOGLE_PLAY.md#aws-notification-processing)                              |
 
    Stripe credentials remain required for the shared worker even when testing
    Apple or Google. Secrets use the default Secrets Manager encryption key;
@@ -110,7 +111,7 @@ template does not establish deployed IAM, event delivery, or purchases.
    pnpm infra:deploy:dev
    ```
 
-   These scripts read `infra/.env`, check STS account identity against
+   These scripts sync first, read `infra/.env`, check STS account identity against
    `AWS_ACCOUNT_ID`, and retain CDK approval prompts. Shell values override the
    file. Bootstrap is never implicit.
 
@@ -136,9 +137,9 @@ template does not establish deployed IAM, event delivery, or purchases.
 ### Cloud reconciliation
 
 After a separately authorized deployment, use the three switches in
-[infra/.env.example](.env.example): `RECONCILIATION_STRIPE_ENABLED`,
+`config/.env`: `RECONCILIATION_STRIPE_ENABLED`,
 `RECONCILIATION_APPLE_ENABLED`, and `RECONCILIATION_GOOGLE_ENABLED`. Each defaults
-to `false`; Apple/Google additionally require their provider opt-in. Processing
+to `false`; Apple/Google additionally require their provider opt-in (`CLOUD_APPLE_ENABLED`, `CLOUD_GOOGLE_PLAY_ENABLED`). Processing
 alone no longer enables Google discovery. Both the deploy wrapper and the
 CloudFormation template enforce these dependencies.
 

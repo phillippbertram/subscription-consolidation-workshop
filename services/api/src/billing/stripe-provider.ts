@@ -1,5 +1,9 @@
 import Stripe from 'stripe';
 import {
+  stripePlanIdSchema,
+  type StripePlanId,
+} from '@premiumpass/api-contracts';
+import {
   CheckoutError,
   type BillingProvider,
   type CheckoutAttempt,
@@ -36,26 +40,54 @@ export class StripeBillingProvider implements BillingProvider {
     }
   }
 
-  async validatePrice(priceId: string) {
-    const price = await this.call(() =>
-      this.stripe.prices.retrieve(priceId, { expand: ['product'] }),
+  /**
+   * A lookup key selects today's offer, not a permanent entitlement. Resolve it
+   * only for a new purchase intent, then persist its concrete price ID.
+   * This small demo does not cache prices; caching would need an explicit policy
+   * for how long new purchases may still use a previous offer.
+   */
+  async resolvePrice(
+    productId: string,
+    priceLookupKey: string,
+    planId: StripePlanId,
+  ) {
+    const prices = await this.call(() =>
+      this.stripe.prices.list({
+        lookup_keys: [priceLookupKey],
+        active: true,
+        limit: 2,
+        expand: ['data.product'],
+      }),
     );
+    const price = prices.data[0];
+    if (prices.has_more || prices.data.length !== 1 || !price) {
+      throw new CheckoutError('stripe_price_invalid', 503);
+    }
+
+    // A lookup key is editable: verify that its price bills the chosen period.
     const product = price.product;
     if (
+      price.lookup_key !== priceLookupKey ||
       price.livemode ||
       !price.active ||
       price.type !== 'recurring' ||
-      price.recurring?.interval !== 'month' ||
+      price.recurring?.interval !==
+        (planId === 'premium_daily' ? 'day' : 'month') ||
       price.recurring.interval_count !== 1 ||
       price.recurring.usage_type !== 'licensed' ||
       price.billing_scheme !== 'per_unit' ||
-      !price.unit_amount ||
+      price.unit_amount === null ||
+      price.unit_amount <= 0 ||
       typeof product === 'string' ||
       product.deleted ||
+      product.id !== productId ||
+      product.livemode ||
       !product.active
     ) {
       throw new CheckoutError('stripe_price_invalid', 503);
     }
+
+    return price.id;
   }
 
   async createCustomer(mapping: CustomerMapping) {
@@ -164,7 +196,9 @@ export class StripeBillingProvider implements BillingProvider {
    * references to the saved attempt and check whether checkout can be resumed.
    */
   private session(result: Stripe.Checkout.Session): CheckoutSession {
+    const plan = stripePlanIdSchema.safeParse(result.metadata?.planId);
     if (
+      !plan.success ||
       result.livemode ||
       !result.id.startsWith('cs_test_') ||
       result.mode !== 'subscription' ||
@@ -191,6 +225,7 @@ export class StripeBillingProvider implements BillingProvider {
 
     return {
       id: result.id,
+      planId: plan.data,
       customerId: result.customer,
       userId: result.metadata.userId,
       requestId: result.metadata.requestId,
@@ -209,7 +244,7 @@ export class StripeBillingProvider implements BillingProvider {
     const metadata = {
       userId: attempt.userId,
       requestId: attempt.requestId,
-      planId: 'premium_monthly',
+      planId: attempt.planId,
     };
     const result = await this.call(() =>
       this.stripe.checkout.sessions.create(

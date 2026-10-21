@@ -1,7 +1,11 @@
 import type { GoogleConfig } from '@premiumpass/api-contracts';
+import { withDetails } from '../../../api/failure-details';
 
 interface GooglePurchaseState {
   config: GoogleConfig | undefined;
+  // True once Play answered the product query, so "no offer" is a real result
+  // and not just a request that has not finished yet.
+  productsLoaded: boolean;
   busy: boolean;
   message: string | null;
   error: string | null;
@@ -10,24 +14,31 @@ interface GooglePurchaseState {
 type GooglePurchaseAction =
   | { type: 'configLoaded'; config: GoogleConfig }
   | { type: 'verificationFailed'; error: string }
+  // Failures carry the technical cause (see describeFailure) for the screen.
   | {
       type:
         | 'configurationFailed'
-        | 'checkoutStarted'
         | 'checkoutFailed'
-        | 'paymentPending'
-        | 'purchaseCancelled'
         | 'purchaseFailed'
         | 'connectionFailed'
-        | 'verificationStarted'
-        | 'verificationSucceeded'
-        | 'verificationsSettled'
         | 'restoreFailed'
         | 'managementFailed';
+      detail: string;
+    }
+  | {
+      type:
+        | 'productsLoaded'
+        | 'checkoutStarted'
+        | 'paymentPending'
+        | 'purchaseCancelled'
+        | 'verificationStarted'
+        | 'verificationSucceeded'
+        | 'verificationsSettled';
     };
 
 export const initialGooglePurchaseState: GooglePurchaseState = {
   config: undefined,
+  productsLoaded: false,
   busy: false,
   message: null,
   error: null,
@@ -45,11 +56,15 @@ export function googlePurchaseReducer(
   switch (action.type) {
     case 'configLoaded':
       return { ...state, config: action.config };
+    case 'productsLoaded':
+      return { ...state, productsLoaded: true };
     case 'configurationFailed':
       return {
         ...state,
-        error:
+        error: withDetails(
           'Google Play purchases are unavailable. Check the local Google configuration.',
+          action.detail,
+        ),
       };
     case 'checkoutStarted':
       return { ...state, busy: true, error: null };
@@ -57,7 +72,10 @@ export function googlePurchaseReducer(
       return {
         ...state,
         busy: false,
-        error: 'Unable to open Google Play checkout. Please retry.',
+        error: withDetails(
+          'Unable to open Google Play checkout. Please retry.',
+          action.detail,
+        ),
       };
     case 'paymentPending':
       return {
@@ -73,14 +91,18 @@ export function googlePurchaseReducer(
         ...state,
         busy: false,
         message: null,
-        error:
+        error: withDetails(
           'Google Play could not complete the purchase. Check your license tester account and retry.',
+          action.detail,
+        ),
       };
     case 'connectionFailed':
       return {
         ...state,
-        error:
+        error: withDetails(
           'Cannot connect to Google Play. Use a Play-enabled device and retry.',
+          action.detail,
+        ),
       };
     case 'verificationStarted':
       return {
@@ -99,12 +121,18 @@ export function googlePurchaseReducer(
     case 'restoreFailed':
       return {
         ...state,
-        error: 'Unable to restore Google Play purchases. Please retry.',
+        error: withDetails(
+          'Unable to restore Google Play purchases. Please retry.',
+          action.detail,
+        ),
       };
     case 'managementFailed':
       return {
         ...state,
-        error: 'Unable to open Google Play subscription management.',
+        error: withDetails(
+          'Unable to open Google Play subscription management.',
+          action.detail,
+        ),
       };
   }
 }

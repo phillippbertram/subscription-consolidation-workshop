@@ -31,3 +31,5 @@ work/
 *.jks
 *.keystore
 *.service-account.json
+
+secrets

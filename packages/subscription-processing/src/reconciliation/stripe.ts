@@ -75,7 +75,7 @@ export async function discoverStripeSubscriptions(options: {
 /** Discover Stripe state first; repairs use the same guarded processor as webhooks. */
 export async function reconcileStripeSubscriptions(options: {
   stripe: Stripe;
-  priceId: string;
+  productId: string;
   store: StripeProcessingStore;
   userId: string;
   customerId: string;
@@ -86,7 +86,7 @@ export async function reconcileStripeSubscriptions(options: {
   enqueue?: (job: StripeReconciliationJob) => Promise<void>;
   signal?: AbortSignal;
 }) {
-  const { stripe, priceId, store, userId, customerId, dryRun } = options;
+  const { stripe, productId, store, userId, customerId, dryRun } = options;
   options.onProgress?.('Discovering Stripe subscriptions…');
   const { aggregate, ids } = await discoverStripeSubscriptions({
     stripe,
@@ -96,7 +96,7 @@ export async function reconcileStripeSubscriptions(options: {
     ...(options.signal ? { signal: options.signal } : {}),
   });
 
-  const source = new StripeSubscriptionSource(stripe, priceId);
+  const source = new StripeSubscriptionSource(stripe, productId);
   const clock = options.now ?? (() => new Date());
   const processor = new StripeSubscriptionProcessor(store, source, clock);
   const runId = options.runId ?? randomUUID();

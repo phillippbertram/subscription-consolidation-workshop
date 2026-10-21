@@ -3,7 +3,7 @@ export function readLocalConfig(env: NodeJS.ProcessEnv) {
 
   if (rawPort === undefined || rawPort.trim() === '') {
     throw new Error(
-      'PORT is required for local startup. Copy services/api/.env.example to services/api/.env or set PORT.',
+      'PORT is required for local startup. Set API_PORT in config/.env and run pnpm config:sync, or set PORT.',
     );
   }
 

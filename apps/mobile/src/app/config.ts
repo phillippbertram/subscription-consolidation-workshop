@@ -5,21 +5,51 @@ export function readMobileConfig() {
   const audience = process.env.EXPO_PUBLIC_AUTH0_AUDIENCE?.trim();
   const apiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
 
-  if (
-    !domain ||
-    !/^[a-zA-Z0-9.-]+$/.test(domain) ||
-    domain === 'your-tenant.eu.auth0.com' ||
-    !clientId ||
-    clientId === 'your-native-client-id' ||
-    !audience ||
-    !apiUrl
-  ) {
-    throw new Error(
-      'Set the public Auth0 domain, Native Client ID, API audience, and API URL in apps/mobile/.env, then reload the app.',
+  // Name each problem instead of one generic message: in a workshop the usual
+  // mistake is a single setting left empty or at its example value. The names
+  // are those in config/.env, which pnpm config:sync turns into the
+  // EXPO_PUBLIC_* variables read above. Values never appear here.
+  const problems: string[] = [];
+  if (!domain) {
+    problems.push('AUTH0_DOMAIN is empty');
+  } else if (domain === 'your-tenant.eu.auth0.com') {
+    problems.push('AUTH0_DOMAIN still has the example value');
+  } else if (!/^[a-zA-Z0-9.-]+$/.test(domain)) {
+    problems.push(
+      'AUTH0_DOMAIN must be a bare hostname, without https:// or a path',
     );
   }
 
-  const url = new URL(apiUrl);
+  if (!clientId) {
+    problems.push('MOBILE_AUTH0_CLIENT_ID is empty');
+  } else if (clientId === 'your-native-client-id') {
+    problems.push('MOBILE_AUTH0_CLIENT_ID still has the example value');
+  }
+
+  if (!audience) {
+    problems.push('AUTH0_AUDIENCE is empty');
+  }
+
+  if (!apiUrl) {
+    problems.push('MOBILE_API_URL is empty');
+  }
+
+  // The extra checks repeat the ones above so TypeScript narrows the values.
+  if (problems.length > 0 || !domain || !clientId || !audience || !apiUrl) {
+    throw new Error(
+      `Fix config/.env, run pnpm config:sync, then reload the app: ${problems.join('; ')}.`,
+    );
+  }
+
+  let url: URL;
+  try {
+    url = new URL(apiUrl);
+  } catch {
+    throw new Error(
+      'MOBILE_API_URL is not a valid URL. Use an origin such as http://192.168.1.20:3000.',
+    );
+  }
+
   const [first, second] = url.hostname.split('.').map(Number);
   const privateIpv4 =
     /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname) &&
@@ -40,7 +70,7 @@ export function readMobileConfig() {
     url.pathname !== '/'
   ) {
     throw new Error(
-      'API URL must be an HTTPS origin or a local HTTP origin (loopback, private IPv4, or .local hostname).',
+      'MOBILE_API_URL must be an HTTPS origin or a local HTTP origin (loopback, private IPv4, or .local hostname), without a path, query, or credentials.',
     );
   }
 

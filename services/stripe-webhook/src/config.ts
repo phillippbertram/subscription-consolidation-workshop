@@ -52,7 +52,7 @@ export async function readWebhookCredentials(
     });
     if (!parsed.success) {
       throw new Error(
-        'Configure STRIPE_WEBHOOK_SECRET in services/stripe-webhook/.env.',
+        'Configure STRIPE_WEBHOOK_SECRET in config/.env and run pnpm config:sync.',
       );
     }
 

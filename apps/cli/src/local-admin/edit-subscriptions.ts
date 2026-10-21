@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { isPremiumSubscription } from '@premiumpass/domain';
 import { z } from 'zod';
 import { RevisionConflict } from '@premiumpass/subscription-processing';
 import type { LocalSubscriptionStore } from './store.js';
@@ -58,10 +59,7 @@ export async function editSubscriptions(
       );
     }
 
-    if (
-      mode !== 'free' &&
-      selected.some((s) => s.productId !== 'premium_monthly')
-    ) {
+    if (mode !== 'free' && selected.some((s) => !isPremiumSubscription(s))) {
       throw new Error(
         'Cannot activate an unknown product. Select a Premium subscription.',
       );

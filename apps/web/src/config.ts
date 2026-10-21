@@ -22,7 +22,7 @@ export function readWebConfig() {
     });
   if (!values.success) {
     throw new Error(
-      'Copy apps/web/.env.example to apps/web/.env and configure the Auth0 SPA client, audience, and API origin. Restart pnpm dev:web after editing it.',
+      'Set AUTH0_DOMAIN, WEB_AUTH0_CLIENT_ID, AUTH0_AUDIENCE, and WEB_API_URL in config/.env, run pnpm config:sync, and restart pnpm dev:web.',
     );
   }
 

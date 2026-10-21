@@ -7,8 +7,12 @@ import {
   deepLinkToSubscriptions,
   type Purchase,
 } from 'expo-iap';
-import type { SubscriptionOverview } from '@premiumpass/api-contracts';
+import type {
+  GoogleConfig,
+  SubscriptionOverview,
+} from '@premiumpass/api-contracts';
 import type { ApiClient } from '../../../api/api-client';
+import { describeFailure, withDetails } from '../../../api/failure-details';
 import { useApiClient } from '../../../api/use-api-client';
 import { canPurchasePremium } from '../subscription-presentation';
 import {
@@ -42,7 +46,7 @@ export function useGooglePurchase({
     googlePurchaseReducer,
     initialGooglePurchaseState,
   );
-  const { config, busy, message, error } = state;
+  const { config, productsLoaded, busy, message, error } = state;
   // Aborted on unmount: late async results must not update a closed screen.
   const lifetime = useRef(new AbortController());
   // One verification per purchase token, even if Play reports it twice.
@@ -118,13 +122,17 @@ export function useGooglePurchase({
       })()
         .catch((failure: unknown) => {
           if (!signal.aborted) {
-            // Do not display raw native/provider errors containing purchase payloads.
+            // describeFailure shows codes and messages, never raw native or
+            // provider objects, which can contain purchase payloads.
             dispatch({
               type: 'verificationFailed',
               error:
                 failure instanceof GoogleUiError
                   ? failure.message
-                  : 'Unable to verify this purchase. Check the signed-in account and backend, then restore to retry.',
+                  : withDetails(
+                      'Unable to verify this purchase. Check the signed-in account and backend, then restore to retry.',
+                      describeFailure(failure),
+                    ),
             });
           }
         })
@@ -146,17 +154,21 @@ export function useGooglePurchase({
     },
     onPurchaseError: (failure) => {
       if (!lifetime.current.signal.aborted) {
-        dispatch({
-          type:
-            failure.code === ErrorCode.UserCancelled
-              ? 'purchaseCancelled'
-              : 'purchaseFailed',
-        });
+        // Play's own reason (for example item-unavailable) is the most useful
+        // part of a failed purchase, so it travels to the screen.
+        dispatch(
+          failure.code === ErrorCode.UserCancelled
+            ? { type: 'purchaseCancelled' }
+            : { type: 'purchaseFailed', detail: describeFailure(failure) },
+        );
       }
     },
-    onError: () => {
+    onError: (failure) => {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'connectionFailed' });
+        dispatch({
+          type: 'connectionFailed',
+          detail: describeFailure(failure),
+        });
       }
     },
   });
@@ -173,9 +185,9 @@ export function useGooglePurchase({
       if (!signal.aborted) {
         verifiedCallback.current();
       }
-    } catch {
+    } catch (failure) {
       if (!signal.aborted) {
-        dispatch({ type: 'restoreFailed' });
+        dispatch({ type: 'restoreFailed', detail: describeFailure(failure) });
       }
     }
   }, [verify]);
@@ -200,11 +212,18 @@ export function useGooglePurchase({
         dispatch({ type: 'configLoaded', config: settings });
         await fetchProducts({ skus: [settings.productId], type: 'subs' });
         if (!controller.signal.aborted) {
+          // Only now is an empty product list a real answer from Play.
+          dispatch({ type: 'productsLoaded' });
           await restore();
         }
-      } catch {
+      } catch (failure: unknown) {
         if (!controller.signal.aborted) {
-          dispatch({ type: 'configurationFailed' });
+          // Config and product lookups carry no purchase payloads, so their
+          // exact cause is safe to show and helps debug the workshop setup.
+          dispatch({
+            type: 'configurationFailed',
+            detail: describeFailure(failure),
+          });
         }
       }
     })();
@@ -257,9 +276,9 @@ export function useGooglePurchase({
           },
         },
       });
-    } catch {
+    } catch (failure) {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'checkoutFailed' });
+        dispatch({ type: 'checkoutFailed', detail: describeFailure(failure) });
       }
     }
   }
@@ -274,17 +293,44 @@ export function useGooglePurchase({
         skuAndroid: config.productId,
         packageNameAndroid: config.packageName,
       });
-    } catch {
+    } catch (failure) {
       if (!lifetime.current.signal.aborted) {
-        dispatch({ type: 'managementFailed' });
+        dispatch({
+          type: 'managementFailed',
+          detail: describeFailure(failure),
+        });
       }
     }
   }
+
+  // Without exactly one offer the Subscribe button stays disabled. Say why, so
+  // a wrong product ID or base plan is visible instead of a silent "waiting".
+  const offerProblem =
+    config && productsLoaded && !offer
+      ? withDetails(
+          'Google Play does not offer this subscription.',
+          explainMissingOffer(
+            config,
+            product !== undefined,
+            product?.platform === 'android'
+              ? [
+                  ...new Set(
+                    product.subscriptionOffers.flatMap(
+                      (candidate) => candidate.basePlanIdAndroid ?? [],
+                    ),
+                  ),
+                ]
+              : [],
+            offers.length,
+          ),
+        )
+      : null;
 
   return {
     connected,
     config,
     offer,
+    offerProblem,
     busy,
     message,
     error,
@@ -296,6 +342,27 @@ export function useGooglePurchase({
     restore,
     manage,
   };
+}
+
+/**
+ * Name the first thing that is wrong when Play returns no usable offer. The
+ * checks follow the setup order: product, then base plan, then offers.
+ */
+function explainMissingOffer(
+  config: GoogleConfig,
+  productFound: boolean,
+  basePlans: string[],
+  matchingOffers: number,
+) {
+  if (!productFound) {
+    return `Play returned no subscription "${config.productId}" for package ${config.packageName}. Check the product ID in Play Console, that the subscription is active, and that this build uses that package name.`;
+  }
+
+  if (matchingOffers === 0) {
+    return `Subscription "${config.productId}" has no active base plan "${config.basePlanId}" with an offer. Play lists: ${basePlans.join(', ') || 'none'}.`;
+  }
+
+  return `Subscription "${config.productId}" has ${matchingOffers} offers for base plan "${config.basePlanId}", but the demo needs exactly one. Remove extra offers or free trials in Play Console.`;
 }
 
 /**

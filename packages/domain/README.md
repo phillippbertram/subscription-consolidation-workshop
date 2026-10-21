@@ -26,7 +26,8 @@ flowchart LR
     Sort --> Result["tier, features,<br/>effectiveUntil, grants"]
 ```
 
-1. **Validate:** only `premium_monthly` counts, and the stored state must match
+1. **Validate:** `premium_monthly` and Stripe `premium_daily` grant the same Premium
+   features; daily records from other providers do not count. The stored state must match
    what `normalizeProviderStatus` makes of the raw provider status.
 2. **Compute an end:** `active`/`trialing` use the verified `accessUntil`;
    `past_due` adds grace (Apple's signed value, otherwise at most 24 hours).

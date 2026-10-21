@@ -112,7 +112,16 @@ export function normalizeProviderStatus(
 /** Maximum grace after a failed renewal for providers without a signed grace boundary. */
 export const GRACE_MS = 24 * 60 * 60 * 1000;
 
-const PREMIUM_PRODUCT_ID = 'premium_monthly';
+/** Both Stripe billing periods unlock the same features; native stores stay monthly. */
+export function isPremiumSubscription(
+  subscription: Pick<Subscription, 'provider' | 'productId'>,
+) {
+  return (
+    subscription.productId === 'premium_monthly' ||
+    (subscription.provider === 'stripe' &&
+      subscription.productId === 'premium_daily')
+  );
+}
 
 /** One reason why a user has Premium right now, with the moment it ends. */
 export type AccessGrant =
@@ -219,7 +228,7 @@ export function deriveEntitlements(
  */
 function isKnownAndConsistent(subscription: Subscription) {
   return (
-    subscription.productId === PREMIUM_PRODUCT_ID &&
+    isPremiumSubscription(subscription) &&
     normalizeProviderStatus(
       subscription.provider,
       subscription.providerStatus,

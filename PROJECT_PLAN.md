@@ -16,6 +16,9 @@ reliability exercises. Google protected API, notification, and worker wiring, pl
 Stripe/Apple/Google reconciliation with one schedule and separate provider opt-ins,
 can be prepared for AWS;
 account changes and deployment remain separate from local implementation.
+Stripe offers daily and monthly recurring prices for the same Premium features;
+native store purchases remain monthly. Web users choose a period before starting
+a new checkout. Existing subscription period changes remain outside this iteration.
 Administrators can also grant selected users Premium
 access without a Stripe, Apple, or Google purchase.
 

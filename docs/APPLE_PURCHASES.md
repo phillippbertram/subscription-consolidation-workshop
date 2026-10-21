@@ -54,8 +54,47 @@ saved (step 8, Apple's Finish Transaction API). If anything fails before that,
 Apple simply delivers the transaction again; nothing is lost and nothing is
 granted twice.
 
-**Later changes** such as renewals or cancellations arrive as signed App Store
-Server Notifications and go through steps 6–8 without the app.
+## How later changes arrive
+
+After the purchase, the app is no longer needed. Renewals, cancellations,
+refunds, and billing problems reach the backend as **App Store Server
+Notifications**: Apple calls the webhook directly.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    box rgb(244, 244, 245) Apple
+        participant Store as App Store
+    end
+    box rgb(240, 253, 250) PremiumPass backend
+        participant Hook as Webhook
+        participant Queue as Queue
+        participant Worker as Worker
+    end
+    Note over Store: Something changed:<br/>renewal, cancellation, refund …
+    Store->>Hook: Signed notification
+    Hook->>Hook: Verify Apple's signature
+    Hook->>Queue: Queue a reference (transaction ID)
+    Hook-->>Store: 200 OK, only after the queue accepted it
+    Queue->>Worker: Deliver the job
+    Worker->>Store: Fetch the current signed status
+    Note over Worker: Owner is already known:<br/>bound at the first purchase
+    Worker->>Worker: Save the new state in one atomic write
+    Worker->>Store: Finish the transaction
+    Note over Worker: The app shows the change<br/>on its next refresh
+```
+
+- **Only a reference is queued.** Notifications can arrive late, twice, or out
+  of order. The worker always asks Apple for the _current_ state, so an old
+  notification can never overwrite newer data.
+- **200 only after the queue accepted it.** If queuing fails, the webhook
+  answers 503 and Apple sends the notification again later.
+- **Duplicates are harmless.** A completion marker per notification makes a
+  second delivery a no-op.
+- **Lost notifications are repaired.** Every five minutes, reconciliation asks
+  Apple again about known purchases and queues the same kind of job
+  ([Reconciliation](RECONCILIATION.md)).
+- `TEST` notifications from App Store Connect are acknowledged without any job.
 
 ## Prepare your Apple resources
 
@@ -76,16 +115,16 @@ outside the app and repository.
 
 ## Enable local processing
 
-Edit the ignored `.env` files prepared by Getting started:
+Set these values once in `config/.env` and run `pnpm config:sync`:
 
-| File                                | Values to set                                                            |
-| ----------------------------------- | ------------------------------------------------------------------------ |
-| `services/api/.env`                 | `APPLE_ENABLED=true`, `APPLE_PRODUCT_ID`, local `SUBSCRIPTION_QUEUE_URL` |
-| `services/apple-webhook/.env`       | Same enable flag, product, queue; `APPLE_BUNDLE_ID`                      |
-| `services/subscription-worker/.env` | Same enable flag, product, bundle and queue; credentials below           |
-| `apps/mobile/.env`                  | `IOS_BUNDLE_IDENTIFIER` matching the registered bundle                   |
+| Setting            | Value                         | Programs that receive it                                            |
+| ------------------ | ----------------------------- | ------------------------------------------------------------------- |
+| `APPLE_ENABLED`    | `true`                        | API, Apple webhook, worker, CLI                                     |
+| `APPLE_PRODUCT_ID` | The subscription's product ID | API, Apple webhook, worker, CLI, AWS                                |
+| `APPLE_BUNDLE_ID`  | The registered bundle         | Apple webhook, worker, CLI, AWS; the app as `IOS_BUNDLE_IDENTIFIER` |
 
-Only the worker loads the private key:
+The app's bundle identifier and the verified bundle now come from one setting,
+so they cannot drift apart. Only the worker and the CLI receive the private key:
 
 ```dotenv
 APPLE_IAP_KEY_ID=YOUR_KEY_ID
@@ -93,9 +132,9 @@ APPLE_IAP_ISSUER_ID=YOUR_ISSUER_UUID
 APPLE_IAP_PRIVATE_KEY_PATH="/absolute/path/SubscriptionKey_YOUR_KEY_ID.p8"
 ```
 
-Use an absolute path; `~` is not expanded. API and worker must use the same local
-table. Keep existing Stripe configuration: the shared worker still requires it.
-Restart the stack after changes. Apple verification needs network access to Apple
+Use an absolute path; `~` is not expanded. Keep the Stripe settings: the shared
+worker still requires them. Restart the stack after changes; `pnpm dev` syncs
+first. Apple verification needs network access to Apple
 and always targets Sandbox; there is no production or mock fallback.
 
 ```sh
@@ -193,7 +232,8 @@ lifecycle changes to the separate local notification service.
 ```mermaid
 flowchart LR
     Apple["Apple Sandbox"] -->|"HTTPS notification"| Tunnel["ngrok"]
-    Tunnel --> Ingress["Apple webhook :3003<br/>@premiumpass/apple-webhook"]
+    Tunnel --> Router["Local webhook router :3005"]
+    Router --> Ingress["Apple webhook :3003<br/>@premiumpass/apple-webhook"]
     Ingress -->|"Verified references"| Queue["ElasticMQ"]
     Queue --> Worker["Subscription worker<br/>@premiumpass/subscription-worker"]
     Worker --> DB["DynamoDB Local"]
@@ -208,15 +248,20 @@ flowchart LR
 2. With the enabled Apple ingress running, open a separate terminal:
 
    ```sh
-   ngrok http 3003
+   pnpm webhooks:listen
    ```
+
+   This starts Stripe forwarding and one ngrok tunnel to a local router on port 3005. The same HTTPS origin also accepts Google's webhook path. Do not run a
+   second Stripe listener or ngrok process alongside it.
+   [Shared forwarding](DEVELOPMENT.md#receive-provider-webhooks-together).
 
 3. Copy the public **HTTPS** origin. In App Store Connect → your app → App
    Information → App Store Server Notifications, set **Sandbox Server URL** to
    `https://YOUR_NGROK_HOST/v1/webhooks/apple` and select **Version 2**.
    [Apple URL configuration](https://developer.apple.com/help/app-store-connect/configure-in-app-purchase-settings/enter-server-urls-for-app-store-server-notifications/).
-4. Update that URL whenever the tunnel address changes. Forward only port 3003;
-   do not expose the database, admin UI, or API through this tunnel.
+4. Update that URL whenever the tunnel address changes. The router forwards only
+   the Apple and Google webhook POST paths to ports 3003 and 3004; it does not
+   expose the database, admin UI, or API.
 5. Request an Apple test notification, then check its delivery status. The
    following optional command uses the existing worker credentials and installed
    Apple library; it makes a real Sandbox test-notification request, not a purchase:

@@ -75,10 +75,13 @@ export class StripeSubscriptionProcessor {
     );
 
     const revision = aggregate.revision + 1;
+    // The normalized subscription lets the worker log what it concluded from
+    // Stripe's answer; the worker decides which fields are safe to show.
     return {
       outcome: changed ? 'changed' : 'verified',
       userId,
       revision,
+      subscription,
       ...(changed ? { domainEventId: `${userId}:${revision}` } : {}),
     };
   }

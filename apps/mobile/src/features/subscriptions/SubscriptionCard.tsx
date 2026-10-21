@@ -3,6 +3,7 @@ import type {
   Entitlements,
   SubscriptionOverview,
 } from '@premiumpass/api-contracts';
+import { appendToSummary } from '../../api/failure-details';
 import { Badge } from '../../components/Brand';
 import { Icon, type IconName } from '../../components/Icon';
 import { Card } from '../../components/ui/card';
@@ -72,7 +73,10 @@ function Unavailable({ error, onReload }: Omit<StatusProps, 'overview'>) {
       {error ? (
         <>
           <ErrorMessage
-            message={`${error} No current access status could be verified.`}
+            message={appendToSummary(
+              error,
+              'No current access status could be verified.',
+            )}
           />
           <Button variant="outline" className="rounded-xl" onPress={onReload}>
             <ButtonText>Try again</ButtonText>
