@@ -4,12 +4,13 @@ import { config } from './config';
 
 export function GluestackUIProvider({ children }: PropsWithChildren) {
   useEffect(() => {
-    Appearance.setColorScheme('dark');
+    // The app has one light appearance, matching the website.
+    Appearance.setColorScheme('light');
   }, []);
 
   return (
-    <View style={[config.dark, { flex: 1 }]}>
-      <StatusBar barStyle="light-content" />
+    <View style={[config.light, { flex: 1 }]}>
+      <StatusBar barStyle="dark-content" />
       {children}
     </View>
   );

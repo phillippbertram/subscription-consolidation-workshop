@@ -2,6 +2,8 @@ import { View } from 'react-native';
 import { ApiError } from '../../api/api-client';
 import { useScoreHistory } from '../../api/use-account-queries';
 import { ErrorMessage } from '../../components/ErrorMessage';
+import { Badge } from '../../components/Brand';
+import { Icon } from '../../components/Icon';
 import { Button, ButtonText } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Spinner } from '../../components/ui/spinner';
@@ -11,11 +13,17 @@ import { ScoreHistoryChart } from './ScoreHistoryChart';
 interface ScoreHistoryCardProps {
   hasAccess: boolean | null;
   loading: boolean;
+  onUpgrade: () => void;
 }
 
+/**
+ * `hasAccess` is null while the account is loading or unavailable. The card
+ * then shows neither the locked teaser nor data, because neither is verified.
+ */
 export function ScoreHistoryCard({
   hasAccess,
   loading,
+  onUpgrade,
 }: ScoreHistoryCardProps) {
   const query = useScoreHistory(hasAccess === true);
   const history = hasAccess && query.isSuccess ? query.data : null;
@@ -25,8 +33,11 @@ export function ScoreHistoryCard({
       ? query.error.message
       : 'Unable to load your score history. Please retry.';
   const latest = history?.points.at(-1);
+  const previous = history?.points.at(-2);
+  const change = latest && previous ? latest.score - previous.score : null;
+
   return (
-    <Card className="gap-4 rounded-3xl border-0 bg-secondary p-6 shadow-none">
+    <Card className="gap-5 rounded-2xl p-5">
       <View className="flex-row flex-wrap items-center justify-between gap-2">
         <Text
           accessibilityRole="header"
@@ -35,13 +46,14 @@ export function ScoreHistoryCard({
           Score history
         </Text>
         {hasAccess !== null && (
-          <Text className="text-xs font-medium text-primary">
-            {hasAccess ? 'Premium' : 'Premium feature'}
-          </Text>
+          <Badge
+            label={hasAccess ? 'Premium' : 'Premium feature'}
+            tone={hasAccess ? 'default' : 'secondary'}
+          />
         )}
       </View>
       {(loading || (hasAccess && query.isPending && !query.isPaused)) && (
-        <View className="min-h-32 items-center justify-center gap-3">
+        <View className="min-h-40 items-center justify-center gap-3">
           <Spinner accessibilityLabel="Loading score history" />
           <Text className="text-sm text-muted-foreground">
             {loading ? 'Checking your access…' : 'Loading your history…'}
@@ -50,18 +62,25 @@ export function ScoreHistoryCard({
       )}
       {hasAccess === null && !loading && (
         <Text className="text-muted-foreground">
-          Refresh your subscription to check access to your history.
+          Refresh your account to check access to your history.
         </Text>
       )}
       {hasAccess === false && (
-        <View className="gap-2 py-4">
-          <Text className="text-xl font-medium text-foreground">
-            Your score over time
+        <View className="items-center gap-3 rounded-xl border border-border bg-muted px-5 py-8">
+          <View className="h-10 w-10 items-center justify-center rounded-full border border-border bg-card">
+            <Icon name="lock" size={16} />
+          </View>
+          <Text className="font-semibold text-foreground">
+            Unlock your score history
           </Text>
-          <Text className="text-muted-foreground">
-            Unlock your score history with Premium. Your history will appear
-            here once your subscription is active.
+          <Text className="text-center text-sm text-muted-foreground">
+            See how your score develops month by month. Included in Premium on
+            every device.
           </Text>
+          <Button className="mt-1 rounded-xl" onPress={onUpgrade}>
+            <ButtonText>Upgrade to Premium</ButtonText>
+            <Icon name="chevron" size={16} color="primary-foreground" />
+          </Button>
         </View>
       )}
       {hasAccess && (query.isError || (query.isPaused && !history)) && (
@@ -75,21 +94,37 @@ export function ScoreHistoryCard({
       {latest && history && (
         <>
           <View className="gap-1">
-            <Text className="text-6xl font-medium text-foreground">
-              {latest.score}
-            </Text>
+            <View className="flex-row flex-wrap items-end gap-x-3">
+              <Text className="text-6xl font-semibold text-foreground">
+                {latest.score}
+              </Text>
+              {change !== null && (
+                <View className="mb-2.5 flex-row items-center gap-1">
+                  <Icon
+                    name={change < 0 ? 'trendingDown' : 'trendingUp'}
+                    size={16}
+                    color={change < 0 ? 'muted-foreground' : 'success'}
+                  />
+                  <Text
+                    className={`text-sm font-medium ${change < 0 ? 'text-muted-foreground' : 'text-success'}`}
+                  >
+                    {change >= 0 ? '+' : ''}
+                    {change} since last month
+                  </Text>
+                </View>
+              )}
+            </View>
             <Text className="text-sm text-muted-foreground">
               Latest score ·{' '}
-              {new Date(`${latest.date}T00:00:00`).toLocaleDateString(
-                undefined,
-                { month: 'short', day: 'numeric', year: 'numeric' },
-              )}
+              {new Date(`${latest.date}T00:00:00`).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              })}{' '}
+              · Synthetic demo data
             </Text>
           </View>
           <ScoreHistoryChart points={history.points} />
-          <Text className="text-xs text-muted-foreground">
-            Synthetic demo data · Score out of 100
-          </Text>
         </>
       )}
       {history && !latest && (

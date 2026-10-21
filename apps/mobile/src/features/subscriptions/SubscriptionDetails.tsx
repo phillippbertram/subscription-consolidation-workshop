@@ -1,26 +1,25 @@
-import { Modal, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import type { SubscriptionOverview } from '@premiumpass/api-contracts';
-import { GluestackUIProvider } from '../../components/ui/gluestack-ui-provider';
-import { Button, ButtonText } from '../../components/ui/button';
+import { useState } from 'react';
+import { Pressable, View } from 'react-native';
+import type {
+  Subscription,
+  SubscriptionOverview,
+} from '@premiumpass/api-contracts';
+import { Badge } from '../../components/Brand';
+import { Icon } from '../../components/Icon';
 import { Text } from '../../components/ui/text';
 import { Card } from '../../components/ui/card';
-import { ErrorMessage } from '../../components/ErrorMessage';
 import {
+  badgeTone,
   describeSubscription,
   formatAccessDate,
+  planName,
 } from './subscription-presentation';
 
+/** Every recorded subscription across stores, current access first. Tap a row for details. */
 export function SubscriptionDetails({
-  visible,
   overview,
-  error,
-  onClose,
 }: {
-  visible: boolean;
   overview: SubscriptionOverview | null;
-  error: string | null;
-  onClose: () => void;
 }) {
   const records =
     overview?.subscriptions
@@ -32,109 +31,145 @@ export function SubscriptionDetails({
         (a, b) =>
           Number(b.description.hasAccess) - Number(a.description.hasAccess),
       ) ?? [];
+
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
-      <GluestackUIProvider>
-        <SafeAreaView className="flex-1 bg-background">
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-            <View className="gap-5 p-6">
-              <View className="flex-row flex-wrap items-center justify-between gap-3">
-                <Text className="text-2xl font-semibold text-foreground">
-                  Subscription details
-                </Text>
-                <Button variant="outline" onPress={onClose}>
-                  <ButtonText>Close</ButtonText>
-                </Button>
-              </View>
-              <Text className="text-sm text-muted-foreground">
-                Current and previous subscriptions, with their latest recorded
-                status.
-              </Text>
-              <ErrorMessage message={error} />
-              {!overview && !error && (
-                <Text>Refreshing subscription details…</Text>
-              )}
-              {overview && (
-                <>
-                  <Text className="text-sm text-muted-foreground">
-                    Current access:{' '}
-                    {overview.entitlements.tier === 'premium'
-                      ? 'Premium'
-                      : 'Free'}
-                  </Text>
-                  {records.length === 0 && (
-                    <Text>No subscriptions recorded yet.</Text>
-                  )}
-                  {records.map(({ subscription, description }) => (
-                    <Card
-                      key={`${subscription.provider}:${subscription.providerSubscriptionId}`}
-                      className="gap-3 rounded-xl border border-border p-4"
-                    >
-                      <View className="flex-row flex-wrap items-center justify-between gap-2">
-                        <Text className="font-semibold text-foreground">
-                          {description.provider}
-                        </Text>
-                        <Text className="text-sm text-primary">
-                          {description.badge}
-                        </Text>
-                      </View>
-                      <Text className="text-sm text-muted-foreground">
-                        {description.hasAccess
-                          ? 'Grants current access'
-                          : 'No current access from this subscription'}
-                      </Text>
-                      <Text className="text-sm text-foreground">
-                        {description.status}
-                      </Text>
-                      {description.validUntil && (
-                        <DetailField
-                          label={description.boundaryLabel}
-                          value={formatAccessDate(
-                            description.validUntil,
-                            overview.entitlements.evaluatedAt,
-                          )}
-                        />
-                      )}
-                      {description.renewal && (
-                        <DetailField
-                          label="Auto-renewal"
-                          value={description.renewal}
-                        />
-                      )}
-                      <DetailField
-                        label="Last provider check"
-                        value={formatAccessDate(
-                          subscription.verifiedAt,
-                          overview.entitlements.evaluatedAt,
-                        )}
-                      />
-                      <DetailField
-                        label="Subscription ID"
-                        value={subscription.providerSubscriptionId}
-                      />
-                    </Card>
-                  ))}
-                  {overview.entitlements.warnings.length > 0 && (
-                    <Text className="text-muted-foreground">
-                      Some subscriptions could not be verified. Refresh before
-                      making another purchase.
-                    </Text>
-                  )}
-                </>
-              )}
-            </View>
-          </ScrollView>
-        </SafeAreaView>
-      </GluestackUIProvider>
-    </Modal>
+    <Card className="gap-4 rounded-2xl p-5">
+      <View className="gap-1">
+        <Text
+          accessibilityRole="header"
+          className="text-lg font-semibold text-foreground"
+        >
+          Subscription history
+        </Text>
+        <Text className="text-sm text-muted-foreground">
+          Current and previous subscriptions from the website, App Store, and
+          Google Play, with their latest verified status.
+        </Text>
+      </View>
+      {!overview && (
+        <Text className="text-sm text-muted-foreground">
+          Subscription history is unavailable until your account loads.
+        </Text>
+      )}
+      {overview && records.length === 0 && (
+        <View className="rounded-xl border border-dashed border-border p-5">
+          <Text className="text-center text-sm text-muted-foreground">
+            No subscriptions yet. Purchases from any store appear here once they
+            are verified.
+          </Text>
+        </View>
+      )}
+      {overview && records.length > 0 && (
+        <View className="rounded-xl border border-border">
+          {records.map(({ subscription, description }, index) => (
+            <HistoryRow
+              key={`${subscription.provider}:${subscription.providerSubscriptionId}`}
+              subscription={subscription}
+              description={description}
+              evaluatedAt={overview.entitlements.evaluatedAt}
+              first={index === 0}
+            />
+          ))}
+        </View>
+      )}
+    </Card>
   );
 }
 
-function DetailField({ label, value }: { label: string; value: string }) {
+function HistoryRow({
+  subscription,
+  description,
+  evaluatedAt,
+  first,
+}: {
+  subscription: Subscription;
+  description: ReturnType<typeof describeSubscription>;
+  evaluatedAt: string;
+  first: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
   return (
-    <View className="gap-1">
+    <View className={first ? '' : 'border-t border-border'}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityHint="Shows the subscription details"
+        className="flex-row items-center gap-3 p-4 active:bg-muted"
+        onPress={() => setExpanded(!expanded)}
+      >
+        <View className="h-8 w-8 items-center justify-center rounded-lg bg-secondary">
+          <Icon
+            name={subscription.provider === 'stripe' ? 'globe' : 'smartphone'}
+            size={16}
+            color="muted-foreground"
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-medium text-foreground">
+            {description.provider}
+            <Text className="font-normal text-muted-foreground">
+              {' '}
+              · {planName(subscription.productId)}
+            </Text>
+          </Text>
+          <Text className="text-sm text-muted-foreground">
+            {description.validUntil
+              ? `${description.boundaryLabel} ${formatAccessDate(description.validUntil, evaluatedAt)}`
+              : 'No verified period'}
+          </Text>
+        </View>
+        <Badge label={description.badge} tone={badgeTone(description.badge)} />
+        <View style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }}>
+          <Icon name="chevronDown" size={16} color="muted-foreground" />
+        </View>
+      </Pressable>
+      {expanded && (
+        <View className="gap-3 border-t border-border bg-muted px-4 py-4">
+          <DetailField
+            label="Access"
+            value={
+              description.hasAccess
+                ? 'Grants current access'
+                : 'No current access from this subscription'
+            }
+          />
+          <DetailField label="Status" value={description.status} />
+          {description.renewal && (
+            <DetailField label="Auto-renewal" value={description.renewal} />
+          )}
+          <DetailField
+            label="Last provider check"
+            value={formatAccessDate(subscription.verifiedAt, evaluatedAt)}
+          />
+          <DetailField
+            label="Subscription ID"
+            value={subscription.providerSubscriptionId}
+            mono
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+function DetailField({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <View className="gap-0.5">
       <Text className="text-xs text-muted-foreground">{label}</Text>
-      <Text selectable className="text-sm text-foreground">
+      <Text
+        selectable
+        className={
+          mono ? 'font-mono text-xs text-foreground' : 'text-sm text-foreground'
+        }
+      >
         {value}
       </Text>
     </View>

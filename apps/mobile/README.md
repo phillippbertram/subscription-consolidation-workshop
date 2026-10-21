@@ -93,14 +93,20 @@ user ID with Web. Simulator can reach the Mac's loopback address.
 
 ## App structure
 
+The app follows the website's design: the same light theme tokens, Lucide icons,
+and page structure. Signed out, a compact landing screen leads to sign-in.
+Signed in, three tabs mirror the website's pages: **Overview**, **Billing**,
+and **Account**.
+
 | Area                                                 | Responsibility                                                                      |
 | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `src/App.tsx`, `src/app/`                            | Providers, configuration, session-dependent screen selection                        |
-| `src/features/auth/`                                 | Login/logout and optional session inspector                                         |
-| `src/features/dashboard/`                            | Score-first layout, query refresh, expiry updates                                   |
-| `src/features/profile/`, `scores/`, `subscriptions/` | Account modal, protected history, subscription/purchase behavior                    |
+| `src/features/auth/`                                 | Landing/login screen, login/logout, optional session inspector                      |
+| `src/features/dashboard/`                            | Signed-in shell with tab bar, Overview tab, query refresh, expiry updates           |
+| `src/features/profile/`, `scores/`, `subscriptions/` | Account tab, protected history, Billing tab with subscription/purchase behavior     |
+| `src/components/`                                    | Brand elements, badges, Lucide-based icons, shared screen pieces                    |
 | `src/api/`                                           | Typed Axios/Zod client, account queries, session cache, native focus/network events |
-| `src/components/ui/`                                 | Locally owned Gluestack/NativeWind components and fixed dark theme                  |
+| `src/components/ui/`                                 | Locally owned Gluestack/NativeWind components and fixed light theme matching Web    |
 
 API schemas live in [HTTP contracts](../../packages/api-contracts/README.md).
 Profile, subscription overview, and score history use TanStack Query hooks over
@@ -119,7 +125,7 @@ The backend-relative Premium expiry timer uses the snapshot's original fetch
 time, so cache reads cannot extend access. At expiry, old access/history are
 hidden until the backend confirms the current state, including while offline.
 StoreKit synchronization/polling stays in the purchase feature; its listener
-stays mounted during dashboard refreshes and modal changes.
+stays mounted during dashboard refreshes and tab changes.
 
 Within `src/features/subscriptions/`, `apple/` and `google/` each own their
 store UI, purchase hook, and local reducer. Hooks handle native/API effects;
@@ -139,8 +145,8 @@ and purchase eligibility remain in the parent folder.
   Expiry/refresh hides stale data; network failures show retry instead of Free.
 - Let Premium expire while offline; cached Premium/history must disappear. After
   reconnecting or a verified Sandbox purchase, confirm access/history reload.
-- Current subscriptions show active grants; Subscription details includes previous
-  records. Open/close Account and details, including on a narrow device.
+- Billing shows active grants as access sources; Subscription history includes
+  previous records. Switch tabs and expand history rows, including on a narrow device.
 - Developer tools start collapsed. Session details clear on background/sign-out;
   raw tokens are revealed only on demand and must not appear in logs/screenshots.
 - Follow [payment scenarios](../../docs/PAYMENTS.md#manual-checks) and the separate

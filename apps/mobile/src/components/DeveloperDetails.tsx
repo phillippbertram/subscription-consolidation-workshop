@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { AppState, View } from 'react-native';
 import { Button, ButtonText } from './ui/button';
-import { DashboardIcon } from './DashboardIcon';
+import { Icon } from './Icon';
 
 export function DeveloperDetails({ children }: { children: ReactNode }) {
   const [expanded, setExpanded] = useState(false);
@@ -26,7 +26,7 @@ export function DeveloperDetails({ children }: { children: ReactNode }) {
           Developer tools
         </ButtonText>
         <View style={{ transform: [{ rotate: expanded ? '90deg' : '0deg' }] }}>
-          <DashboardIcon name="chevron" />
+          <Icon name="chevron" size={18} color="muted-foreground" />
         </View>
       </Button>
       {expanded && <View className="gap-4">{children}</View>}

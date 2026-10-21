@@ -1,9 +1,99 @@
 import type {
+  Entitlements,
   Subscription,
   SubscriptionOverview,
 } from '@premiumpass/api-contracts';
+import { hasBlockingSubscription } from '@premiumpass/api-contracts';
+import type { Tone } from '../../components/Brand';
 
 export { canPurchasePremium } from '@premiumpass/api-contracts';
+
+export const providerLabels: Record<Subscription['provider'], string> = {
+  apple: 'App Store',
+  google: 'Google Play',
+  stripe: 'Website',
+  apple_mock: 'Apple demo',
+  google_mock: 'Google demo',
+};
+
+/** Show billing frequency without implying that the feature set changes. */
+export function planName(productId: string) {
+  if (productId === 'premium_daily') {
+    return 'Premium Daily';
+  }
+
+  if (productId === 'premium_monthly') {
+    return 'Premium Monthly';
+  }
+
+  return productId;
+}
+
+/** Same colors as the website: green grants access, amber needs a look. */
+export function badgeTone(badge: string): Tone {
+  if (badge === 'Active' || badge === 'Trial') {
+    return 'success';
+  }
+
+  if (['Canceled', 'Expired', 'Revoked'].includes(badge)) {
+    return 'secondary';
+  }
+
+  return 'warning';
+}
+
+type Grant = Entitlements['grants'][number];
+
+export function findGrantSubscription(
+  grant: Grant,
+  overview: SubscriptionOverview,
+) {
+  if (grant.source === 'admin') {
+    return undefined;
+  }
+
+  return overview.subscriptions.find(
+    (subscription) =>
+      subscription.provider === grant.provider &&
+      subscription.providerSubscriptionId === grant.providerSubscriptionId,
+  );
+}
+
+/**
+ * The membership headline. Premium is the union of all valid grants, so it
+ * only reads "Ending" when no grant renews any more.
+ */
+export function describeMembership(overview: SubscriptionOverview): {
+  label: string;
+  tone: Tone;
+  headline: string;
+  needsAttention: boolean;
+} {
+  const { entitlements } = overview;
+  const needsAttention =
+    entitlements.warnings.length > 0 || hasBlockingSubscription(overview);
+  if (entitlements.tier === 'free') {
+    return {
+      label: needsAttention ? 'Needs attention' : 'Free plan',
+      tone: needsAttention ? 'warning' : 'secondary',
+      headline:
+        'You are on the Free plan. Premium unlocks your score history on every device.',
+      needsAttention,
+    };
+  }
+
+  const everyGrantEnds = entitlements.grants.every(
+    (grant) => findGrantSubscription(grant, overview)?.cancelAtPeriodEnd,
+  );
+  return {
+    label: everyGrantEnds ? 'Ending' : 'Active',
+    tone: everyGrantEnds ? 'warning' : 'success',
+    headline: entitlements.effectiveUntil
+      ? `Premium access until ${formatAccessDate(entitlements.effectiveUntil, entitlements.evaluatedAt)}.`
+      : 'Premium access until revoked.',
+    needsAttention,
+  };
+}
 
 export function describeSubscription(
   subscription: Subscription,
@@ -15,13 +105,6 @@ export function describeSubscription(
       item.provider === subscription.provider &&
       item.providerSubscriptionId === subscription.providerSubscriptionId,
   );
-  const providerLabels: Record<Subscription['provider'], string> = {
-    apple: 'App Store',
-    google: 'Google Play',
-    stripe: 'Website',
-    apple_mock: 'Apple demo',
-    google_mock: 'Google demo',
-  };
   let status: string;
   let badge: string;
   if (grant) {

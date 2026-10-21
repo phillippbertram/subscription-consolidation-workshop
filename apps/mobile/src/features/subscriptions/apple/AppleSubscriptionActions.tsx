@@ -34,7 +34,7 @@ function AppleStoreCard({
 
   const purchaseOffer = apple.offerPurchase && (
     <>
-      <Text className="text-muted-foreground">
+      <Text className="text-sm text-muted-foreground">
         Monthly subscription · Apple Sandbox
       </Text>
       {connected && config && !product && (
@@ -44,6 +44,7 @@ function AppleStoreCard({
         </Text>
       )}
       <Button
+        className="min-h-12 rounded-xl"
         isDisabled={!connected || !config || !product || isBusy}
         onPress={() => {
           void apple.buy();
@@ -60,12 +61,12 @@ function AppleStoreCard({
     </>
   );
   const actions = (
-    <View className="gap-1">
+    <View className="gap-2">
       {!sandboxOverride && purchaseOffer}
       {apple.canManage && (
         <Button
           variant="outline"
-          className="min-h-11 rounded-xl bg-card px-3 py-2 shadow-none dark:bg-card dark:border-border"
+          className="min-h-11 rounded-xl bg-card px-3 py-2 shadow-none"
           isDisabled={!connected || isBusy}
           onPress={() => {
             void apple.manage();
@@ -99,7 +100,7 @@ function AppleStoreCard({
   const sandboxControl = __DEV__ &&
     config?.environment === 'Sandbox' &&
     apple.hasPremium && (
-      <View className="gap-2 rounded-xl bg-card p-4">
+      <View className="gap-2 rounded-xl border border-border bg-card p-4">
         <Text className="font-bold text-foreground">
           Sandbox test: allow another purchase
         </Text>

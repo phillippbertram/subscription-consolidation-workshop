@@ -1,52 +1,43 @@
 import { vars } from 'nativewind';
 
-// Raw color values - update these and they sync everywhere
+// Raw color values - update these and they sync everywhere. They mirror the
+// website tokens in apps/web/src/style.css so both clients look like one product.
 export const colors = {
   light: {
-    '--primary': '51 98 92',
-    '--primary-foreground': '250 250 250',
+    '--primary': '29 90 67',
+    '--primary-foreground': '245 250 247',
     '--card': '255 255 255',
-    '--secondary': '245 245 245',
-    '--secondary-foreground': '23 23 23',
-    '--background': '243 246 248',
+    '--secondary': '232 241 235',
+    '--secondary-foreground': '22 62 50',
+    '--background': '247 248 246',
     '--popover': '255 255 255',
-    '--popover-foreground': '10 10 10',
-    '--muted': '245 245 245',
-    '--muted-foreground': '69 92 96',
-    '--destructive': '156 48 39',
-    '--foreground': '20 47 44',
-    '--border': '229 229 229',
-    '--input': '229 229 229',
-    '--ring': '212 212 212',
-    '--accent': '247 247 247',
-    '--accent-foreground': '52 52 52',
-  },
-  dark: {
-    '--primary': '165 213 195',
-    '--primary-foreground': '20 45 36',
-    '--card': '27 37 34',
-    '--secondary': '37 63 52',
-    '--secondary-foreground': '238 245 242',
-    '--background': '17 24 22',
-    '--popover': '27 37 34',
-    '--popover-foreground': '238 245 242',
-    '--muted': '37 63 52',
-    '--muted-foreground': '171 192 184',
-    '--destructive': '255 145 137',
-    '--foreground': '238 245 242',
-    '--border': '53 70 63',
-    '--input': '53 70 63',
-    '--accent': '37 63 52',
-    '--accent-foreground': '238 245 242',
-    '--ring': '165 213 195',
+    '--popover-foreground': '16 36 29',
+    '--muted': '239 243 240',
+    '--muted-foreground': '90 106 99',
+    '--destructive': '200 30 30',
+    '--success': '21 128 61',
+    '--warning': '180 83 9',
+    '--foreground': '16 36 29',
+    '--border': '225 231 227',
+    '--input': '214 223 217',
+    '--ring': '59 133 102',
+    '--accent': '232 241 235',
+    '--accent-foreground': '22 62 50',
   },
 };
 
 // Config for nativewind vars() - used by provider
 export const config = {
   light: vars(colors.light),
-  dark: vars(colors.dark),
 };
 
 // Fixed product appearance, also used by native SVG elements.
-export const themeColors = colors.dark;
+export const themeColors = colors.light;
+
+type StripPrefix<T> = T extends `--${infer Name}` ? Name : never;
+export type ThemeColor = StripPrefix<keyof typeof themeColors>;
+
+/** `rgba(...)` for props that cannot use class names, such as SVG strokes. */
+export function themeColor(name: ThemeColor, opacity = 1) {
+  return `rgba(${themeColors[`--${name}`].replaceAll(' ', ', ')}, ${opacity})`;
+}

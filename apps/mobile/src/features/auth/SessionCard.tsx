@@ -131,7 +131,7 @@ export function SessionCard() {
     return () => subscription.remove();
   }, []);
   return (
-    <Card className="gap-4 rounded-2xl p-6">
+    <Card className="gap-4 rounded-xl p-4 shadow-none">
       <Text className="text-base font-semibold text-foreground">
         Auth0 session
       </Text>

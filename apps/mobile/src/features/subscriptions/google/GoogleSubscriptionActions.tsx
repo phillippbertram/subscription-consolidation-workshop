@@ -32,11 +32,12 @@ function GoogleStoreActions({ overview, onVerified, children }: Props) {
     sandboxControl: null,
     actions: (
       <View className="gap-2">
-        <Text className="text-muted-foreground">
+        <Text className="text-sm text-muted-foreground">
           Monthly subscription · Google Play license test
         </Text>
         {google.offerPurchase && (
           <Button
+            className="min-h-12 rounded-xl"
             isDisabled={!connected || !config || !offer || busy}
             onPress={() => {
               void google.buy();
@@ -54,6 +55,7 @@ function GoogleStoreActions({ overview, onVerified, children }: Props) {
         {google.canManage && (
           <Button
             variant="outline"
+            className="min-h-11 rounded-xl"
             isDisabled={!config || busy}
             onPress={() => {
               void google.manage();

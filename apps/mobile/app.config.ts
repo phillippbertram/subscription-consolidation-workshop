@@ -84,7 +84,7 @@ const config: ExpoConfig = {
   version: '0.1.0',
   scheme: 'premiumpass',
   orientation: 'portrait',
-  userInterfaceStyle: 'dark',
+  userInterfaceStyle: 'light',
   ios: {
     bundleIdentifier:
       typeof iosBundleIdentifier === 'string'

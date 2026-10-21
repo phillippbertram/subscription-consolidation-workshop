@@ -10,7 +10,7 @@
     "prebuild:ios": "expo prebuild --platform ios --no-install --no-clean",
     "typecheck": "tsc --noEmit",
     "build": "expo export --platform all",
-    "android": "expo run:android",
+    "android": "node --env-file-if-exists=.env scripts/android-build.mjs --dev",
     "prebuild:android": "expo prebuild --platform android --no-install --no-clean",
     "android:aab": "node --env-file-if-exists=.env scripts/android-build.mjs",
     "android:doctor": "node --env-file-if-exists=.env scripts/android-build.mjs --check"
