@@ -42,8 +42,8 @@ transaction** as the subscription means either both are saved or neither is;
 the publisher retries pending announcements after a restart. A crash after
 sending but before marking `sent` can repeat a delivery with the same
 `domainEventId`: at-least-once publication, not exactly-once consumer execution.
-[The outbox guide](../../docs/OUTBOX.md) pictures the problem and walks through
-every crash case. The local queue's restart limitation is described below.
+[The outbox guide](../../docs/OUTBOX.md) pictures the problem and what the
+pattern guarantees. The local queue's restart limitation is described below.
 
 | Component           | Responsibility                                                                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |

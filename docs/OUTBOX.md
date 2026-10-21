@@ -1,65 +1,62 @@
-# Outbox: announce every change, lose none
+# Outbox: reliable change events
 
-When a user's access changes, the backend saves the change. Other parts of a
-system often want to hear about it too: a welcome email, a report, a CRM, another
-service. The **outbox** makes sure that every saved change is announced, even
-when a process crashes at the worst possible moment. This page shows the
-problem, gives the idea a picture, and then follows one change through PremiumPass.
+Whenever a user's subscriptions or access change, PremiumPass publishes its own
+`SubscriptionChanged` event, so that **other systems can react**: send a welcome
+email, update a report, sync a CRM. Premium itself never needs this event. The
+API reads access straight from the database, and the apps keep asking the API.
+
+The **outbox** is how that event is published reliably: no event is lost when a
+process crashes, and no event goes out for a change that was never saved.
 
 > [!NOTE]
-> Premium access never depends on the outbox. The API reads access straight
-> from the database and checks the clock. The outbox only decides whether
-> _others_ hear about a change. Today the only listener writes a log line.
+> In this lab the only listener writes a log line. The event is optional for
+> the product and exists to show reliable publishing. Stop the publisher and
+> Premium still works; the events simply wait.
 
-## The problem: two systems, no shared transaction
+## In short
 
-After a provider confirms a purchase, two things should happen: **save** the
-new state in DynamoDB and **announce** it on an event queue (ElasticMQ locally,
-EventBridge in AWS). These are two different systems, and no transaction spans
-both. Whatever the order, a crash between the two steps leaves one done and the
-other not.
+| Question                  | Answer                                                                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| What is published?        | One `SubscriptionChanged` event per change, carrying the user's complete access snapshot                                              |
+| When?                     | A subscription changed, an access boundary passed, or a complimentary grant changed; a check that finds nothing new publishes nothing |
+| Where to?                 | An event queue: ElasticMQ locally. EventBridge is planned for AWS; only the adapter exists                                            |
+| Who listens?              | Today a log consumer (`pnpm dev:events`). Email, reporting, or a CRM could follow; none are built                                     |
+| Who does not use it?      | The API, the website and apps, and the payment providers                                                                              |
+| What does the outbox add? | Every saved change is published at least once, and only saved changes are published                                                   |
 
-![Three cards. Save, then send: the change is saved, the worker crashes, and the announcement never happens. Send, then save: the announcement goes out, then the save fails, so others act on a change that does not exist. With outbox: the change and a pending letter are saved in one transaction, and a separate process sends the letter later; a crash only delays it or sends it twice with the same ID.](images/outbox-why.svg)
+## Why not send the event right after saving?
 
-| Order           | A crash in between leaves                       | Effect                                                      |
-| --------------- | ----------------------------------------------- | ----------------------------------------------------------- |
-| Save, then send | The change saved, the announcement lost         | Others never learn that the user is Premium                 |
-| Send, then save | The announcement out, the save failed           | Others act on a change that does not exist                  |
-| Outbox          | The change and a pending announcement, together | The announcement goes out later; at worst it goes out twice |
+The change goes to DynamoDB, the event goes to a queue. These are two systems,
+and no transaction spans both. Whatever the order, a crash in between leaves one
+step done and the other not:
 
-Retrying does not rescue "save, then send" in this project. After a crash, the
-queue redelivers the job, the worker finds the job's completion marker, and
-skips it as a duplicate. That marker is exactly what keeps duplicate provider
-events harmless, but it also means nothing remembers the missing announcement.
-This trap is known as the **dual-write problem**.
+![Three cards. Save, then publish: the change is saved, the worker crashes, and the event is never published. Publish, then save: the event goes out, then the save fails, so others act on a change that does not exist. With outbox: the change and a pending event are saved in one transaction, and a separate process sends the event later; a crash only delays it or sends it twice with the same ID.](images/outbox-why.svg)
+
+A retry does not rescue "save, then publish" either. After a crash, the work
+queue redelivers the job, the worker finds the job's completion marker and skips
+it as a duplicate, and nothing remembers the missing event. This trap is known
+as the **dual-write problem**. The outbox avoids it by saving the event _as
+data_ in the same transaction as the change and sending it later from a separate
+process.
 
 ## The idea, pictured as a mailroom
 
 ![An office mailroom with four stations. The clerk (subscription worker) updates the file and writes the letter in one move. The cabinet with an out-tray (DynamoDB) keeps the letter as a pending outbox entry. The mail carrier (outbox publisher) posts waiting letters every five seconds, then stamps the copy as sent. The post office (event queue and consumer) delivers every letter at least once. Notes: the API never waits for a letter; a stopped carrier only delays letters; a crash before the stamp posts a letter again, and its reference number reveals the copy.](images/outbox-mailroom.svg)
 
-A careful clerk does not promise to "post the letter later". They write the
-letter and put it into the out-tray **in the same move** that files the change,
-and the drawer only closes with both inside. A mail carrier empties the tray on
-regular rounds, posts each letter, and stamps the office copy "sent" afterwards.
+A careful clerk does not promise to "post the letter later". They put the letter
+into the out-tray **in the same move** that files the change; the drawer only
+closes with both inside. A mail carrier empties the tray on regular rounds,
+posts each letter, and stamps the office copy "sent" afterwards.
 
-| In the mailroom                  | In PremiumPass                                                                               |
-| -------------------------------- | -------------------------------------------------------------------------------------------- |
-| Clerk                            | Every writer that changes access: provider and expiration jobs, admin grants, CLI demo edits |
-| File and out-tray in one drawer  | Access snapshot and outbox entry in **one** DynamoDB transaction                             |
-| Letter waiting in the tray       | `OUTBOX#<user-id>:<revision>` with `status: pending`                                         |
-| Mail carrier on rounds           | Outbox publisher, every five seconds with `pnpm dev:outbox`                                  |
-| Post office                      | Event queue: ElasticMQ locally; EventBridge in AWS (adapter only, not wired)                 |
-| "Sent" stamp on the copy         | `status: sent`, `sentAt`, `publishedEventId`                                                 |
-| Reference number on every letter | `domainEventId` = `<user-id>:<revision>`, identical on every retry                           |
-| Recipient                        | Event consumer; today it logs `subscription.changed`                                         |
-
-Two consequences follow from the picture:
-
-- **A letter can arrive twice, but never zero times.** If the carrier posts a
-  letter and is interrupted before stamping the copy, the next round posts it
-  again. This is called _at-least-once_ delivery.
-- **The stamp means "the post office took it", not "the recipient acted on it".**
-  `sent` records transport acceptance only.
+| In the mailroom                  | In PremiumPass                                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Clerk                            | Every writer that changes access: provider and expiration jobs, admin grants, CLI demo edits        |
+| Letter in the out-tray           | Outbox entry `OUTBOX#<user-id>:<revision>` with `status: pending`, in the same DynamoDB transaction |
+| Mail carrier on rounds           | Outbox publisher, every five seconds with `pnpm dev:outbox`                                         |
+| Post office                      | Event queue                                                                                         |
+| "Sent" stamp on the copy         | `status: sent`, `sentAt`, `publishedEventId`                                                        |
+| Reference number on every letter | `domainEventId` = `<user-id>:<revision>`, identical on every retry                                  |
+| Recipient                        | Event consumer; today it logs `subscription.changed`                                                |
 
 ## One change, end to end
 
@@ -104,9 +101,9 @@ sequenceDiagram
 ```
 
 `U` stands for the internal user ID; `8` is the user's new aggregate revision.
-The pending entry carries everything the announcement needs, so the publisher
-never recalculates access. Publication later adds `sentAt` and
-`publishedEventId`, the queue's receipt. A pending entry looks like this:
+The pending entry already is the event, so the publisher never recalculates
+access. Publication later adds `sentAt` and `publishedEventId`, the queue's
+receipt. A pending entry looks like this:
 
 ```jsonc
 {
@@ -132,149 +129,39 @@ never recalculates access. Publication later adds `sentAt` and
 }
 ```
 
-## The life of one entry
+## What you can rely on
 
-```mermaid
-flowchart LR
-    Commit(["Committed with<br/>the change"]) --> Pending["pending"]
-    Pending --> Send{"Send to<br/>the queue"}
-    Send -->|"accepted"| Sent["sent<br/><i>kept, no TTL</i>"]
-    Send -.->|"failed: retry"| Pending
-    classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59
-    classDef waiting fill:#fff7ed,stroke:#f97316,color:#9a3412
-    classDef done fill:#f0fdf4,stroke:#22c55e,color:#166534
-    class Commit,Send service
-    class Pending waiting
-    class Sent done
-```
+- **No lost event.** A saved change always has its pending entry, and the
+  publisher retries it until the queue accepts it. A stopped publisher only
+  delays events.
+- **No event without a change.** An entry exists only if its change was committed.
+- **Copies are possible.** A crash after sending but before marking `sent` sends
+  the event again, with the same `domainEventId`. This is _at-least-once_
+  delivery. Exactly once would need sending and marking in one atomic step,
+  which is the same two-system problem again.
+- **No order promise.** A retried event can arrive after a newer one. Every event
+  carries the full snapshot of its revision, and revisions can have gaps.
+- **`sent` means accepted by the queue**, not processed by a listener.
 
-A failed send, a rejected entry, or a crash before marking leaves the entry
-pending for the next pass. The publisher sends first and marks second, never
-the other way round: marking first could lose an announcement in a crash;
-sending first can only repeat one. The mark is a conditional update
-(`status = pending`), so it never overwrites an existing `sent` marker or
-recreates a deleted entry.
-
-## When something crashes
-
-| Crash or failure                                | In the database                  | What happens next                                                                          | Result                                     |
-| ----------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| Worker crashes before its commit                | Nothing                          | The work queue redelivers the job, which runs again                                        | Nothing lost, nothing doubled              |
-| Worker crashes after its commit                 | Change and pending entry         | The redelivered job finds the completion marker and stops; the publisher sends             | Announced once, as planned                 |
-| Publisher stopped or event queue down           | Pending entry                    | The next pass sends it; the [admin console](ADMIN_CONSOLE.md) warns after 60 seconds       | Announced late; access unaffected          |
-| The queue rejects one entry of a batch          | That entry stays pending         | Accepted entries are marked one by one; the rejected one is retried                        | No entry is marked without its own receipt |
-| Publisher crashes after sending, before marking | Entry still pending              | The next pass sends it again                                                               | Duplicate with the same `domainEventId`    |
-| Two publishers run at the same time             | Both read the same pending entry | Both may send; the conditional update lets only one mark it                                | Duplicate with the same `domainEventId`    |
-| Consumer fails                                  | Entry already `sent`             | The event queue retries after 30 seconds and moves it to the event DLQ after five receives | `sent` never meant "processed"             |
-
-Every row ends in "announced", "announced late", or "announced twice". None ends
-in "silently lost", which is the point of the pattern.
-
-## Copies and order: rules for listeners
-
-Today's consumer only logs, so a duplicate log line is expected and harmless. A
-future consumer with real side effects (sending an email, updating a CRM) needs
-three rules. They are guidance, not implemented code:
-
-1. **Skip known IDs.** Remember each handled `domainEventId` and ignore a copy.
-2. **Let the newest revision win.** The publisher does not promise order: a
-   retried entry can arrive after a newer one. Every event carries the full
-   snapshot of its revision, so a consumer can ignore any revision older than
-   the last one it applied.
-3. **Expect gaps.** A check that finds nothing new still advances the revision
-   but writes no entry, so `U:7` can be followed by `U:9`.
-
-## Inbox and outbox: both ends of one idea
-
-Copies are normal on both ends of the worker. Each end has a stable ID to
-recognize them.
-
-```mermaid
-flowchart LR
-    subgraph Incoming["Incoming: guard against copies"]
-        direction TB
-        Provider["Provider events<br/><i>at least once</i>"] --> Worker["Worker skips events<br/>it already completed"]
-    end
-    subgraph Outgoing["Outgoing: guard against loss"]
-        direction TB
-        Entry["Outbox entry<br/>saved with the change"] --> Publisher["Publisher<br/><i>at least once</i>"] --> Listener["Listener should skip<br/>a known domainEventId"]
-    end
-    Incoming -->|"one transaction"| Outgoing
-    classDef service fill:#f0fdfa,stroke:#0d9488,color:#115e59
-    classDef queue fill:#f5f3ff,stroke:#8b5cf6,color:#5b21b6
-    classDef data fill:#f0fdf4,stroke:#22c55e,color:#166534
-    class Worker,Publisher,Listener service
-    class Provider queue
-    class Entry data
-    style Incoming fill:#f8fafc,stroke:#cbd5e1,color:#334155
-    style Outgoing fill:#f8fafc,stroke:#cbd5e1,color:#334155
-```
-
-The worker recognizes a completed event by its completion marker
-(`EVENT#…/PROCESSED`), which makes processing a provider event safe to repeat.
-The outbox entry makes sure our own announcement is not forgotten. Both are
-written in the same transaction as the change.
-
-## When an entry is written
-
-Only a real change creates an entry: a changed subscription, a passed access
-boundary, or a changed grant. Every writer uses the same
-[shared commit](../packages/subscription-processing/src/processing/dynamodb-processing.ts).
-
-| Situation                                                         | Outbox entry                    |
-| ----------------------------------------------------------------- | ------------------------------- |
-| Provider job (Stripe, Apple, Google) with a changed state         | Yes                             |
-| An access boundary has passed (expiration job)                    | Yes                             |
-| Complimentary Premium granted or revoked                          | Yes                             |
-| Local CLI demo edits (`pnpm cli seed`, `pnpm cli set`)            | Yes                             |
-| A fresh check that finds nothing new (for example reconciliation) | No; the revision still advances |
-| A duplicate job                                                   | No; nothing is written          |
-
-## Demo simplifications
-
-The pattern is complete; the plumbing around it is kept small so you can watch
-it in a terminal.
-
-| In this demo                        | Why it fits the lab                    | Open for production                                                    |
-| ----------------------------------- | -------------------------------------- | ---------------------------------------------------------------------- |
-| The publisher scans the whole table | No extra index; easy to read           | An indexed access pattern for pending entries                          |
-| Polling every five seconds          | Start, stop, and crash it on purpose   | Polling interval or change data capture (see below)                    |
-| Entries are kept forever            | The admin console can show the history | A retention policy for sent entries                                    |
-| ElasticMQ keeps messages in memory  | Runs without AWS                       | EventBridge bus, rules, and target retries; not wired in the CDK stack |
-| The consumer only logs              | Shows delivery without side effects    | Idempotent consumers that follow the rules above                       |
-
-**An alternative carrier.** Instead of polling, DynamoDB Streams could hand each
-new outbox entry to a Lambda function or EventBridge Pipes. The entry and its
-guarantees stay the same; only the carrier changes. The polling publisher fits
-this lab better because you can stop it, run single passes, and watch entries
-wait. Nothing is decided for a cloud version yet.
-
-**Queue or broker?** An announcement is a fact with any number of listeners,
-so it fits a broker such as an EventBridge bus or an SNS topic, which hands a
-copy to every subscriber. A queue gives each message to one consumer only: right
-for incoming work like the worker's jobs, but two listeners on one queue would
-split the events between them. A common shape is a broker with one SQS queue
-per listener, so each listener gets its own buffer, retries, and DLQ. Locally,
-the single ElasticMQ queue stands in for the broker; that is fine for one log
-consumer. This is a recommendation, not a decision.
+A future listener with real side effects therefore skips a `domainEventId` it
+has already handled and ignores revisions older than the last one it applied.
+[Duplicates and crashes](try-it/duplicates-and-crashes.md) walks through each
+crash moment.
 
 ## See it yourself
 
-Let a letter wait in the tray, then send it. This needs `pnpm local:up`, the
-website with `pnpm dev`, and a user who has signed in once.
+Let an event wait in the outbox, then publish it. This needs `pnpm local:up`,
+the website with `pnpm dev`, and a user who has signed in once.
 
 1. Start the consumer with `pnpm dev:events`. Leave `pnpm dev:outbox` stopped.
 2. Run `pnpm cli seed <user-id> active`. **Expect:** after a refresh, the
-   website shows Premium, although nothing has been announced yet.
+   website shows Premium, although no event has been published yet.
 3. Run `pnpm outbox:publish --dry-run`. **Expect:** an `outbox.preview` line
    with `<user-id>:<revision>`. The [admin console](ADMIN_CONSOLE.md) lists the
    entry as pending and warns once it is older than 60 seconds.
 4. Run `pnpm outbox:publish`. **Expect:** `outbox.sent` in this terminal and
    `subscription.changed` in the consumer terminal, with the same `domainEventId`.
 5. Clean up with `pnpm cli seed <user-id> free` and one more `pnpm outbox:publish`.
-
-[Duplicates and crashes](try-it/duplicates-and-crashes.md) shows the same flow
-with a real Stripe cancellation.
 
 | File                                                                                                             | What to look for                                                      |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -283,44 +170,22 @@ with a real Stripe cancellation.
 | [`outbox-publisher/src/store.ts`](../services/outbox-publisher/src/store.ts)                                     | The pending scan and the conditional `sent` update                    |
 | [`outbox-publisher/src/events.ts`](../services/outbox-publisher/src/events.ts)                                   | The `SubscriptionChanged` shape and the `<user-id>:<revision>` rule   |
 
-## Why it works this way
+## Demo simplifications
 
-<details>
-<summary>Why not send the event from the worker and simply retry until it works?</summary>
+The pattern is complete; the plumbing around it is kept small. None of the
+following is decided for a cloud version.
 
-Retries live inside the process. If the process dies, the retry dies with it,
-and the redelivered job is skipped because its completion marker already
-exists. The outbox entry is a retry that survives the crash, because it is
-stored data instead of a running loop.
-
-</details>
-
-<details>
-<summary>Why not one transaction across DynamoDB and the event queue?</summary>
-
-There is none. DynamoDB transactions cover DynamoDB items only, and neither SQS
-nor EventBridge can join them. The outbox moves the announcement into the
-database, so one local transaction is enough.
-
-</details>
-
-<details>
-<summary>Why not exactly once?</summary>
-
-The publisher would have to send and mark in one atomic step, which is the same
-two-system problem again. Instead, every announcement carries a stable ID, and a
-listener with side effects skips copies. At-least-once plus a stable ID is the
-usual, honest guarantee.
-
-</details>
-
-<details>
-<summary>Does the outbox make access faster or more correct?</summary>
-
-No. Access comes from the stored subscriptions and the current time on every
-request. Stop the publisher and Premium still works; only the announcements wait.
-
-</details>
+- **Queue or broker.** An event with any number of listeners fits a broker, such
+  as an EventBridge bus or an SNS topic, that hands a copy to every subscriber,
+  often with one SQS queue per listener for its own buffer, retries, and DLQ. A
+  plain queue gives each message to one consumer only. Locally, the single
+  ElasticMQ queue stands in for the broker, which is fine for one log consumer.
+- **Polling.** The publisher scans the whole table every five seconds, and
+  entries are kept forever. Production would need an index for pending entries
+  and a retention policy. DynamoDB Streams could replace the polling; the
+  entries and their guarantees would stay the same.
+- **In-memory transport.** ElasticMQ loses accepted messages on restart, and the
+  CDK stack has no event bus or rule yet.
 
 ## Continue
 
@@ -328,5 +193,3 @@ request. Stop the publisher and Premium still works; only the announcements wait
   outbox record next to the snapshot and the completion marker.
 - [Publisher README](../services/outbox-publisher/README.md): batches, logs, and
   the EventBridge boundary.
-- [Reconciliation](RECONCILIATION.md): the safety net for incoming events that
-  never arrived.

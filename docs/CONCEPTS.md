@@ -147,4 +147,4 @@ commit: tell the store the purchase was processed (finish / acknowledge).
 - [Architecture](ARCHITECTURE.md): which process does what, locally and in AWS.
 - [Data model](DYNAMODB_DATA_MODEL.md): how these records are stored.
 - [Reconciliation](RECONCILIATION.md): how missed updates are repaired.
-- [Outbox](OUTBOX.md): how every saved change gets announced, even after a crash.
+- [Outbox](OUTBOX.md): optional change events for other systems, published reliably.

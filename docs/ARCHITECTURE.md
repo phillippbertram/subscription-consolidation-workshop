@@ -374,7 +374,7 @@ Three rules hold for every provider:
 - [Apple purchase and notifications](setup/apple.md): client synchronization and lifecycle events converge in the worker.
 - [Google Play purchases and notifications](setup/google.md): Android purchase/restore, authenticated Pub/Sub ingress, and backend acknowledgement.
 - [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
-- [Outbox](OUTBOX.md): announce every committed change at least once, and what goes wrong without it.
+- [Outbox](OUTBOX.md): optional `SubscriptionChanged` events for other systems, published without losing one.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 
 ## Maintaining the diagrams

@@ -100,16 +100,16 @@ Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove ev
 | `packages/` | Shared code; the access rules live in [`domain`](packages/domain/README.md)                                                                                             |
 | `infra/`    | [AWS CDK stack](infra/README.md) for an optional cloud deployment                                                                                                       |
 
-| Guide                                     | Read it for                                               |
-| ----------------------------------------- | --------------------------------------------------------- |
-| [Concepts](docs/CONCEPTS.md)              | The core idea, the status translation table, the glossary |
-| [Architecture](docs/ARCHITECTURE.md)      | Components, data flow, and what runs locally vs. in AWS   |
-| [Payments](docs/PAYMENTS.md)              | Stripe flow, retries, and the exact access rules          |
-| [Reconciliation](docs/RECONCILIATION.md)  | How missed updates are repaired                           |
-| [Outbox](docs/OUTBOX.md)                  | How every saved change gets announced, even after a crash |
-| [Data model](docs/DYNAMODB_DATA_MODEL.md) | Records, keys, and atomic writes in one DynamoDB table    |
-| [Development](docs/DEVELOPMENT.md)        | Everyday commands, logs, and local demo tools             |
-| [Decisions](docs/DECISIONS.md)            | Why the project uses these approaches                     |
+| Guide                                     | Read it for                                                  |
+| ----------------------------------------- | ------------------------------------------------------------ |
+| [Concepts](docs/CONCEPTS.md)              | The core idea, the status translation table, the glossary    |
+| [Architecture](docs/ARCHITECTURE.md)      | Components, data flow, and what runs locally vs. in AWS      |
+| [Payments](docs/PAYMENTS.md)              | Stripe flow, retries, and the exact access rules             |
+| [Reconciliation](docs/RECONCILIATION.md)  | How missed updates are repaired                              |
+| [Outbox](docs/OUTBOX.md)                  | Optional change events for other systems, published reliably |
+| [Data model](docs/DYNAMODB_DATA_MODEL.md) | Records, keys, and atomic writes in one DynamoDB table       |
+| [Development](docs/DEVELOPMENT.md)        | Everyday commands, logs, and local demo tools                |
+| [Decisions](docs/DECISIONS.md)            | Why the project uses these approaches                        |
 
 ## What this is not
 
