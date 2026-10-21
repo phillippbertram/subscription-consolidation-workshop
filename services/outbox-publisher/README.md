@@ -124,4 +124,4 @@ check and is not proof of a matching rule or target delivery.
   version must treat failed target delivery and failed Lambda execution as two
   separate retry paths.
 
-Hands-on: [Exercise 4](../../docs/exercises/04-reliability.md).
+Try it: [Duplicates and crashes](../../docs/try-it/duplicates-and-crashes.md).

@@ -47,6 +47,10 @@ export const googlePurchaseSchema = z.object({
           basePlanId: z.string(),
           offerId: z.string().optional(),
         }),
+        // The Play Console order (GPA.…) of the latest successful purchase or
+        // renewal. Logged only, so a log line matches an entry in Order
+        // management; it never decides access. Absent until the user owns it.
+        latestSuccessfulOrderId: z.string().optional(),
       }),
     )
     .length(1),

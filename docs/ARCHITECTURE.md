@@ -3,7 +3,7 @@
 PremiumPass has two paths: **authenticated reads/actions** through the API and
 **provider notifications** through verified webhook ingress. Both meet at
 subscriptions in DynamoDB. New to the terms? Start with [Concepts](CONCEPTS.md).
-[Product overview](../README.md) · [Setup](GETTING_STARTED.md).
+[Product overview](../README.md) · [Setup](setup/README.md).
 
 ## System overview
 
@@ -20,7 +20,7 @@ their own colors; labels and shapes identify each component as well.
 | Layer                       | Responsibility                                                                                 | Start reading                                                                                                                                |
 | --------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | Clients                     | Login, display backend access, initiate purchases                                              | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                             |
-| Auth0                       | Authenticate users, issue API access tokens, publish public signing keys                       | [Auth0](AUTH0_SETUP.md)                                                                                                                      |
+| Auth0                       | Authenticate users, issue API access tokens, publish public signing keys                       | [Auth0](setup/auth0.md)                                                                                                                      |
 | API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, handle enabled billing actions | [API](../services/api/README.md)                                                                                                             |
 | Webhooks                    | Verify event signatures or Pub/Sub identity, then enqueue references                           | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md), [Google](../services/google-webhook/README.md) |
 | Worker                      | Verify current provider state/ownership; persist atomically                                    | [Worker](../services/subscription-worker/README.md)                                                                                          |
@@ -175,7 +175,7 @@ its local router forwards only Apple/Google notification POSTs to their receiver
 
 Apple and Google stay disabled until configured. The outbox publisher and log
 consumer are two processes from the same workspace package.
-[Commands](DEVELOPMENT.md#run-and-check) · [Google setup](GOOGLE_PLAY.md).
+[Commands](DEVELOPMENT.md#run-and-check) · [Google setup](setup/google.md).
 
 ## AWS deployment topology
 
@@ -335,7 +335,6 @@ which the CDK stack prepares. Verification status lives only in [TASKS](TASKS.md
 | Google notifications (Pub/Sub push)      | ✓ via HTTPS tunnel         | ✓ opt-in                    |
 | Reconciliation for Stripe, Apple, Google | ✓ watcher in `pnpm dev`    | ✓ opt-in schedule           |
 | Expiration jobs                          | ✓                          | — (API still checks expiry) |
-| Google mock scenarios                    | ✓                          | —                           |
 | Outbox publication                       | ✓ ElasticMQ + log consumer | — EventBridge adapter only  |
 | Browser CORS for the website             | ✓                          | — not configured            |
 | Complimentary Premium (CLI)              | ✓                          | —                           |
@@ -369,8 +368,8 @@ Three rules hold for every provider:
 ## Follow a feature
 
 - [Stripe checkout and processing](PAYMENTS.md#payment-flow): payment → verified state → access.
-- [Apple purchase and notifications](APPLE_PURCHASES.md): client synchronization and lifecycle events converge in the worker.
-- [Google Play purchases and notifications](GOOGLE_PLAY.md): Android purchase/restore, authenticated Pub/Sub ingress, and backend acknowledgement.
+- [Apple purchase and notifications](setup/apple.md): client synchronization and lifecycle events converge in the worker.
+- [Google Play purchases and notifications](setup/google.md): Android purchase/restore, authenticated Pub/Sub ingress, and backend acknowledgement.
 - [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 

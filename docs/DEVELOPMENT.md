@@ -1,6 +1,6 @@
 # Development
 
-Complete [Getting started](GETTING_STARTED.md) once. This guide covers everyday
+Complete the [local setup](setup/README.md) once. This guide covers everyday
 work, local diagnostics, and cleanup. Commands run from the repository root.
 
 ## Run and check
@@ -8,24 +8,25 @@ work, local diagnostics, and cleanup. Commands run from the repository root.
 Run `pnpm run` to list all root scripts. Names follow these groups:
 `dev:*` for long-running development processes, `local:*` for Docker,
 `mobile:*` for native builds, `cli` for all local subscription tools,
-`webhooks:listen` for provider forwarding, and `infra:*` for CDK.
+`webhooks:listen` for provider forwarding, `infra:*` for CDK, and `docs:*`
+for the documentation site.
 Standard checks keep their short names.
 Additional arguments follow the command directly, for example
 `pnpm cli reconcile --provider google --dry-run`.
 
 ### Development processes
 
-| Command                                              | Starts                                                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                           | Docker + table, then API, Stripe/Apple/Google webhooks, worker, Web, reconciliation watcher       |
-| `pnpm dev:api` / `pnpm dev:api:lan`                  | API on loopback / on all interfaces (for a phone on the LAN)                                      |
-| `pnpm dev:web`                                       | Website only                                                                                      |
-| `pnpm dev:mobile` / `pnpm dev:mobile:lan`            | Metro for the development app ([device setup](../apps/mobile/README.md#run-on-a-physical-iphone)) |
-| `pnpm dev:webhook:stripe` / `pnpm dev:webhook:apple` | One webhook process                                                                               |
-| `pnpm dev:webhook:google`                            | Google Pub/Sub webhook on port 3004                                                               |
-| `pnpm dev:worker`                                    | Subscription queue worker                                                                         |
-| `pnpm dev:outbox` / `pnpm dev:events`                | Outbox publisher (repeating) / its log consumer                                                   |
-| `pnpm cli reconcile --watch`                         | Reconciliation watcher, only when not using `pnpm dev`                                            |
+| Command                                              | Starts                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                           | Docker + table, then API, Stripe/Apple/Google webhooks, worker, Web, reconciliation watcher |
+| `pnpm dev:api` / `pnpm dev:api:lan`                  | API on loopback / on all interfaces (for a phone on the LAN)                                |
+| `pnpm dev:web`                                       | Website only                                                                                |
+| `pnpm dev:mobile` / `pnpm dev:mobile:lan`            | Metro for the development app ([device setup](setup/apple.md#run-on-a-physical-iphone))     |
+| `pnpm dev:webhook:stripe` / `pnpm dev:webhook:apple` | One webhook process                                                                         |
+| `pnpm dev:webhook:google`                            | Google Pub/Sub webhook on port 3004                                                         |
+| `pnpm dev:worker`                                    | Subscription queue worker                                                                   |
+| `pnpm dev:outbox` / `pnpm dev:events`                | Outbox publisher (repeating) / its log consumer                                             |
+| `pnpm cli reconcile --watch`                         | Reconciliation watcher, only when not using `pnpm dev`                                      |
 
 - Use either `pnpm dev` or individual processes, not both.
 - Metro, outbox publisher, and log consumer always start separately. The Google
@@ -66,7 +67,6 @@ CLI. The programs keep reading their own `.env` as before.
 | `pnpm local:logs`                             | Show the last 100 lines of Docker logs                                |
 | `pnpm cli --help`                             | Inspect or change local subscriptions for one user                    |
 | `pnpm cli seed <internal-user-id> <scenario>` | Seed reserved synthetic demo records                                  |
-| `pnpm cli google-mock --help`                 | Change independent local Google mock state                            |
 | `pnpm cli reconcile --dry-run`                | Preview queued reconciliation; omit `--dry-run` to enqueue            |
 | `pnpm outbox:publish --dry-run`               | Preview pending outbox events; omit `--dry-run` to publish one pass   |
 | `pnpm stripe:listen`                          | Forward Stripe test events in a separate CLI terminal                 |
@@ -74,8 +74,8 @@ CLI. The programs keep reading their own `.env` as before.
 
 ### Receive provider webhooks together
 
-After installing and logging into the [Stripe CLI](PAYMENTS.md#stripe-test-setup)
-and configuring [ngrok](APPLE_PURCHASES.md#receive-apple-notifications-through-ngrok),
+After installing and logging into the [Stripe CLI](setup/stripe.md#1-create-the-product-keys-and-listener)
+and configuring [ngrok](setup/apple.md#receive-apple-notifications-through-ngrok),
 run in a separate terminal:
 
 ```sh
@@ -107,20 +107,31 @@ Use this command instead of a separate `pnpm stripe:listen` or ngrok process.
 
 ### Builds and checks
 
-| Command                                              | Purpose                                                                                 |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `pnpm format` / `pnpm check`                         | Fix lint and formatting / verify formatting, lint, types, and builds                    |
-| `pnpm format:check` / `pnpm lint` / `pnpm typecheck` | One check on its own                                                                    |
-| `pnpm lint:fix`                                      | ESLint fixes only                                                                       |
-| `pnpm build` / `pnpm start:api`                      | Build all workspaces / start the built local API                                        |
-| `pnpm mobile:ios` / `pnpm mobile:android`            | Build and install the native development app                                            |
-| `pnpm mobile:android:doctor`                         | Check JDK (17-21) and Android SDK prerequisites                                         |
-| `pnpm mobile:android:aab` (`--unsigned`)             | Signed Play upload / unsigned test bundle ([setup](GOOGLE_PLAY.md#local-android-build)) |
-| `pnpm infra:synth`                                   | Produce the CDK template locally, without AWS calls                                     |
-| `pnpm infra:bootstrap:dev` / `pnpm infra:deploy:dev` | Prepare / deploy AWS development resources ([AWS guide](../infra/README.md#deploy))     |
+| Command                                                   | Purpose                                                                                  |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `pnpm format` / `pnpm check`                              | Fix lint and formatting / verify formatting, lint, types, and builds                     |
+| `pnpm format:check` / `pnpm lint` / `pnpm typecheck`      | One check on its own                                                                     |
+| `pnpm lint:fix`                                           | ESLint fixes only                                                                        |
+| `pnpm build` / `pnpm start:api`                           | Build all workspaces / start the built local API                                         |
+| `pnpm mobile:ios` / `pnpm mobile:android`                 | Build and install the native development app                                             |
+| `pnpm mobile:android:doctor`                              | Check JDK (17-21) and Android SDK prerequisites                                          |
+| `pnpm mobile:android:aab` (`--unsigned`)                  | Signed Play upload / unsigned test bundle ([setup](setup/google.md#local-android-build)) |
+| `pnpm infra:synth`                                        | Produce the CDK template locally, without AWS calls                                      |
+| `pnpm infra:bootstrap:dev` / `pnpm infra:deploy:dev`      | Prepare / deploy AWS development resources ([AWS guide](setup/aws.md#deploy))            |
+| `pnpm docs:dev` / `pnpm docs:build` / `pnpm docs:preview` | Documentation site on port 5174 / static build / serve the build on port 4174            |
 
-- `pnpm build` bundles backends, builds Web, and exports Mobile JavaScript; it
-  does not compile native apps. There is no automated test suite.
+- `pnpm build` bundles backends, builds Web, exports Mobile JavaScript, and
+  builds the documentation site; it does not compile native apps. There is no
+  automated test suite.
+- The documentation site ([`apps/docs`](../apps/docs/.vitepress/config.ts))
+  renders `docs/` in place. Its build fails on a relative link to a file that
+  does not exist; links to source code and to files outside `docs/` open on
+  GitHub. Add a new page to the sidebar in that config file. Colors and fonts
+  live in [`theme/brand.css`](../apps/docs/.vitepress/theme/brand.css).
+- The [docs workflow](../.github/workflows/docs.yml) builds the site for every
+  pull request and push, and publishes `main` to
+  [GitHub Pages](https://phillippbertram.github.io/subscription-consolidation-workshop/).
+  It needs Pages enabled once under Settings → Pages → Source: GitHub Actions.
 - Format scripts skip Markdown. For a changed Markdown file, run
   `pnpm exec prettier --write path/to/file.md` and check its links and diagrams.
 
@@ -152,15 +163,15 @@ above. Search the output of `pnpm dev` for one `correlationId` to see an event
 from the provider's call to the committed result. Lines at the same step share
 fields across providers, so the table applies to Stripe, Apple, and Google.
 
-| Log event                                                                         | Level   | Meaning                                                                                                                                  |
-| --------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `webhook.received`, `apple.notification_received`, `google.notification_received` | `info`  | A verified provider event, with a safe summary of what it says (type, IDs, status, dates)                                                |
-| `webhook.queued`, `apple.notification_queued`, `google.notification_queued`       | `info`  | The queue accepted the job and the provider got its 200                                                                                  |
-| `webhook.ignored`, `apple.notification_ignored`, `google.notification_ignored`    | `info`  | Verified, but nothing to do. `reason` says why (unhandled event type, TEST, another product)                                             |
-| `webhook.rejected`, `apple.notification_rejected`, `google.notification_rejected` | `warn`  | The webhook answered with an error. `code` or `reason` names the cause, for example `invalid_push_identity`                              |
-| `subscription.received`                                                           | `info`  | The worker took a job: `queueLagMs`, `receiveCount` (above 1 means a retry), and the job's IDs                                           |
-| `subscription.processed`                                                          | `info`  | `outcome` (`changed`, `verified`, `duplicate`), `durationMs`, and the resulting `subscription` (state, `accessUntil`, revision)          |
-| `subscription.failed`, `subscription.invalid_job`                                 | `error` | Processing failed with a `code`, or the message was not a valid job. The queue retries, and `issues` lists the fields that did not match |
+| Log event                                                                         | Level   | Meaning                                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `webhook.received`, `apple.notification_received`, `google.notification_received` | `info`  | A verified provider event, with a safe summary of what it says (type, IDs, status, dates)                                                                                                                        |
+| `webhook.queued`, `apple.notification_queued`, `google.notification_queued`       | `info`  | The queue accepted the job and the provider got its 200                                                                                                                                                          |
+| `webhook.ignored`, `apple.notification_ignored`, `google.notification_ignored`    | `info`  | Verified, but nothing to do. `reason` says why (unhandled event type, TEST, another product)                                                                                                                     |
+| `webhook.rejected`, `apple.notification_rejected`, `google.notification_rejected` | `warn`  | The webhook answered with an error. `code` or `reason` names the cause, for example `invalid_push_identity`                                                                                                      |
+| `subscription.received`                                                           | `info`  | The worker took a job: `queueLagMs`, `receiveCount` (above 1 means a retry), and the job's IDs                                                                                                                   |
+| `subscription.processed`                                                          | `info`  | `outcome` (`changed`, `verified`, `duplicate`), `durationMs`, the resulting `subscription` (state, `accessUntil`, revision), and for Google the `orderId` (`GPA.…`) shown in the Play Console's Order management |
+| `subscription.failed`, `subscription.invalid_job`                                 | `error` | Processing failed with a `code`, or the message was not a valid job. The queue retries, and `issues` lists the fields that did not match                                                                         |
 
 The summaries are allowlists, not payloads. `pickFields` in
 `packages/logging` copies only plain fields that a service names in its
@@ -170,14 +181,14 @@ details, and amounts are never logged: a Google subscription is shown as the
 digest that also names it in the database. Raw payloads are deliberately not
 logged, because logs must not contain full payment payloads.
 
-| Problem                                 | First check                                                                                   |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Port already used                       | Stop the older process using the same service port                                            |
-| Profile fails but health succeeds       | Docker/table configuration; health does not check dependencies                                |
-| Login, 401, or scope error              | [Auth0 troubleshooting](AUTH0_SETUP.md#troubleshooting)                                       |
-| Checkout succeeds but access stays Free | [Payment checks](PAYMENTS.md#manual-checks)                                                   |
-| iPhone cannot reach API                 | API LAN binding, device permission, and Mac address; not phone localhost                      |
-| Apple notification fails                | [ngrok and notification checks](APPLE_PURCHASES.md#receive-apple-notifications-through-ngrok) |
+| Problem                                 | First check                                                                               |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Port already used                       | Stop the older process using the same service port                                        |
+| Profile fails but health succeeds       | Docker/table configuration; health does not check dependencies                            |
+| Login, 401, or scope error              | [Auth0 troubleshooting](setup/auth0.md#troubleshooting)                                   |
+| Checkout succeeds but access stays Free | [Payment checks](PAYMENTS.md#manual-checks)                                               |
+| iPhone cannot reach API                 | API LAN binding, device permission, and Mac address; not phone localhost                  |
+| Apple notification fails                | [ngrok and notification checks](setup/apple.md#receive-apple-notifications-through-ngrok) |
 
 ## Local outbox
 
@@ -229,8 +240,9 @@ pnpm cli --help
   mapping, but no worker. It never changes Stripe; partial failures exit nonzero.
 - **`seed <user-id> <scenario>`** changes only two reserved demo records
   (scenarios such as `active`, `expiring`, `multiple`, `grace`; `free` removes
-  them). Real provider grants stay untouched. [Exercise 3](exercises/03-consolidation.md)
-  walks through the scenarios.
+  them). Real provider grants stay untouched.
+  [Several sources at once](try-it/several-sources.md) walks through the
+  scenarios.
 
 ### Complimentary Premium
 
@@ -256,7 +268,7 @@ pnpm cli premium revoke <internal-user-id> --reason "Workshop ended"
   There is no Auth0 admin role and no HTTP admin route; a hosted version would
   need both. This is a developer tool, not a multi-user admin system.
 - Reconciliation and the `set`/`seed` demo commands never change this grant.
-  Step by step: [Exercise 6](exercises/06-complimentary-premium.md).
+  Step by step: [Complimentary Premium](try-it/complimentary-premium.md).
 
 ## Local reconciliation and expiration
 
@@ -270,47 +282,40 @@ section lists the commands.
 | `pnpm cli reconcile --watch`     | Run now, then every five minutes (already part of `pnpm dev`) |
 | `pnpm cli stripe-sync <user-id>` | Repair Stripe directly, without the queue                     |
 
-| Option                      | Effect                                                                        |
-| --------------------------- | ----------------------------------------------------------------------------- |
-| `--user <internal-user-id>` | Only this user                                                                |
-| `--provider all`            | Default: Stripe test, known Apple/Google test subscriptions, and Google mocks |
-| `--provider stripe`         | Stripe test only                                                              |
-| `--provider apple`          | Known Apple Sandbox subscriptions only                                        |
-| `--provider google`         | Known Google Play license-test tokens; needs Google settings                  |
-| `--provider google_mock`    | Google mock state only; no provider keys                                      |
-| `--provider none`           | Expiration only; no provider keys                                             |
+| Option                      | Effect                                                         |
+| --------------------------- | -------------------------------------------------------------- |
+| `--user <internal-user-id>` | Only this user                                                 |
+| `--provider all`            | Default: Stripe test and known Apple/Google test subscriptions |
+| `--provider stripe`         | Stripe test only                                               |
+| `--provider apple`          | Known Apple Sandbox subscriptions only                         |
+| `--provider google`         | Known Google Play license-test tokens; needs Google settings   |
+| `--provider none`           | Expiration only; no provider keys                              |
 
 - Queued jobs need a running worker (`pnpm dev` or `pnpm dev:worker`).
 - Every run also checks expiration. The API enforces expiry on its own; the job
   only refreshes the stored snapshot and announces the change.
 - Provider credentials load only when a matching subscription exists. Stripe
   needs `STRIPE_SECRET_KEY` (test) and `STRIPE_PRODUCT_ID`; Apple needs the
-  [Apple settings](APPLE_PURCHASES.md#local-reconciliation).
+  [Apple settings](setup/apple.md#local-reconciliation).
 - Logs and exit codes: [Follow a run](RECONCILIATION.md#follow-a-run).
 
-### Exercise a missed Google mock event (T20)
+### Repair a missed Stripe event (T20)
+
+Needs a Stripe test subscription bought on the website. Stop `pnpm stripe:listen`
+first, so the next Stripe event never reaches the local webhook. Then cancel the
+subscription in the Stripe Dashboard (test mode), or with the Stripe CLI:
 
 ```sh
-pnpm cli google-mock <internal-user-id> mock_google_demo active
-# Wait for subscription.processed in the worker terminal.
-pnpm cli google-mock <internal-user-id> mock_google_demo revoked --suppress-event
-pnpm cli reconcile --user <internal-user-id> --provider google_mock --dry-run
-pnpm cli reconcile --user <internal-user-id> --provider google_mock
+pnpm cli list <internal-user-id>   # shows the sub_… ID
+stripe subscriptions cancel sub_…
+pnpm cli reconcile --user <internal-user-id> --provider stripe --dry-run
+pnpm cli reconcile --user <internal-user-id> --provider stripe
 ```
 
-The suppressed change updates only the mock "provider". Access stays stale until
-reconciliation repairs it; repeating the last command adds no second outbox
-event. Guided version with explanations: [Exercise 5](exercises/05-repair-missed-updates.md).
-
-| Google mock scenario            | Effect                                                  |
-| ------------------------------- | ------------------------------------------------------- |
-| `active [--until]`              | Access until one hour from now, or an explicit UTC time |
-| `renewal_failed`                | Keeps the previous period plus bounded grace            |
-| `canceling`                     | Renewal off; access until the existing boundary         |
-| `expired`, `revoked`, `pending` | No access                                               |
-
-These are synthetic local states, not Google Play purchases. Failure and
-cancellation need an existing period; repeated failure never restarts grace.
+The cancellation changed only Stripe. Access stays stale until reconciliation
+repairs it; repeating the last command adds no second outbox event. Start
+`pnpm stripe:listen` again afterwards. Guided version with explanations:
+[Missed updates and expiry](try-it/missed-updates.md).
 
 **T21 (missed initial Stripe webhook):** the Stripe customer mapping must
 already exist. Reconciliation lists all of that customer's test subscriptions,
@@ -337,15 +342,15 @@ have separate lifecycles; deleting one does not delete the others.
    remain in the named volume; ElasticMQ messages are lost when its container
    stops. Resume with `pnpm dev` and restart the needed listener/tunnel.
 
-3. For a longer Apple pause, [remove the sandbox notification URL](APPLE_PURCHASES.md#cleanup)
+3. For a longer Apple pause, [remove the sandbox notification URL](setup/apple.md#cleanup)
    so Apple no longer targets an inactive tunnel. For a longer Google pause,
-   [delete the Pub/Sub push subscription](GOOGLE_PLAY.md#cleanup) for the same
+   [delete the Pub/Sub push subscription](setup/google.md#cleanup) for the same
    reason.
 
 ### Reset local data
 
 **Deletes all profiles, customer/owner mappings, subscriptions, markers, and
-outbox records and independent Google mock state in this project's local database,
+outbox records in this project's local database,
 plus queued work.** It does
 not cancel Stripe/Apple subscriptions or delete Auth0 users.
 
@@ -368,17 +373,17 @@ or editing another user's mapping.
 Use this order when retiring the demo:
 
 1. While processing is still available, end project-specific test subscriptions
-   through the [Stripe](PAYMENTS.md#cleanup), [Apple](APPLE_PURCHASES.md#cleanup),
-   or [Google Play](GOOGLE_PLAY.md#cleanup) management flow if that is your intent.
+   through the [Stripe](setup/stripe.md#cleanup), [Apple](setup/apple.md#cleanup),
+   or [Google Play](setup/google.md#cleanup) management flow if that is your intent.
 2. Remove project webhook destinations (Stripe endpoint, Apple URL, the Google
    Pub/Sub topic and subscriptions) and stop forwarding/tunnels.
-3. Follow [AWS cleanup](../infra/README.md#cleanup) if you deployed resources.
-4. Remove dedicated [Auth0 resources](AUTH0_SETUP.md#cleanup), revoke only
+3. Follow [AWS cleanup](setup/aws.md#cleanup) if you deployed resources.
+4. Remove dedicated [Auth0 resources](setup/auth0.md#cleanup), revoke only
    project-specific keys, and remove their ignored local files when no longer
    needed. Preserve shared tenants, connections, keys, and developer accounts.
 5. Remove the dedicated Google Cloud resources: the backend and push-auth
    service accounts with their JSON key, and the Play Console user for the
-   backend account ([Google Play cleanup](GOOGLE_PLAY.md#cleanup)). Preserve a
+   backend account ([Google Play cleanup](setup/google.md#cleanup)). Preserve a
    shared Cloud project, the Play app, and your license-tester list.
 6. Sign out of the demo clients. Clear only this site's browser data if desired;
    uninstall the development app if you no longer need it.

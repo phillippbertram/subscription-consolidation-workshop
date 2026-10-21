@@ -10,4 +10,4 @@ The worker loads local `.p8` credentials or a cloud secret and passes them into
 public roots, with online certificate checks. Requests have an eight-second
 transport timeout and bounded response size. No production or mock fallback.
 
-[Local and AWS setup](../../docs/APPLE_PURCHASES.md).
+[Local and AWS setup](../../docs/setup/apple.md).

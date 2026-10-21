@@ -1,7 +1,7 @@
 # Google Play notification ingress
 
 Local Hono service on `127.0.0.1:3004`, started by `pnpm dev` or alone with
-`pnpm dev:webhook:google`. Follow [Google Play setup](../../docs/GOOGLE_PLAY.md).
+`pnpm dev:webhook:google`. Follow [Google Play setup](../../docs/setup/google.md).
 
 `POST /v1/webhooks/google` accepts wrapped, authenticated Pub/Sub push messages.
 The official Google auth library verifies signature, issuer, audience, and time;
@@ -29,4 +29,4 @@ check Google credentials, the tunnel, Pub/Sub, queue delivery, or purchases.
 events to the same Hono app and an AWS SQS queue. Initialization failures return
 a safe 503. In AWS this Lambda may only send to the queue; it has no database or
 secret access. Google processing is disabled by default.
-[AWS setup](../../docs/GOOGLE_PLAY.md#aws-notification-processing).
+[AWS setup](../../docs/setup/google.md#aws-notification-processing).

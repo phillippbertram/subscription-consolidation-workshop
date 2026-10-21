@@ -1,0 +1,123 @@
+/*
+ * PremiumPass brand on top of the VitePress default theme.
+ *
+ * The light colors come from the web app (apps/web/src/style.css), so the
+ * docs, the screenshots, and the demo look like one product. The web app has
+ * no dark mode; the dark values below are derived from the same green. Only
+ * VitePress variables are overridden, so every default component (nav,
+ * sidebar, buttons, alerts, search) picks them up without custom markup.
+ */
+
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+:root {
+  --vp-font-family-base:
+    'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --vp-font-family-mono:
+    'Geist Mono Variable', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, monospace;
+
+  /* Brand: links and active navigation (1), hover (2), solid fills (3). */
+  --vp-c-brand-1: #1d5a43;
+  --vp-c-brand-2: #2b6b52;
+  --vp-c-brand-3: #1d5a43;
+  --vp-c-brand-soft: rgba(29, 90, 67, 0.14);
+
+  /* Surfaces: white content on the web app's green-tinted background. */
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-alt: #f7f8f6;
+  --vp-c-bg-soft: #eff3f0;
+  --vp-c-bg-elv: #ffffff;
+
+  --vp-c-text-1: #10241d;
+  --vp-c-text-2: #5a6a63;
+  --vp-c-text-3: #8a9a92;
+
+  --vp-c-divider: #e1e7e3;
+  --vp-c-border: #d6dfd9;
+  --vp-c-gutter: #e1e7e3;
+  --vp-c-default-soft: rgba(90, 106, 99, 0.12);
+
+  /* Orange marks work in progress and optional steps, as in the web app. */
+  --vp-c-warning-1: #b45309;
+  --vp-c-warning-2: #c2620f;
+  --vp-c-warning-3: #b45309;
+  --vp-c-warning-soft: rgba(180, 83, 9, 0.12);
+
+  /* Buttons set their own hover colors: brand-2 is too light behind white text. */
+  --vp-button-brand-bg: #1d5a43;
+  --vp-button-brand-hover-bg: #174a37;
+  --vp-button-brand-active-bg: #123b2c;
+  --vp-button-brand-text: #f5faf7;
+  --vp-button-brand-hover-text: #f5faf7;
+  --vp-button-brand-active-text: #f5faf7;
+
+  --vp-home-hero-name-color: var(--vp-c-brand-1);
+}
+
+.dark {
+  --vp-c-brand-1: #7fc8a3;
+  --vp-c-brand-2: #9ad6b6;
+  --vp-c-brand-3: #2f7a5a;
+  --vp-c-brand-soft: rgba(127, 200, 163, 0.16);
+
+  --vp-c-bg: #0f1714;
+  --vp-c-bg-alt: #0b120f;
+  --vp-c-bg-soft: #17241f;
+  --vp-c-bg-elv: #141f1b;
+
+  --vp-c-text-1: #e4ede8;
+  --vp-c-text-2: #a7b7ae;
+  --vp-c-text-3: #75877e;
+
+  --vp-c-divider: #24352e;
+  --vp-c-border: #33463d;
+  --vp-c-gutter: #050907;
+  --vp-c-default-soft: rgba(167, 183, 174, 0.14);
+
+  --vp-c-warning-1: #f2a65a;
+  --vp-c-warning-2: #f5b97a;
+  --vp-c-warning-3: #c97a2c;
+  --vp-c-warning-soft: rgba(242, 166, 90, 0.14);
+
+  --vp-button-brand-bg: #2f7a5a;
+  --vp-button-brand-hover-bg: #378a66;
+  --vp-button-brand-active-bg: #2a6c50;
+}
+
+/*
+ * The "Why it works this way" answers are plain <details> elements, so they
+ * also unfold on GitHub. Here they become cards. VitePress's own `::: details`
+ * containers carry the custom-block class and keep their default style.
+ */
+.vp-doc details:not(.custom-block) {
+  margin: 12px 0;
+  padding: 0 16px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 8px;
+  background-color: var(--vp-c-bg);
+}
+
+.vp-doc details:not(.custom-block) > summary {
+  padding: 12px 0;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vp-doc details:not(.custom-block)[open] > summary {
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+/* Wide diagrams scroll inside the page instead of widening it. */
+.vp-doc .mermaid-diagram {
+  margin: 16px 0;
+  overflow-x: auto;
+}
+
+/* The overview graphics have a light background; rounded corners frame them in dark mode. */
+.vp-doc img {
+  border-radius: 12px;
+}

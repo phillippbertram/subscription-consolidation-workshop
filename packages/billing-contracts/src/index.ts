@@ -47,18 +47,6 @@ export type StripeReconciliationJob = z.infer<
   typeof stripeReconciliationJobSchema
 >;
 
-export const googleMockIdSchema = z
-  .string()
-  .regex(/^mock_google_[A-Za-z0-9_-]{1,80}$/);
-export const googleMockJobSchema = baseJobSchema.extend({
-  provider: z.literal('google_mock'),
-  eventId: z.string().min(1).max(200),
-  eventType: z.enum(['notification', 'reconciliation']),
-  userId: z.uuid(),
-  subscriptionId: googleMockIdSchema,
-});
-export type GoogleMockJob = z.infer<typeof googleMockJobSchema>;
-
 export const expirationJobSchema = baseJobSchema.extend({
   provider: z.literal('local_expiration'),
   eventId: z.string().min(1).max(200),
@@ -118,7 +106,6 @@ export const subscriptionJobSchema = z.union([
   appleJobSchema,
   appleReconciliationJobSchema,
   googleJobSchema,
-  googleMockJobSchema,
   expirationJobSchema,
 ]);
 export type SubscriptionJob = z.infer<typeof subscriptionJobSchema>;

@@ -58,7 +58,7 @@ export function readDeviceInfo(settings: {
       value: `${reactNative.major}.${reactNative.minor}.${reactNative.patch}`,
     },
     { label: 'API URL', value: settings.apiUrl },
-    // The format is documented in docs/AUTH0_SETUP.md, with the application ID
+    // The format is documented in docs/setup/auth0.md, with the application ID
     // in lowercase. If sign-in reports a callback mismatch, this exact URL must
     // be in Auth0's Allowed Callback URLs and Allowed Logout URLs.
     {

@@ -84,6 +84,8 @@ export class GoogleSubscriptionSource {
 
     return {
       subscription,
+      // For the worker's log only; see latestSuccessfulOrderId.
+      orderId: subscriptionLine.latestSuccessfulOrderId,
       needsAcknowledgement:
         purchase.acknowledgementState === 'ACKNOWLEDGEMENT_STATE_PENDING' &&
         ['active', 'past_due'].includes(subscription.state) &&

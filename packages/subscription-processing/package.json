@@ -8,7 +8,6 @@
     "./stripe": "./src/providers/stripe/index.ts",
     "./apple": "./src/providers/apple/index.ts",
     "./google": "./src/providers/google/index.ts",
-    "./google-mock": "./src/providers/google-mock/index.ts",
     "./contracts": "./src/processing/contracts.ts",
     "./stripe/store": "./src/providers/stripe/store.ts",
     "./stripe/credentials": "./src/providers/stripe/credentials.ts",

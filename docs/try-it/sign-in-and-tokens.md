@@ -1,6 +1,6 @@
-# Exercise 1: Login and tokens
+# Sign-in and tokens
 
-**Goal:** see how the API decides _who_ is calling and _what_ they may call,
+See how the API decides _who_ is calling and _what_ they may call,
 and why a valid token still does not mean Premium.
 
 ## Steps
@@ -55,7 +55,7 @@ and why a valid token still does not mean Premium.
 
    **Expect:** `401`. The payload is unchanged, but the signature no longer matches.
 
-## Look at the code
+## Where in the code
 
 | File                                                                             | What to look for                                                       |
 | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -63,7 +63,7 @@ and why a valid token still does not mean Premium.
 | [`services/api/src/app.ts`](../../services/api/src/app.ts)                       | Authentication runs before every route except `/health`                |
 | [`services/api/src/routes/premium.ts`](../../services/api/src/routes/premium.ts) | Scope check first, then the entitlement check                          |
 
-## Think about it
+## Why it works this way
 
 <details>
 <summary>Step 4 decoded the token without any key. Why must the API not do the same?</summary>

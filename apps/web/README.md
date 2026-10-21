@@ -1,7 +1,7 @@
 # PremiumPass Web
 
 React/Vite website for Auth0 login, the Premium score history, Stripe test
-checkout, and period-end cancellation. Follow [Getting started](../../docs/GETTING_STARTED.md)
+checkout, and period-end cancellation. Follow the [local setup](../../docs/setup/README.md)
 for configuration and the first purchase.
 
 ## Run
@@ -72,5 +72,5 @@ uses named reducer transitions so selection, recovery, and pending UI stay toget
 ## Cleanup
 
 Sign out and, if desired, clear only this website's browser data. This does not
-cancel provider subscriptions. See [Stripe cleanup](../../docs/PAYMENTS.md#cleanup)
+cancel provider subscriptions. See [Stripe cleanup](../../docs/setup/stripe.md#cleanup)
 and [environment cleanup](../../docs/DEVELOPMENT.md#cleanup).

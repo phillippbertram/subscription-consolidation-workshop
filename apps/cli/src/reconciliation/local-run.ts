@@ -15,10 +15,6 @@ import {
 import type { AppleSubscriptionSource } from '@premiumpass/subscription-processing/apple/source';
 import type { LocalSubscriptionStore } from '../local-admin/store.js';
 import {
-  GoogleMockSource,
-  normalizeGoogleMock,
-} from '@premiumpass/subscription-processing/google-mock';
-import {
   expirationDue,
   ProcessingError,
   sameDomainState,
@@ -41,7 +37,7 @@ export interface LocalReconciliationOptions {
     | Pick<AppleSubscriptionSource, 'read'>
     | Promise<Pick<AppleSubscriptionSource, 'read'>>;
   google?: () => GoogleSubscriptionSource | Promise<GoogleSubscriptionSource>;
-  provider: 'all' | 'stripe' | 'apple' | 'google' | 'google_mock' | 'none';
+  provider: 'all' | 'stripe' | 'apple' | 'google' | 'none';
   dryRun: boolean;
   userId?: string;
   runId?: string;
@@ -116,10 +112,6 @@ export async function runLocalReconciliation(
 
     if (includesProvider(options, 'google')) {
       await reconcileGoogle(run, userId, aggregate);
-    }
-
-    if (includesProvider(options, 'google_mock')) {
-      await reconcileGoogleMock(run, userId, aggregate);
     }
   }
 
@@ -408,76 +400,6 @@ async function reconcileGoogle(
     } catch (error) {
       recordFailure(run, userId, 'google', error);
     }
-  }
-}
-
-/**
- * The Google mock keeps its own "provider" state. Compare it with our records,
- * including mock subscriptions whose notification was deliberately suppressed.
- */
-async function reconcileGoogleMock(
-  run: RunContext,
-  userId: string,
-  aggregate: Aggregate,
-) {
-  const { local } = run.options;
-  try {
-    const source = new GoogleMockSource(local.documentClient, local.tableName);
-    const ids = new Set(
-      aggregate.subscriptions
-        .filter(
-          (s) =>
-            s.provider === 'google_mock' &&
-            s.providerSubscriptionId.startsWith('mock_google_'),
-        )
-        .map((s) => s.providerSubscriptionId),
-    );
-    for await (const state of source.list(userId)) {
-      ids.add(state.subscriptionId);
-    }
-
-    for (const subscriptionId of ids) {
-      if (run.options.signal?.aborted) {
-        break;
-      }
-
-      try {
-        const state = await source.read(userId, subscriptionId);
-        if (!state) {
-          throw new ProcessingError('google_mock_state_missing');
-        }
-
-        const previous = aggregate.subscriptions.find(
-          (s) =>
-            s.provider === 'google_mock' &&
-            s.providerSubscriptionId === subscriptionId,
-        );
-        await queueRefresh(run, {
-          event: 'reconciliation.google_mock',
-          userId,
-          subscriptionId,
-          changed:
-            !previous ||
-            !sameDomainState(
-              previous,
-              normalizeGoogleMock(state, previous, run.clock()),
-            ),
-          job: {
-            provider: 'google_mock',
-            eventType: 'reconciliation',
-            eventId: `reconcile_${run.runId}_${subscriptionId}`,
-            userId,
-            subscriptionId,
-            correlationId: run.runId,
-            receivedAt: run.clock().toISOString(),
-          },
-        });
-      } catch (error) {
-        recordFailure(run, userId, 'google_mock', error);
-      }
-    }
-  } catch (error) {
-    recordFailure(run, userId, 'google_mock', error);
   }
 }
 

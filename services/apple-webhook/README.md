@@ -18,5 +18,5 @@ access, or private key. Verified TEST notifications are acknowledged without job
 
 `pnpm dev:webhook:apple` starts individually; `pnpm dev` includes it.
 `GET /health` reports `appleEnabled`; disabled notification handling returns 503.
-Follow [local ngrok setup](../../docs/APPLE_PURCHASES.md#receive-apple-notifications-through-ngrok)
-or [AWS notification setup](../../docs/APPLE_PURCHASES.md#aws-notification-processing).
+Follow [local ngrok setup](../../docs/setup/apple.md#receive-apple-notifications-through-ngrok)
+or [AWS notification setup](../../docs/setup/apple.md#aws-notification-processing).

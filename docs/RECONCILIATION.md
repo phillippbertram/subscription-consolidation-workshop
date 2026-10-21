@@ -23,15 +23,13 @@ For startup, preview, provider selection, and stopping the watcher, follow
 | ---------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Stripe test      | Recheck stored subscriptions and discover missing ones through the mapped customer's subscriptions         | Customer mapping must already exist; reads do not change Stripe contracts                                             |
 | Apple Sandbox    | Refresh stored `Sandbox:<originalTransactionId>` lineages from current signed transaction and renewal data | Requires the worker's Apple settings/key; an unknown initial purchase needs purchase/Restore or a signed notification |
-| Google mock      | Compare independent synthetic provider state with derived subscription records                             | Only managed `mock_google_…` records; no real Google Play billing                                                     |
 | Google Play test | Refresh stored token references using current Developer API state                                          | Worker Google settings/key required; unknown first purchases need sync/Restore or RTDN                                |
 | Expiration       | Recompute due entitlement snapshots from stored verified boundaries                                        | Included with every provider selection; needs no provider credentials                                                 |
 
 Provider credentials load only for relevant work. Profiles without known Apple
-subscriptions need no Apple key. Mock and expiration work need neither provider's
-credentials. See [Stripe setup](GETTING_STARTED.md#5-connect-the-configuration)
-and [Apple setup](APPLE_PURCHASES.md#enable-local-processing), or
-[Google Play setup](GOOGLE_PLAY.md#7-enable-local-processing). Google credentials
+subscriptions need no Apple key. Expiration work needs no provider credentials. See [Stripe setup](setup/stripe.md#2-enter-the-values)
+and [Apple setup](setup/apple.md#enable-local-processing), or
+[Google Play setup](setup/google.md#7-enable-local-processing). Google credentials
 are loaded only when known Google subscriptions need refresh.
 
 ## Processing flow
@@ -56,7 +54,7 @@ are loaded only when known Google subscriptions need refresh.
 The queue payload never proves a purchase or grants access. Internal refresh
 schemas remain separate from notification/client ingress. Cloud workers accept
 Stripe test, Apple Sandbox, and Google Play test refresh jobs through the same
-verification paths. Google mock and expiration jobs remain local-only.
+verification paths. Expiration jobs remain local-only.
 
 ## Cloud reconciliation
 
@@ -120,13 +118,13 @@ Replay only the affected provider's function with the original event ID.
 `dryRun=true` lists refresh jobs without sends, writes, Apple finish, or Google
 acknowledgement; it does not predict differences. Logs contain IDs and counts,
 never purchase tokens, keys, or raw SDK errors. Outputs, manual preview, and
-pausing: [AWS guide](../infra/README.md#cloud-reconciliation).
+pausing: [AWS guide](setup/aws.md#cloud-reconciliation).
 
 ## Follow a run
 
 Match the runner's `runId` with the worker's `correlationId`.
 Local provider rows use `reconciliation.stripe`, `reconciliation.apple`, or
-`reconciliation.google`, or `reconciliation.google_mock`; due snapshots use `reconciliation.expiration_due`.
+`reconciliation.google`; due snapshots use `reconciliation.expiration_due`.
 Cloud logs use `reconciliation.reference` / `reconciliation.completed` and an explicit
 `provider` field.
 
@@ -155,18 +153,19 @@ provider outage, queue backlog, or ElasticMQ restart can delay repair.
   subscription preserves other valid grants under the [access policy](PAYMENTS.md#access-policy).
 - **Apple finish retries:** a committed job retains the exact verified finish
   target. Redelivery resumes finish without repeating domain/outbox writes.
-  See [Apple recovery](APPLE_PURCHASES.md#processing-and-ownership).
+  See [Apple recovery](STORE_PURCHASES.md#apple-processing-and-ownership).
 - **Expiration:** recalculate a due snapshot without rewriting provider status,
   extending access, or deleting subscriptions. The API enforces expiry even
   while the watcher is stopped. A provider refresh crossing that boundary also
   emits the required outbox change.
 
-## Exercises and code
+## Try it and code
 
-Start with the [missed Google event exercise (T20)](DEVELOPMENT.md#exercise-a-missed-google-mock-event-t20)
+Try a repair end to end with [Missed updates and expiry](try-it/missed-updates.md).
+The underlying commands are the [missed Stripe event (T20)](DEVELOPMENT.md#repair-a-missed-stripe-event-t20)
 and [missed initial Stripe webhook prerequisites (T21)](DEVELOPMENT.md#local-reconciliation-and-expiration).
 For Apple configuration and a targeted refresh, use
-[local Apple reconciliation](APPLE_PURCHASES.md#local-reconciliation).
+[local Apple reconciliation](setup/apple.md#local-reconciliation).
 
 | Entry                                                                                                      | Responsibility                                                              |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |

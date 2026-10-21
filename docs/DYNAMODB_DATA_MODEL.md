@@ -95,7 +95,7 @@ their provider-specific references and finish/acknowledgement fields are below.
 - **The API recomputes:** access comes from subscriptions, admin grants, and the
   current time, so an old snapshot can never extend access.
 
-### Checkout and local mock extensions
+### Checkout extensions
 
 ```mermaid
 erDiagram
@@ -104,7 +104,6 @@ erDiagram
     USER_PROFILE ||--o{ CHECKOUT_REQUEST : starts
     USER_PROFILE ||--o| ACTIVE_CHECKOUT : has_pointer
     ACTIVE_CHECKOUT o|--|| CHECKOUT_REQUEST : selects
-    USER_PROFILE ||--o{ GOOGLE_MOCK_SOURCE : has_local_source
 
     STRIPE_CUSTOMER_MAPPING {
         uuid userId
@@ -121,11 +120,6 @@ erDiagram
         uuid userId
         uuid requestId
     }
-    GOOGLE_MOCK_SOURCE {
-        string subscriptionId
-        string status
-        int revision "independent source revision"
-    }
 ```
 
 - A Stripe customer mapping becomes a forward and a reverse record once bound.
@@ -133,24 +127,23 @@ erDiagram
   pointer selects a request; it is not proof of payment.
 - A checkout request never creates a subscription; only verified worker
   processing does.
-- Google mock source rows are local-only inputs; their derived subscriptions use
-  the core model above. Admin grants: [complimentary access records](#complimentary-access-records).
+- Admin grants: [complimentary access records](#complimentary-access-records).
 
-| Logical record                                | DynamoDB record family / details                                                                                                                          |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity map / profile                        | [`IDENTITY#H / MAP`, `USER#U / PROFILE`](#identity-and-profile)                                                                                           |
-| Subscription                                  | [`USER#U / SUB#provider#reference`](#subscriptions)                                                                                                       |
-| Entitlement snapshot / outbox / Stripe marker | [`ENTITLEMENTS`, `OUTBOX#U:R`, `EVENT#stripe#E`](#subscription-processing-records)                                                                        |
-| Provider owner / store marker                 | [Stripe](#subscription-processing-records), [Apple](#apple-sandbox-records), [Google](#google-play-records), [Google mock](#local-reconciliation-records) |
-| Stripe customer / checkout request / pointer  | [`CUSTOMER#stripe`, `CHECKOUT#U#Q`, `CHECKOUT#ACTIVE`](#stripe-customer-and-checkout-records)                                                             |
-| Google mock source / local expiration marker  | [`MOCK#google#USER#U`, `EVENT#local_expiration#E`](#local-reconciliation-records)                                                                         |
+| Logical record                                | DynamoDB record family / details                                                                            |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Identity map / profile                        | [`IDENTITY#H / MAP`, `USER#U / PROFILE`](#identity-and-profile)                                             |
+| Subscription                                  | [`USER#U / SUB#provider#reference`](#subscriptions)                                                         |
+| Entitlement snapshot / outbox / Stripe marker | [`ENTITLEMENTS`, `OUTBOX#U:R`, `EVENT#stripe#E`](#subscription-processing-records)                          |
+| Provider owner / store marker                 | [Stripe](#subscription-processing-records), [Apple](#apple-sandbox-records), [Google](#google-play-records) |
+| Stripe customer / checkout request / pointer  | [`CUSTOMER#stripe`, `CHECKOUT#U#Q`, `CHECKOUT#ACTIVE`](#stripe-customer-and-checkout-records)               |
+| Local expiration marker                       | [`EVENT#local_expiration#E`](#local-reconciliation-records)                                                 |
 
 ## Table structure
 
 String `pk` and `sk` form the primary key. Other fields belong to application
 records. No secondary indexes or TTL are configured. Local table:
 `premiumpass-local`; AWS uses the generated name from `DYNAMODB_TABLE_NAME`.
-Both use on-demand billing. [Retention and cleanup](../infra/README.md#cleanup).
+Both use on-demand billing. [Retention and cleanup](setup/aws.md#cleanup).
 
 Shorthand: `U` = internal UUID, `H` = SHA-256 of JSON `[issuer, subject]`,
 `C` = Stripe customer ID, `Q` = request UUID, `S` = subscription ID,
@@ -295,7 +288,7 @@ subscriptions or markers. There is no TTL cleanup. [Publisher](../services/outbo
 The marker and its finish target commit with access. After Apple confirms the
 finish, a conditional `UpdateItem` adds `finishedAt` (nothing else changes);
 only then does owner-only API polling report completion.
-[Apple processing](APPLE_PURCHASES.md#processing-and-ownership).
+[Apple processing](STORE_PURCHASES.md#apple-processing-and-ownership).
 
 ## Google Play records
 
@@ -324,19 +317,10 @@ private backend data and must not be logged or placed in client configuration.
 
 ## Local reconciliation records
 
-| PK / SK                                               | Fields and role                                                                                                             |
-| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `MOCK#google#USER#U` / `SUB#mock_google_<id>`         | Independent synthetic provider state: owner, ID, status, access/grace, renewal flag, source revision and update time        |
-| `PROVIDER#google_mock#SUB#mock_google_<id>` / `OWNER` | Immutable owner established with the independent source                                                                     |
-| `EVENT#google_mock#E` / `PROCESSED`                   | Owner/subscription, correlation ID and completion time; atomic with derived `SUB`, entitlement snapshot and optional outbox |
-| `EVENT#local_expiration#E` / `PROCESSED`              | Owner and completion time; atomic with the recalculated snapshot and outbox                                                 |
+| PK / SK                                  | Fields and role                                                             |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| `EVENT#local_expiration#E` / `PROCESSED` | Owner and completion time; atomic with the recalculated snapshot and outbox |
 
-- **Mock source = fake provider:** source rows share the table for convenience but
-  act as a separate authority. Changing them needs an existing profile and the
-  current source revision; they never write the derived `SUB#google_mock#…` rows.
-- **Processing** reads the aggregate revision first and guards both revisions
-  plus ownership at commit. A missing or failing source never deletes anything.
-- Old `demo-p05-*` seed records have no source and are not treated as mocks.
 - **Event IDs:** Stripe `reconcile_<run-uuid>_<subscription-id>`, expiration
   `expire_<run-uuid>_<user-id>`; stable within a run, new in the next.
   Markers and outbox records have no TTL.
@@ -370,5 +354,4 @@ Sources: [user store](../services/api/src/dynamodb-users.ts),
 [Stripe persistence](../packages/subscription-processing/src/providers/stripe/store.ts),
 [Apple persistence](../packages/subscription-processing/src/providers/apple/store.ts),
 [Google persistence](../packages/subscription-processing/src/providers/google/store.ts),
-[Google discovery reads](../packages/subscription-processing/src/providers/google/reconciliation-store.ts),
-and [Google mock persistence](../packages/subscription-processing/src/providers/google-mock/store.ts).
+and [Google discovery reads](../packages/subscription-processing/src/providers/google/reconciliation-store.ts).

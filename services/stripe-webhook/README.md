@@ -17,11 +17,11 @@ or Auth0 dependency. [Payment processing](../../docs/PAYMENTS.md#processing-and-
 | `scripts/stripe-listen.ts`        | CLI forwarding with the shared event allowlist |
 
 Local setup needs only queue URL and signing secret, using the
-[configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
+[configuration map](../../docs/setup/stripe.md#2-enter-the-values).
 `pnpm dev:webhook:stripe` starts individually; grouped `pnpm dev` includes it.
-The [Stripe listener](../../docs/PAYMENTS.md#stripe-test-setup) runs separately.
+The [Stripe listener](../../docs/setup/stripe.md#1-create-the-product-keys-and-listener) runs separately.
 
 Lambda reads the signing field of the referenced Stripe Secrets Manager secret
 with a five-minute cache. That existing secret also contains worker credentials;
 service separation does not split its secret permissions. See
-[cloud registration](../../docs/PAYMENTS.md#register-the-cloud-webhook).
+[cloud registration](../../docs/setup/stripe.md#register-the-cloud-webhook).

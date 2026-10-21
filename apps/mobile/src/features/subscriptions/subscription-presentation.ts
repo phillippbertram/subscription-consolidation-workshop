@@ -13,7 +13,6 @@ export const providerLabels: Record<Subscription['provider'], string> = {
   google: 'Google Play',
   stripe: 'Website',
   apple_mock: 'Apple demo',
-  google_mock: 'Google demo',
 };
 
 /** Show billing frequency without implying that the feature set changes. */

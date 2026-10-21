@@ -10,7 +10,6 @@ export const providerNames = {
   apple: 'App Store',
   google: 'Google Play',
   apple_mock: 'Apple demo',
-  google_mock: 'Google demo',
 };
 
 /** Show billing frequency without implying that the feature set changes. */

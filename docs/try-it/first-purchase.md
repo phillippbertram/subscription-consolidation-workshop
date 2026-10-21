@@ -1,6 +1,6 @@
-# Exercise 2: First purchase
+# A first purchase
 
-**Goal:** follow one Stripe test payment from the checkout page to the database
+Follow one Stripe test payment from the checkout page to the database
 and see why the redirect back to the website proves nothing.
 
 ## Steps
@@ -43,7 +43,7 @@ and see why the redirect back to the website proves nothing.
 
    **Expect:** `400` with `invalid_signature`, and nothing queued.
 
-## Look at the code
+## Where in the code
 
 | File                                                                                                        | What to look for                                     |
 | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
@@ -51,7 +51,7 @@ and see why the redirect back to the website proves nothing.
 | [`providers/stripe/processor.ts`](../../packages/subscription-processing/src/providers/stripe/processor.ts) | Load revision → read Stripe → translate → commit     |
 | [`providers/stripe/normalize.ts`](../../packages/subscription-processing/src/providers/stripe/normalize.ts) | How a Stripe subscription becomes our shape          |
 
-## Think about it
+## Why it works this way
 
 <details>
 <summary>Why does the webhook queue only a reference instead of the event body?</summary>

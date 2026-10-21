@@ -1,100 +1,131 @@
-# Apple Sandbox purchases
+# Apple + iOS app
 
-Add native purchase/restore to the [local demo](GETTING_STARTED.md). Use a physical
-iPhone, an Apple Developer Program membership with permission to create App Store
-Connect resources, and a Sandbox Apple Account. Complete the
-[mobile configuration](../apps/mobile/README.md#configure-the-app) first; prepare
-the resources below before the signed iPhone build.
+Run the iOS development app, then add real Sandbox purchases. **Afterwards:**
+the app signs in on the Simulator or an iPhone and shows the same access as the
+website; with the purchase steps, a Sandbox purchase on the iPhone grants
+Premium. Requires the local setup up to [Stripe](stripe.md).
 
-## How a purchase works
+| Part              | Sections                                                                                                       | You need                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| App               | [Configure the app](#configure-the-app) to [App checks](#app-checks)                                           | macOS with Xcode, an iOS Simulator, CocoaPods; the Auth0 Native application               |
+| Sandbox purchases | [Prepare your Apple resources](#prepare-your-apple-resources) to [Manual device checks](#manual-device-checks) | Apple Developer Program membership, a physical iPhone, a Sandbox Apple Account, and ngrok |
 
-Three parties take part: the **app** shows Apple's purchase sheet, the **App
-Store** takes the payment, and the **backend** decides about Premium.
+How purchases reach the right user: [Store purchases](../STORE_PURCHASES.md).
+How the app is built: [mobile package guide](../../apps/mobile/README.md).
+For Android, follow [Google + Android app](google.md).
 
-```mermaid
-sequenceDiagram
-    autonumber
-    box rgb(239, 246, 255) iPhone
-        participant App as PremiumPass app
-    end
-    box rgb(244, 244, 245) Apple
-        participant Store as App Store
-    end
-    box rgb(240, 253, 250) PremiumPass
-        participant Backend as Backend
-    end
-    App->>Backend: Which product? Who am I?
-    Backend-->>App: Product ID + appAccountToken (= your user ID)
-    App->>Store: Buy, with the appAccountToken attached
-    Store-->>App: Signed transaction, token included
-    App->>Backend: Please check this transaction
-    Backend->>Store: Fetch the signed transaction and current status
-    Note over Backend: Check signature, product, Sandbox,<br/>and that the token is this user
-    Backend->>Backend: Save Premium in one atomic write
-    Backend->>Store: Finish the transaction
-    App->>Backend: Done yet?
-    Backend-->>App: Completed, show Premium
+## Configure the app
+
+You need macOS, Xcode with an iOS Simulator, CocoaPods, and the repository's pinned
+toolchain. Follow [Expo's Xcode/Simulator setup](https://docs.expo.dev/workflow/ios-simulator/)
+and [install CocoaPods](https://guides.cocoapods.org/using/getting-started.html).
+Open Xcode once to finish installation, install an iOS Simulator runtime, and
+select Xcode under Settings → Locations → Command Line Tools. Check
+`xcodebuild -version` and `pod --version` before building.
+Expo Go cannot run the native Auth0/IAP modules; no EAS account is needed.
+Create the [Auth0 Native application](auth0.md#add-the-native-application),
+then set these in `config/.env` ([setup](workspace.md#2-create-the-configuration)).
+`pnpm config:sync` writes `apps/mobile/.env`; the mobile scripts sync first.
+
+| Setting in `config/.env` | The app receives it as        | Your value                                                |
+| ------------------------ | ----------------------------- | --------------------------------------------------------- |
+| `AUTH0_DOMAIN`           | `EXPO_PUBLIC_AUTH0_DOMAIN`    | Shared with Web and API, without scheme or trailing slash |
+| `MOBILE_AUTH0_CLIENT_ID` | `EXPO_PUBLIC_AUTH0_CLIENT_ID` | Native application's Client ID                            |
+| `AUTH0_AUDIENCE`         | `EXPO_PUBLIC_AUTH0_AUDIENCE`  | Shared Custom API identifier                              |
+| `MOBILE_API_URL`         | `EXPO_PUBLIC_API_URL`         | `http://127.0.0.1:3000` for Simulator                     |
+| `APPLE_BUNDLE_ID`        | `IOS_BUNDLE_IDENTIFIER`       | Your signing bundle ID; default `com.example.premiumpass` |
+
+These are public values embedded in the app. Keep secrets out. Match the bundle
+ID and Auth0 callback before prebuild. The app uses PKCE and SDK secure storage;
+no refresh token is requested. Sign in again when credentials cannot be renewed.
+
+## Run on the iOS Simulator
+
+Keep the configured backend running with `pnpm dev`. For API-only work, use
+`pnpm local:up` and `pnpm dev:api` instead. In a separate terminal:
+
+```sh
+pnpm mobile:ios
 ```
 
-| Who     | Does                                                                    | Never does                                   |
-| ------- | ----------------------------------------------------------------------- | -------------------------------------------- |
-| App     | Fetch config, open the purchase sheet, send the transaction ID, wait    | Grant Premium or finish the transaction      |
-| Backend | Verify with Apple, check the owner, save access, finish the transaction | Trust what the app says without asking Apple |
+This builds/installs the development app and starts Metro. Later JavaScript work
+only needs `pnpm dev:mobile`; press `i` to open the installed iOS app. Rebuild after
+native dependency, Auth0 domain, scheme, or bundle changes. Edit `apps/mobile/app.config.ts`,
+not generated native settings, for persistent configuration.
 
-**What is the `appAccountToken` for?** Apple lets an app attach one UUID to a
-purchase, and signs it into the transaction. We use the internal user ID. That
-way the backend can prove which PremiumPass account bought the subscription,
-even when the purchase arrives later through a notification or a restore. If
-the token belongs to a different user, the purchase is rejected.
+**Check:** sign in, open Account and Developer tools, and compare the internal
+user ID with Web. Simulator can reach the Mac's loopback address.
 
-**How is a transaction completed?** StoreKit keeps every transaction
-_unfinished_ until someone finishes it, and delivers unfinished ones again on
-the next app start. Here only the backend finishes it, and only after Premium is
-saved (step 8, Apple's Finish Transaction API). If anything fails before that,
-Apple simply delivers the transaction again; nothing is lost and nothing is
-granted twice.
+## Run on a physical iPhone
 
-## How later changes arrive
+1. Connect and trust the device; enable iOS Developer Mode. Use the same trusted
+   Wi-Fi network. Set your registered bundle ID in `.env` and use your own Xcode
+   signing team. For Apple Sandbox, prepare the Apple resources first.
+2. Stop an older loopback API and run the full stack with LAN access:
 
-After the purchase, the app is no longer needed. Renewals, cancellations,
-refunds, and billing problems reach the backend as **App Store Server
-Notifications**: Apple calls the webhook directly.
+   ```sh
+   HOST=0.0.0.0 pnpm dev
+   ```
 
-```mermaid
-sequenceDiagram
-    autonumber
-    box rgb(244, 244, 245) Apple
-        participant Store as App Store
-    end
-    box rgb(240, 253, 250) PremiumPass backend
-        participant Hook as Webhook
-        participant Queue as Queue
-        participant Worker as Worker
-    end
-    Note over Store: Something changed:<br/>renewal, cancellation, refund …
-    Store->>Hook: Signed notification
-    Hook->>Hook: Verify Apple's signature
-    Hook->>Queue: Queue a reference (transaction ID)
-    Hook-->>Store: 200 OK, only after the queue accepted it
-    Queue->>Worker: Deliver the job
-    Worker->>Store: Fetch the current signed status
-    Note over Worker: Owner is already known:<br/>bound at the first purchase
-    Worker->>Worker: Save the new state in one atomic write
-    Worker->>Store: Finish the transaction
-    Note over Worker: The app shows the change<br/>on its next refresh
-```
+3. In the mobile terminal, set the Mac's private IPv4 address or `.local` hostname:
 
-- **Only a reference is queued.** Notifications can arrive late, twice, or out
-  of order. The worker always asks Apple for the _current_ state, so an old
-  notification can never overwrite newer data.
-- **200 only after the queue accepted it.** If queuing fails, the webhook
-  answers 503 and Apple sends the notification again later.
-- **Duplicates are harmless.** A completion marker per notification makes a
-  second delivery a no-op.
-- **Lost notifications are repaired.** Every five minutes, reconciliation asks
-  Apple again about known purchases and queues the same kind of job
-  ([Reconciliation](RECONCILIATION.md)).
-- `TEST` notifications from App Store Connect are acknowledged without any job.
+   ```sh
+   export EXPO_PUBLIC_API_URL=http://your-mac.local:3000
+   ```
+
+   Replace `your-mac` with `scutil --get LocalHostName` output and append `.local`.
+   Open this URL plus `/health` in iPhone Safari and expect `{"status":"ok"}`.
+   `localhost` on the phone refers to the phone, not the Mac.
+
+4. Apply native configuration and select the connected device:
+
+   ```sh
+   pnpm --filter @premiumpass/mobile run prebuild:ios
+   cd apps/mobile/ios
+   pod install
+   cd ../../..
+   pnpm mobile:ios --device
+   ```
+
+   If signing is required, open `apps/mobile/ios/PremiumPass.xcworkspace` in Xcode,
+   add your Apple account in Settings → Accounts, then select the app target and
+   your team under Signing & Capabilities with automatic signing enabled. Retry.
+   The prebuild script uses `--no-clean` to preserve existing signing settings.
+   Allow Local Network access
+   on the device. Stop an older localhost-only Metro process first.
+
+5. For later runs, use `pnpm dev:mobile:lan` in the terminal with the API override.
+   Alternatively save the LAN URL as `MOBILE_API_URL` in `config/.env`; an
+   exported value lasts only for that shell. The API address does not change the Auth0 callback URL.
+
+## App checks
+
+- Sign in as A, refresh/restart, and confirm stable identity; sign in as B and
+  confirm separate records. Sign-out hides account data; failures stay visible.
+- Start a refresh and sign out before it completes; sign in as B and confirm no
+  cached data from A appears. Cancel logout and confirm A's data reloads.
+- Background/foreground the app and disconnect/reconnect networking; verify
+  subscription refresh, bounded retries, and an explicit offline message on an
+  uncached load. Dashboard refresh must also refresh an already visible history.
+- Free shows no fabricated score history. Premium loads protected scores.
+  Expiry/refresh hides stale data; network failures show retry instead of Free.
+- Let Premium expire while offline; cached Premium/history must disappear. After
+  reconnecting or a verified Sandbox purchase, confirm access/history reload.
+- Billing shows active grants as access sources; Subscription history includes
+  previous records. Switch tabs and expand history rows, including on a narrow device.
+- Developer tools start collapsed. Session details clear on background/sign-out;
+  raw tokens are revealed only on demand and must not appear in logs/screenshots.
+- Open Account → **This device** on iOS and Android: the bundle ID or package
+  name must equal `IOS_BUNDLE_IDENTIFIER` / `ANDROID_PACKAGE_NAME`, the OS and
+  model must match the phone, and no row may show `unknown`.
+- Break one setting on purpose (a wrong `EXPO_PUBLIC_API_URL`, a stopped API, an
+  unknown Google product ID) and confirm that the screen names the cause in its
+  **Details** line instead of a generic retry message.
+- Follow [payment scenarios](../PAYMENTS.md#manual-checks) and the separate
+  [Apple device checks](#manual-device-checks).
+
+`pnpm check` exports iOS and Android JavaScript; it does not prove native build, rendering,
+or device purchases. Record those results separately in [TASKS](../TASKS.md).
 
 ## Prepare your Apple resources
 
@@ -146,8 +177,8 @@ curl --fail http://127.0.0.1:3003/health
 ## Build and purchase on iPhone
 
 1. Grant the Native Auth0 client/user `write:checkout` as described in
-   [Auth0 setup](AUTH0_SETUP.md#application-access-policy), then sign out/in.
-2. Follow the [iPhone LAN and signing steps](../apps/mobile/README.md#run-on-a-physical-iphone).
+   [Auth0 setup](auth0.md#application-access-policy), then sign out/in.
+2. Follow the [iPhone LAN and signing steps](#run-on-a-physical-iphone).
    Rebuild the development client for the native `expo-iap` module.
 3. On the iPhone, open **Settings → Developer → Sandbox Apple Account** and sign
    in with the tester created in App Store Connect. This is separate from Auth0
@@ -214,7 +245,7 @@ sequenceDiagram
   automatic StoreKit finishing stays off. The worker calls Apple's
   [Finish Transaction API](https://developer.apple.com/documentation/appstoreserverapi/finish-transaction)
   after the database commit; failures retry from the stored marker
-  ([recovery](#processing-and-ownership)).
+  ([recovery](../STORE_PURCHASES.md#apple-processing-and-ownership)).
 - **One path for everything.** Restore and unfinished-transaction recovery reuse
   the same sync. Closing the app or a polling timeout does not cancel queued
   work; restore or reopen to check again.
@@ -253,7 +284,7 @@ flowchart LR
 
    This starts Stripe forwarding and one ngrok tunnel to a local router on port 3005. The same HTTPS origin also accepts Google's webhook path. Do not run a
    second Stripe listener or ngrok process alongside it.
-   [Shared forwarding](DEVELOPMENT.md#receive-provider-webhooks-together).
+   [Shared forwarding](../DEVELOPMENT.md#receive-provider-webhooks-together).
 
 3. Copy the public **HTTPS** origin. In App Store Connect → your app → App
    Information → App Store Server Notifications, set **Sandbox Server URL** to
@@ -300,37 +331,9 @@ flowchart LR
 | `200` for supported lifecycle event            | Queue accepted; worker completion still needs checking       |
 | Verified `TEST` or intentionally ignored event | Acknowledged without a subscription change                   |
 
-## Processing and ownership
-
-- **Verification:** Sandbox environment, bundle, product, signed state, and
-  `appAccountToken` (our internal user ID).
-- **Ownership:** `Sandbox:<originalTransactionId>` is bound to one internal user
-  forever; restoring with another Auth0 identity cannot transfer it.
-- **One transaction:** ownership, subscription, all-provider entitlements,
-  processing marker, and any outbox change commit together. The marker stores the
-  exact verified `finishTransactionId`.
-- **Concurrency:** conflicts reload current state; duplicates never extend access.
-
-| Interruption                                     | Recovery                                                          |
-| ------------------------------------------------ | ----------------------------------------------------------------- |
-| Before database commit                           | Retry verification and commit; no Apple finish yet                |
-| After commit, before/during Apple finish         | Retry only the stored finish target; do not rewrite grants/outbox |
-| Apple finished, but saving `finishedAt` failed   | Repeat the same Apple finish, then record success                 |
-| After `finishedAt`, before queue acknowledgement | A duplicate skips both domain writes and Apple finish             |
-
-- Access starts with the commit; API polling stays `pending` until `finishedAt`
-  is saved. A finish failure never rolls back or extends access.
-- Repeated failures reach the DLQ: fix the cause, then redrive the original message.
-- Local ElasticMQ messages are lost on restart. After a queue reset, restore
-  purchases to enqueue a new sync. Old demo markers without a finish target also
-  need a new sync/Restore.
-- Apple grace follows its signed boundary. Turning off renewal keeps access until
-  the verified expiry; expiry or revocation removes only the Apple grant.
-  [Access policy](PAYMENTS.md#access-policy) · [Apple records](DYNAMODB_DATA_MODEL.md#apple-sandbox-records).
-
 ## Local reconciliation
 
-Configure Apple separately for the [CLI](../apps/cli/README.md#configuration)
+Configure Apple separately for the [CLI](../../apps/cli/README.md#configuration)
 and the [worker](#enable-local-processing), then preview and enqueue a refresh:
 
 ```sh
@@ -345,28 +348,28 @@ pnpm cli reconcile --user <internal-user-id> --provider apple
   It cannot find a first purchase that never reached the database; use
   purchase/Restore or a signed notification for that.
 - After the commit, the worker finishes the latest signed transaction through the
-  same [finish-retry path](#processing-and-ownership). A retry keeps that exact
+  same [finish-retry path](../STORE_PURCHASES.md#apple-processing-and-ownership). A retry keeps that exact
   target even if another renewal happens; the next run picks up the renewal.
 
-All-user runs, the watcher, and diagnostics: [Reconciliation](RECONCILIATION.md).
+All-user runs, the watcher, and diagnostics: [Reconciliation](../RECONCILIATION.md).
 
 ## AWS notification processing
 
 The AWS stack processes Apple notifications, but has no app-to-API Apple sync:
 purchases from the app still need the local API
-([what runs where](ARCHITECTURE.md#what-runs-where)).
+([what runs where](../ARCHITECTURE.md#what-runs-where)).
 
 1. Create a Secrets Manager JSON secret with `keyId`, `issuerId`, and
    `privateKey` (complete P-256 PEM, newlines encoded as `\n`). Only the worker
    reads it; the webhook needs no private key. Secrets are cached for five minutes.
-2. Follow the [AWS setup](../infra/README.md#deploy) with `APPLE_ENABLED=true`,
+2. Follow the [AWS setup](aws.md#deploy) with `APPLE_ENABLED=true`,
    your bundle and product IDs, and `APPLE_SECRET_ARN`.
 3. Register the **AppleWebhookUrl** output instead of ngrok as the Sandbox URL.
 4. Verify TEST and lifecycle delivery separately. The signed account token must
    match a profile in the AWS table; local users are not copied there.
 
 **Cloud reconciliation:** `RECONCILIATION_APPLE_ENABLED=true` (requires
-`APPLE_ENABLED=true`) adds Apple to the [shared schedule](RECONCILIATION.md#cloud-reconciliation).
+`APPLE_ENABLED=true`) adds Apple to the [shared schedule](../RECONCILIATION.md#cloud-reconciliation).
 Discovery only scans known Sandbox purchases and has no Apple key; the worker
 verifies and finishes as above.
 
@@ -388,6 +391,9 @@ verifies and finishes as above.
 
 ## Cleanup
 
+Stop Metro with `Ctrl+C`; sign out before removing the development app if retiring
+it. App removal does not cancel subscriptions.
+
 Pause by stopping ngrok. For a longer pause or retirement, remove this demo's
 **Sandbox Server URL** in App Store Connect, or replace it with the intended AWS
 URL. Changing URLs redirects subsequent delivery; it does not migrate records.
@@ -399,4 +405,4 @@ operation; it does not clear PremiumPass records or reassign ownership.
 
 Revoke an In-App Purchase key only if it was dedicated to this demo and no other
 app/backend uses it; remove its local `.p8` file afterward. Keep shared developer
-accounts and signing assets. Continue with [overall cleanup](DEVELOPMENT.md#cleanup).
+accounts and signing assets. Continue with [overall cleanup](../DEVELOPMENT.md#cleanup).

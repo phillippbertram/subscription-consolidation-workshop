@@ -20,7 +20,7 @@ Public subscription IDs hash the package-scoped token. Purchase tokens remain
 private server/queue data. Provider exceptions are replaced by safe codes because
 SDK errors can contain credentials and token-bearing request URLs.
 
-[Setup](../../docs/GOOGLE_PLAY.md) · [Worker](../../services/subscription-worker/README.md)
+[Setup](../../docs/setup/google.md) · [Worker](../../services/subscription-worker/README.md)
 
 ## Lightweight contracts
 

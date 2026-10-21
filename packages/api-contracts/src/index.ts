@@ -19,13 +19,7 @@ export type UserProfile = z.infer<typeof userProfileSchema>;
 export type ScoreHistory = z.infer<typeof scoreHistorySchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorSchema>;
 
-const providerSchema = z.enum([
-  'stripe',
-  'apple',
-  'google',
-  'apple_mock',
-  'google_mock',
-]);
+const providerSchema = z.enum(['stripe', 'apple', 'google', 'apple_mock']);
 
 // HTTP representation only; persistence schemas and access rules stay in domain.
 export const subscriptionSchema = z.object({

@@ -17,7 +17,6 @@ import {
 import { createStripeProcessor } from '@premiumpass/subscription-processing/stripe';
 import { createAppleProcessor } from '@premiumpass/subscription-processing/apple';
 import { createGoogleProcessorFactory } from '@premiumpass/subscription-processing/google';
-import { createGoogleMockProcessor } from '@premiumpass/subscription-processing/google-mock';
 
 // Reuse AWS connections in warm Lambda invocations. Secrets are refreshed
 // separately so a cached client does not freeze credential rotation.
@@ -78,10 +77,6 @@ export function workerRuntime(local: boolean) {
           case 'google': {
             const processor = await createGoogleProcessor();
             return processor.process(job);
-          }
-
-          case 'google_mock': {
-            return createGoogleMockProcessor(store, local).process(job);
           }
 
           case 'local_expiration': {

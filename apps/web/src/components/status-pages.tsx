@@ -17,8 +17,8 @@ export function SetupPage({ message }: { message: string }) {
           <p className="text-muted-foreground">{message}</p>
         </div>
         <p className="text-sm text-muted-foreground">
-          The getting-started guide in <code>docs/GETTING_STARTED.md</code>{' '}
-          lists every value and where to find it.
+          The setup guides in <code>docs/setup/</code> list every value and
+          where to find it.
         </p>
       </div>
     </div>

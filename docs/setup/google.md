@@ -1,105 +1,14 @@
-# Google Play test purchases
+# Google + Android app
 
-Set up one Premium subscription for real Google Play **license-test purchases**.
-Start with the local [Getting started](GETTING_STARTED.md) path. The
-`pnpm cli google-mock` command is a separate synthetic exercise that needs no
-Google account.
+Build the Android app, prepare Google Play and Google Cloud, and buy with a
+license-test account. **Afterwards:** the Android app signs in, a license-test
+purchase grants Premium, and Google's notifications update access. Requires the
+local setup up to [Stripe](stripe.md). The same app checks as on iOS apply:
+[App checks](apple.md#app-checks).
 
 Use your own development accounts, synthetic application data, and Google's test
-payment instruments. Do not make production purchases.
-
-## How a purchase works
-
-Three parties take part: the **app** shows Google Play's purchase sheet,
-**Google Play** takes the payment, and the **backend** decides about Premium.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    box rgb(239, 246, 255) Android phone
-        participant App as PremiumPass app
-    end
-    box rgb(232, 240, 254) Google
-        participant Play as Google Play
-    end
-    box rgb(240, 253, 250) PremiumPass
-        participant Backend as Backend
-    end
-    App->>Backend: Which product? Who am I?
-    Backend-->>App: Product, base plan + obfuscatedAccountId (= your user ID)
-    App->>Play: Buy, with the obfuscatedAccountId attached
-    Play-->>App: Purchase token
-    App->>Backend: Please check this purchase token
-    Backend->>Play: Read the purchase with the Developer API
-    Note over Backend: Check owner, product, test purchase,<br/>and expiry
-    Backend->>Backend: Save Premium in one atomic write
-    Backend->>Play: Acknowledge the purchase
-    App->>Backend: Done yet?
-    Backend-->>App: Completed, show Premium
-```
-
-| Who     | Does                                                                 | Never does                                    |
-| ------- | -------------------------------------------------------------------- | --------------------------------------------- |
-| App     | Fetch config, open the purchase sheet, send the purchase token, wait | Grant Premium or acknowledge the purchase     |
-| Backend | Verify with Google, check the owner, save access, acknowledge        | Trust what the app says without asking Google |
-
-**What is the `obfuscatedAccountId` for?** It is Google's equivalent of Apple's
-`appAccountToken`: the app attaches our internal user ID to the purchase, and
-Google returns it as `obfuscatedExternalAccountId` when the backend reads the
-purchase. That proves which PremiumPass account bought the subscription, also
-for a restore or a notification that arrives later. A different ID means the
-purchase is rejected.
-
-**How is a purchase completed?** Google requires every new purchase to be
-_acknowledged_; otherwise it refunds the purchase automatically (after about
-three minutes for license testers, three days in production). Here only the
-backend acknowledges, and only after Premium is saved (step 8). If anything
-fails before that, a retry or Restore picks the purchase up again, and the
-saved completion marker prevents a second grant.
-
-## How later changes arrive
-
-After the purchase, the app is no longer needed. Renewals, cancellations, grace
-periods, and account holds reach the backend as **Real-time developer
-notifications (RTDN)**. Google does not call the backend directly: it publishes
-to a **Pub/Sub** topic, and Pub/Sub pushes each message to the webhook.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    box rgb(232, 240, 254) Google
-        participant Play as Google Play
-        participant PubSub as Pub/Sub
-    end
-    box rgb(240, 253, 250) PremiumPass backend
-        participant Hook as Webhook
-        participant Queue as Queue
-        participant Worker as Worker
-    end
-    Note over Play: Something changed:<br/>renewal, cancellation, grace, hold …
-    Play->>PubSub: Publish notification (purchase token, type)
-    PubSub->>Hook: Authenticated push
-    Hook->>Hook: Verify sender, subscription, and package
-    Hook->>Queue: Queue a reference (purchase token)
-    Hook-->>PubSub: Success, only after the queue accepted it
-    Queue->>Worker: Deliver the job
-    Worker->>Play: Read the current purchase (Developer API)
-    Note over Worker: Owner from obfuscatedExternalAccountId
-    Worker->>Worker: Save the new state in one atomic write
-    Worker->>Play: Acknowledge, if still open
-    Note over Worker: The app shows the change<br/>on its next refresh
-```
-
-- **Only a reference is queued.** The notification says _that_ something
-  changed, not the full state. The worker always reads the current purchase from
-  Google, so a late or repeated message cannot apply stale data.
-- **Success only after the queue accepted it.** If queuing fails, the webhook
-  answers 503 and Pub/Sub delivers the message again.
-- **Duplicates are harmless.** The job ID comes from the Pub/Sub message ID, and
-  a completion marker makes a second delivery a no-op.
-- **Lost notifications are repaired.** Every five minutes, reconciliation asks
-  Google again about known purchase tokens ([Reconciliation](RECONCILIATION.md)).
-- Test messages from Play Console are acknowledged without any job.
+payment instruments. Do not make production purchases. How purchases reach the
+right user: [Store purchases](../STORE_PURCHASES.md).
 
 ## Setup order
 
@@ -129,7 +38,7 @@ Choose the final unique Android package name **before uploading**. For example,
 `com.yourcompany.premiumpass` is a placeholder to replace with your own identifier.
 Set `GOOGLE_PLAY_PACKAGE_NAME` in `config/.env`. The sync passes it to the backend
 and to the app as `ANDROID_PACKAGE_NAME`, which controls `android.package` in
-[app.config.ts](../apps/mobile/app.config.ts), so app and backend cannot disagree. The default `com.example.premiumpass`
+[app.config.ts](../../apps/mobile/app.config.ts), so app and backend cannot disagree. The default `com.example.premiumpass`
 is for local verification only and is rejected by the signed-upload command.
 The iOS bundle ID setting does not change Android.
 An uploaded app's package name cannot later be changed.
@@ -195,7 +104,7 @@ pnpm mobile:android
 Auth0/IAP modules. For an emulator, use `EXPO_PUBLIC_API_URL=http://10.0.2.2:3000`;
 for a device, use the Mac's LAN address with `pnpm dev:api:lan`. The generated app
 allows local HTTP for this demo. Register the Android Auth0 callback/logout URLs
-before signing in: [Native configuration](AUTH0_SETUP.md#add-the-native-application).
+before signing in: [Native configuration](auth0.md#add-the-native-application).
 
 For a Play upload, set `GOOGLE_PLAY_PACKAGE_NAME`, increment
 `ANDROID_VERSION_CODE` for each upload, and configure the four
@@ -243,7 +152,7 @@ changed/reused. Offers are optional.
 
 Record the selected grace-period and account-hold settings for the later payment
 failure exercise. Backend access must follow verified provider state and the
-project's [access policy](PAYMENTS.md#access-policy); a Console setting alone
+project's [access policy](../PAYMENTS.md#access-policy); a Console setting alone
 does not implement that mapping.
 
 ## 5. Prepare backend API access
@@ -371,7 +280,7 @@ Then:
 2. Run `pnpm webhooks:listen` in another terminal to start the Stripe listener and
    a shared Apple/Google ngrok tunnel. Use
    `https://YOUR_NGROK_HOST/v1/webhooks/google` from ngrok's HTTPS origin.
-   [Shared forwarding and prerequisites](DEVELOPMENT.md#receive-provider-webhooks-together).
+   [Shared forwarding and prerequisites](../DEVELOPMENT.md#receive-provider-webhooks-together).
 3. Use that HTTPS URL as `GOOGLE_PLAY_PUSH_AUDIENCE` and as the Pub/Sub
    audience and endpoint, then create the subscription as described next.
 
@@ -452,7 +361,7 @@ answers `200` with `{"received":true,"test":true}` and queues no purchase work.
 acknowledgement, and Pub/Sub redelivers the message with an exponential backoff
 of up to 60 seconds, so fixing the cause lets the same message arrive on a later
 attempt. Every rejection below also writes a `google.notification_rejected` log
-line with the same reason ([log events](DEVELOPMENT.md#follow-a-provider-event-through-the-logs)).
+line with the same reason ([log events](../DEVELOPMENT.md#follow-a-provider-event-through-the-logs)).
 [Push delivery](https://docs.cloud.google.com/pubsub/docs/push).
 
 | Response                                             | Meaning                                                                | Typical cause and fix                                                                                                                           |
@@ -472,29 +381,12 @@ line with the same reason ([log events](DEVELOPMENT.md#follow-a-provider-event-t
 Locally, invalid push settings stop the service at startup with an error in its
 terminal instead of an HTTP response.
 
-### Purchase flow details
+### Repair missed updates
 
-The overview is in [How a purchase works](#how-a-purchase-works). Locally the
-app calls `GET /v1/billing/google/config`, then `POST /v1/billing/google/sync`
-with the token, and polls `/sync/:operationId`; the API only queues the job, and
-the subscription worker does the Google calls.
-
-- The `obfuscatedAccountId` is our internal user ID. Only Google's API response
-  proves ownership, never the app's claim.
-- The app never acknowledges purchases. The worker acknowledges after the
-  commit; a retry resumes acknowledgement without repeating the domain write.
-- Restore and foreground recovery use the same sync path. **Manage** opens
-  Google Play; changes refresh when the app returns.
-- Grace uses Google's verified expiry; account hold, pause, and expiry grant no
-  Google access. Public IDs contain only a token hash; the raw token stays in the
-  private provider record and the queue. [Google records](DYNAMODB_DATA_MODEL.md#google-play-records).
-- Not supported: plan replacements (`linkedPurchaseToken`), offers or trials,
-  more base plans, and production purchases.
-
-**Missed updates:** configure Google in the [CLI's own environment](../apps/cli/README.md#configuration),
+Configure Google in the [CLI's own environment](../../apps/cli/README.md#configuration),
 run `pnpm cli reconcile --provider google --dry-run`, then without `--dry-run`.
 This refreshes stored tokens only; an unknown first purchase needs sync/Restore
-or RTDN. [Reconciliation](RECONCILIATION.md).
+or RTDN. [Reconciliation](../RECONCILIATION.md).
 
 ## AWS notification processing
 
@@ -516,7 +408,7 @@ account, key, or Play Console product.
    `https://billing.example.com/google-play-push` and set the same value in
    Pub/Sub. It may differ from the receiver URL, so you can configure it before
    the API URL exists. [Google push authentication](https://docs.cloud.google.com/pubsub/docs/authenticate-push-subscriptions).
-4. **Deploy:** follow [AWS setup and dry runs](../infra/README.md#deploy), then
+4. **Deploy:** follow [AWS setup and dry runs](aws.md#deploy), then
    use the `GoogleWebhookUrl` output as the Pub/Sub push endpoint, with the
    fields from [Create the push subscription](#create-the-push-subscription).
    Never point a live subscription at an undeployed endpoint.
@@ -561,7 +453,7 @@ local user is rejected; use a separate license-test purchase.
 Verify token/scope rejection, two distinct users, pending → completed polling,
 wrong-user polling, Restore, acknowledgement retry, and Premium access. Cloud
 reconciliation needs its own switch, `RECONCILIATION_GOOGLE_ENABLED=true`
-([shared schedule](RECONCILIATION.md#cloud-reconciliation)).
+([shared schedule](../RECONCILIATION.md#cloud-reconciliation)).
 
 ## Ready for the first integration run
 
@@ -583,7 +475,7 @@ Billing Lab later for renewal, grace, and account hold.
 Google Play's purchase dialog shows this message, in the device language. The
 app only starts a purchase after Play has returned the product, base plan, and
 offer token (`buy()` in
-[use-google-purchase.ts](../apps/mobile/src/features/subscriptions/google/use-google-purchase.ts)).
+[use-google-purchase.ts](../../apps/mobile/src/features/subscriptions/google/use-google-purchase.ts)).
 A wrong product ID, base plan, or package name would therefore keep the
 Subscribe button disabled, and the app shows the reason beneath it. The usual
 cause of this dialog is the **Google account** Play buys with.
@@ -635,11 +527,11 @@ Treat them as a hint that a purchase is still unacknowledged, and check the log.
 **Was the purchase acknowledged?** The worker acknowledges only after it has
 saved access, and it logs `subscription.processed` only after the
 acknowledgement succeeded. Follow the purchase by its `providerSubscriptionId`
-([log events](DEVELOPMENT.md#follow-a-provider-event-through-the-logs)):
+([log events](../DEVELOPMENT.md#follow-a-provider-event-through-the-logs)):
 
 | In the log                                                                                                            | Meaning                                                                                                                                                                             |
 | --------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `google.notification_received` with `SUBSCRIPTION_PURCHASED`, then `subscription.processed` with `provider: "google"` | Saved and acknowledged; Google will not refund it                                                                                                                                   |
+| `google.notification_received` with `SUBSCRIPTION_PURCHASED`, then `subscription.processed` with `provider: "google"` | Saved and acknowledged; Google will not refund it. Its `orderId` (`GPA.…`; renewals add a suffix such as `..0`) finds the order in Order management                                 |
 | `subscription.failed` and `queue.retry` for that purchase                                                             | Not acknowledged. `code` names the cause; for example `google_not_configured` means the worker's `.env` lacks `GOOGLE_PLAY_ENABLED=true`. After about 3 minutes, the refund follows |
 | `voided_purchase`, `SUBSCRIPTION_REVOKED`, or `SUBSCRIPTION_EXPIRED` a few minutes after the purchase                 | Google refunded an unacknowledged purchase. Make a new test purchase after fixing the cause                                                                                         |
 | `SUBSCRIPTION_RENEWED` about every 5 minutes, each followed by `subscription.processed` with a later `accessUntil`    | The accelerated renewal working as intended                                                                                                                                         |
@@ -679,7 +571,7 @@ projects. Remove only what this demo created, in this order:
    the backend service account's user so the invitation does not outlive the
    account. Keep your license-tester list and the app itself.
 5. **Remove AWS and local copies.** For a deployed stack, follow
-   [AWS cleanup](../infra/README.md#cleanup) and schedule deletion of the Google
+   [AWS cleanup](aws.md#cleanup) and schedule deletion of the Google
    secret only if it is dedicated and unused. Delete the downloaded key file, remove
    the Google settings from `config/.env` (set `GOOGLE_PLAY_ENABLED=false`), and
    run `pnpm config:sync`.
@@ -689,4 +581,4 @@ other work in the Cloud project uses them. If the project was created only for
 this demo, deleting the whole project removes all Cloud resources above at once;
 Google keeps a deleted project recoverable for a limited time. Verify the
 project ID before you do. Keep shared developer accounts and Play apps. Continue
-with [overall cleanup](DEVELOPMENT.md#cleanup).
+with [overall cleanup](../DEVELOPMENT.md#cleanup).

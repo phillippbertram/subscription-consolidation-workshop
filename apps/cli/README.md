@@ -18,7 +18,6 @@ pnpm cli premium list <internal-user-id>
 pnpm cli stripe-sync <internal-user-id> --dry-run
 pnpm cli reconcile --dry-run
 pnpm cli seed <internal-user-id> active
-pnpm cli google-mock --help
 pnpm cli reconcile --help
 pnpm cli reconcile --watch
 ```
@@ -47,14 +46,13 @@ access changes. `--dry-run` never writes database state or enqueues jobs.
 
 ## Code map
 
-| Entry                            | Responsibility                                                    |
-| -------------------------------- | ----------------------------------------------------------------- |
-| `src/main.ts`, `src/cli/`        | Lifecycle, commands, prompts, and presentation                    |
-| `src/config.ts`                  | Lazy provider settings with explicit precedence                   |
-| `src/local-admin/`               | Fixed local store, demo edits/seeds, and direct Stripe repair     |
-| `src/reconciliation/`            | Local discovery, preview, queue delivery, and watch loop          |
-| `src/local-admin/google-mock.ts` | Independent synthetic source state and optional notifications     |
-| `src/local-admin/premium.ts`     | CLI options, trusted OS attribution, and shared admin-grant calls |
+| Entry                        | Responsibility                                                    |
+| ---------------------------- | ----------------------------------------------------------------- |
+| `src/main.ts`, `src/cli/`    | Lifecycle, commands, prompts, and presentation                    |
+| `src/config.ts`              | Lazy provider settings with explicit precedence                   |
+| `src/local-admin/`           | Fixed local store, demo edits/seeds, and direct Stripe repair     |
+| `src/reconciliation/`        | Local discovery, preview, queue delivery, and watch loop          |
+| `src/local-admin/premium.ts` | CLI options, trusted OS attribution, and shared admin-grant calls |
 
 The CLI imports [subscription processing](../../packages/subscription-processing/README.md)
 through public package exports. It does not import worker source files. Shared

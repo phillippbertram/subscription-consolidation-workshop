@@ -10,6 +10,7 @@ export default defineConfig(
       '**/build/**',
       '**/coverage/**',
       '**/cdk.out/**',
+      '**/.vitepress/cache/**',
       '**/.expo/**',
       'apps/mobile/ios/**',
       'apps/mobile/android/**',

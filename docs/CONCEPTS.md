@@ -119,7 +119,7 @@ commit: tell the store the purchase was processed (finish / acknowledge).
 
 | Term               | Meaning                                                                                                                |
 | ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| Provider           | Where the user paid: Stripe, Apple, Google Play, or a local mock                                                       |
+| Provider           | Where the user paid: Stripe, Apple, Google Play, or a local demo record                                                |
 | Subscription       | Our record of one purchase, already translated into the normalized shape                                               |
 | Normalized state   | Our shared status vocabulary (`active`, `past_due`, …); the original value stays in `providerStatus`                   |
 | Grant              | One reason a user has Premium right now, with an end time (`validUntil`)                                               |

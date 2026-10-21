@@ -246,7 +246,7 @@ export async function runCli(local: LocalSubscriptionStore) {
         '--provider <provider>',
         'Provider to refresh; expiry always runs',
       )
-        .choices(['all', 'stripe', 'apple', 'google', 'google_mock', 'none'])
+        .choices(['all', 'stripe', 'apple', 'google', 'none'])
         .default('all'),
     )
     .option('--dry-run', 'Read and preview without database or queue writes')
@@ -255,52 +255,6 @@ export async function runCli(local: LocalSubscriptionStore) {
       'Start now, then repeat every five minutes without overlapping runs',
     )
     .action(commands.reconcile);
-
-  program
-    .command('google-mock')
-    .description(
-      'Change independent synthetic Google source state in DynamoDB Local',
-    )
-    .addArgument(userArgument())
-    .argument('<subscription-id>', 'Unique ID starting with mock_google_')
-    .argument(
-      '<scenario>',
-      'active, renewal_failed, canceling, expired, revoked, or pending',
-    )
-    .option(
-      '--until <iso-date>',
-      'Future UTC boundary for active (default: one hour)',
-    )
-    .option(
-      '--suppress-event',
-      'Persist source state without notifying the worker',
-    )
-    .action(
-      async (
-        userId: string,
-        subscriptionId: string,
-        scenario: string,
-        options: { until?: string; suppressEvent?: boolean },
-      ) => {
-        const { mockScenarios } =
-          await import('@premiumpass/subscription-processing/google-mock');
-        const parsedScenario = z.enum(mockScenarios).safeParse(scenario);
-        if (!parsedScenario.success) {
-          throw new InvalidArgumentError(
-            `Choose a scenario: ${mockScenarios.join(', ')}.`,
-          );
-        }
-
-        const { setGoogleMock } = await import('../local-admin/google-mock.js');
-        await setGoogleMock(
-          local,
-          userId,
-          subscriptionId,
-          parsedScenario.data,
-          options,
-        );
-      },
-    );
 
   await program.parseAsync();
 }

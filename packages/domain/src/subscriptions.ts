@@ -3,7 +3,7 @@ import { hasAdminAccess, type AdminGrant } from './admin-grants.js';
 
 export const subscriptionSchema = z.object({
   userId: z.uuid(),
-  provider: z.enum(['stripe', 'apple', 'google', 'apple_mock', 'google_mock']),
+  provider: z.enum(['stripe', 'apple', 'google', 'apple_mock']),
   providerSubscriptionId: z.string().min(1),
   // Unknown products/statuses stay visible but never grant access.
   productId: z.string().min(1),

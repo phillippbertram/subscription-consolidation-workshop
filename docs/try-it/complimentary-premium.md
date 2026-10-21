@@ -1,6 +1,6 @@
-# Exercise 6: Complimentary Premium
+# Complimentary Premium
 
-**Goal:** give Premium without a purchase, and see that it is just one more
+Give Premium without a purchase, and see that it is just one more
 grant next to the provider grants.
 
 ## Steps
@@ -15,8 +15,8 @@ grant next to the provider grants.
 2. Preview, then grant:
 
    ```sh
-   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Workshop exercise" --dry-run
-   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Workshop exercise"
+   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Try it out" --dry-run
+   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Try it out"
    ```
 
    Note the printed **request ID**. Refresh the website. **Expect:**
@@ -25,7 +25,7 @@ grant next to the provider grants.
 3. Repeat the exact command with that request ID:
 
    ```sh
-   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Workshop exercise" --request-id <request-id>
+   pnpm cli premium grant <user-id> --until "$UNTIL" --reason "Try it out" --request-id <request-id>
    ```
 
    **Expect:** no new change; the audit receipt recognizes the retry.
@@ -36,13 +36,13 @@ grant next to the provider grants.
    the complimentary grant:
 
    ```sh
-   pnpm cli premium revoke <user-id> --reason "Workshop exercise done"
+   pnpm cli premium revoke <user-id> --reason "Try it out done"
    ```
 
    **Expect:** still Premium, now through the demo subscription. Finish with
    `pnpm cli seed <user-id> free`.
 
-## Look at the code
+## Where in the code
 
 | File                                                                                                | What to look for                                  |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
@@ -50,7 +50,7 @@ grant next to the provider grants.
 | [`admin-grants/processor.ts`](../../packages/subscription-processing/src/admin-grants/processor.ts) | Validation, idempotency receipt, retries          |
 | [`apps/cli/src/local-admin/premium.ts`](../../apps/cli/src/local-admin/premium.ts)                  | The CLI only parses flags and records the OS user |
 
-## Think about it
+## Why it works this way
 
 <details>
 <summary>Why is the grant not stored as a fake subscription?</summary>

@@ -141,12 +141,12 @@ export async function interactive(
     const provider = answer(
       await prompts.select({
         message: 'Which provider should be checked?',
-        options: (
-          ['all', 'stripe', 'apple', 'google', 'google_mock', 'none'] as const
-        ).map((value) => ({
-          value,
-          label: value === 'none' ? 'Expiration only' : value,
-        })),
+        options: (['all', 'stripe', 'apple', 'google', 'none'] as const).map(
+          (value) => ({
+            value,
+            label: value === 'none' ? 'Expiration only' : value,
+          }),
+        ),
       }),
     );
     const mode = answer(

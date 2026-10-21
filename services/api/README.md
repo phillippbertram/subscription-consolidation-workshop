@@ -1,7 +1,7 @@
 # PremiumPass API
 
 Hono service for authenticated profile, subscription, score, and billing requests.
-Use [Getting started](../../docs/GETTING_STARTED.md) for setup and
+Use the [setup guide](../../docs/setup/README.md) for setup and
 [Development](../../docs/DEVELOPMENT.md) for startup/logging commands.
 
 ## Request flow
@@ -31,7 +31,7 @@ from the configured issuer's fixed JWKS URL; token-provided URLs are ignored.
 Resolvers are reused per app instance: ten-minute cache, five-second retrieval
 timeout, 30-second refresh cooldown including failed fetches. Valid cached keys
 can survive an outage; expired keys are not a fallback. Scope alone never grants
-Premium. See [Auth0 setup/checks](../../docs/AUTH0_SETUP.md).
+Premium. See [Auth0 setup/checks](../../docs/setup/auth0.md).
 
 ## Structure
 
@@ -60,8 +60,8 @@ The API returns 202 only after confirmed queue acceptance. Polling reports
 including Google acknowledgement. Missing, unfinished, or another user's operations
 all report `pending`. The API holds no Google service-account key and creates no
 grants. Sync bodies over 8 KiB return 413 with `google_request_too_large`.
-[Local setup](../../docs/GOOGLE_PLAY.md#7-enable-local-processing) ·
-[Cloud setup](../../docs/GOOGLE_PLAY.md#authenticated-cloud-purchase-and-restore).
+[Local setup](../../docs/setup/google.md#7-enable-local-processing) ·
+[Cloud setup](../../docs/setup/google.md#authenticated-cloud-purchase-and-restore).
 
 | Path                                                  | Purpose / requirement                                                            |
 | ----------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -69,7 +69,7 @@ grants. Sync bodies over 8 KiB return 413 with `google_request_too_large`.
 | `GET /v1/me/subscriptions`, `GET /v1/me/entitlements` | Own records and current access; `read:me`                                        |
 | `GET /v1/premium/score-history`                       | Synthetic history; `read:premium` plus valid grant                               |
 | Stripe checkout/cancellation routes                   | [Payment contract and checks](../../docs/PAYMENTS.md#checkout-and-recovery)      |
-| Apple config/sync/completion routes                   | [Apple processing](../../docs/APPLE_PURCHASES.md#processing-and-ownership)       |
+| Apple config/sync/completion routes                   | [Apple processing](../../docs/STORE_PURCHASES.md#apple-processing-and-ownership) |
 | `GET /v1/billing/google/config`                       | Public product settings and own store-account UUID; `read:me` + `write:checkout` |
 | `POST /v1/billing/google/sync`                        | Purchase/Restore token → queued operation; `write:checkout`                      |
 | `GET /v1/billing/google/sync/:operationId`            | Own durable completion status; `read:me`                                         |

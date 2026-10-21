@@ -31,13 +31,13 @@ reconciliation entry, which only discovers work and queues jobs.
 ## Run and configure
 
 - `pnpm dev` includes the worker; `pnpm dev:worker` runs it alone. Settings:
-  [configuration map](../../docs/GETTING_STARTED.md#5-connect-the-configuration).
+  [configuration map](../../docs/setup/stripe.md#2-enter-the-values).
   No Auth0 settings or webhook secrets are needed.
 - Mock and expiration jobs need no provider credentials and are rejected in AWS.
 - In AWS, provider keys come from Secrets Manager and are cached for five
   minutes. Only the worker reads Apple/Google private keys
-  ([Apple](../../docs/APPLE_PURCHASES.md#aws-notification-processing),
-  [Google](../../docs/GOOGLE_PLAY.md#aws-notification-processing)).
+  ([Apple](../../docs/setup/apple.md#aws-notification-processing),
+  [Google](../../docs/setup/google.md#aws-notification-processing)).
 - Cloud discovery never writes to the database; see
   [Cloud reconciliation](../../docs/RECONCILIATION.md#cloud-reconciliation).
 - A build emits `local.js`, `lambda.js`, and `reconciliation/lambda.js` into a clean `dist/`.

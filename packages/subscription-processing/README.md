@@ -18,7 +18,6 @@ bounded Secrets Manager caches.
 | `/stripe`                | Stripe factory, credentials, and provider store                            |
 | `/apple`                 | Apple factory and verified provider source                                 |
 | `/google`                | Google factory, verified source, and known-reference discovery store       |
-| `/google-mock`           | Synthetic source state, scenarios, normalization, and factory              |
 | `/reconciliation/stripe` | Stripe discovery, dry-run comparison, and direct or queued repair          |
 | `/admin-grants`          | Grant/revoke processing, audit/idempotency contracts, and DynamoDB adapter |
 
@@ -38,8 +37,7 @@ only describe types as `import type`, so they create no runtime dependency. Each
 its existing `factory.ts`, `processor.ts`, `source.ts`, and `store.ts` together.
 Stripe also owns its contracts and pure normalization. Its reconciliation store
 only scans customer mappings; `discovery.ts` composes that persistence with the
-credential-backed Stripe reader. The worker supplies queue delivery separately. Google mocks keep
-independent source state separate from persisted access.
+credential-backed Stripe reader. The worker supplies queue delivery separately.
 
 ## Persistence and completion
 

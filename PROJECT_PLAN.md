@@ -11,8 +11,7 @@ Build a reproducible demo with one Premium product, two synthetic users, one AWS
 development account/region, and an Android verification platform for the next
 native purchase milestone. Web and Mobile share server-derived access across
 Stripe test subscriptions and real Google Play license-test purchases. Apple
-Sandbox remains a later verification path; local Google mocks support isolated
-reliability exercises. Google protected API, notification, and worker wiring, plus
+Sandbox remains a later verification path. Google protected API, notification, and worker wiring, plus
 Stripe/Apple/Google reconciliation with one schedule and separate provider opt-ins,
 can be prepared for AWS;
 account changes and deployment remain separate from local implementation.
@@ -57,7 +56,6 @@ iteration. Android verification must be recorded independently of earlier iOS wo
 
 | Area                       | Intended behavior; implementation status remains in TASKS                                                                                                                             |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Google mock                | Separate authoritative mock state; active, renewal failure, cancellation, expiry, and event-suppression scenarios                                                                     |
 | Google Play test purchases | Native Android purchase/restore and management; backend verification, immutable ownership, durable acknowledgement, RTDN, and reconciliation using real license-test subscriptions    |
 | Outbox / EventBridge       | Publish pending changes with stable IDs; mark only accepted entries sent; handle partial success and crash-after-send duplicates                                                      |
 | Event consumer             | Trace stable event IDs; distinguish EventBridge delivery failures from asynchronous Lambda execution failures                                                                         |
@@ -72,7 +70,7 @@ missed initial webhook. Unmapped external purchases are not automatically assign
 
 ## Acceptance and final demonstration
 
-1. A new developer can follow [Getting started](docs/GETTING_STARTED.md) using
+1. A new developer can follow the [setup guide](docs/setup/README.md) using
    their own service accounts, then follow [Cleanup](docs/DEVELOPMENT.md#cleanup).
 2. Demonstrate login/logout, stable separate user identities, token rejection,
    scope enforcement, and backend-authoritative Premium access.

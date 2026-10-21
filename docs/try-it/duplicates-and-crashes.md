@@ -1,12 +1,15 @@
-# Exercise 4: Reliability
+# Duplicates and crashes
 
-**Goal:** see why duplicate jobs are harmless, how changes are announced
+See why duplicate jobs are harmless, how changes are announced
 through the outbox, and where the system could crash.
+
+Use the test user with the Stripe subscription from
+[A first purchase](first-purchase.md).
 
 ## Steps
 
-1. Keep `pnpm dev` running. In two more terminals start the outbox publisher
-   and its log consumer:
+1. Keep `pnpm dev` and `pnpm stripe:listen` running. In two more terminals
+   start the outbox publisher and its log consumer:
 
    ```sh
    pnpm dev:events
@@ -16,25 +19,23 @@ through the outbox, and where the system could crash.
    pnpm dev:outbox
    ```
 
-2. Create a synthetic Google subscription (no Google account needed):
+2. On the website, choose **Cancel subscription** and confirm. Access stays
+   until the end of the paid period, but the subscription now ends there.
 
-   ```sh
-   pnpm cli google-mock <user-id> mock_google_reliability active
-   ```
-
-   **Expect, in order:** worker `subscription.processed` with `outcome: changed`;
-   publisher `outbox.sent`; consumer `subscription.changed`. All three carry the
-   same `domainEventId` of the form `<user-id>:<revision>`.
+   **Expect, in order:** webhook `webhook.queued`; worker
+   `subscription.processed` with `outcome: changed`; publisher `outbox.sent`;
+   consumer `subscription.changed`. The last three carry the same
+   `domainEventId` of the form `<user-id>:<revision>`.
 
 3. Ask the worker to check the same subscription again, twice:
 
    ```sh
-   pnpm cli reconcile --user <user-id> --provider google_mock
-   pnpm cli reconcile --user <user-id> --provider google_mock
+   pnpm cli reconcile --user <user-id> --provider stripe
+   pnpm cli reconcile --user <user-id> --provider stripe
    ```
 
-   **Expect:** `outcome: verified` both times and **no** new `outbox.sent`.
-   Nothing changed, so nothing is announced.
+   **Expect:** the worker logs `outcome: verified` both times and there is
+   **no** new `outbox.sent`. Nothing changed, so nothing is announced.
 
 4. Preview what the publisher would send, without sending:
 
@@ -44,7 +45,7 @@ through the outbox, and where the system could crash.
 
    **Expect:** no pending entries, because step 2 was already published.
 
-## Look at the code
+## Where in the code
 
 | File                                                                                                                | What to look for                                                       |
 | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -52,9 +53,10 @@ through the outbox, and where the system could crash.
 | [`processing/dynamodb-processing.ts`](../../packages/subscription-processing/src/processing/dynamodb-processing.ts) | `commit`: revision guard, profile check, and outbox in one transaction |
 | [`services/outbox-publisher/src/publisher.ts`](../../services/outbox-publisher/src/publisher.ts)                    | Mark `sent` only after the transport accepted the event                |
 
-## Think about it
+## Why it works this way
 
-Walk through these crash moments. What happens on the next delivery?
+Each crash moment below is safe. Open one to see what happens on the next
+delivery.
 
 <details>
 <summary>The worker crashes before the database commit.</summary>
@@ -97,4 +99,5 @@ fresh reads, so it includes the first worker's change.
 
 </details>
 
-Clean up with `pnpm cli google-mock <user-id> mock_google_reliability expired`.
+The canceled subscription stays usable until its period ends;
+[Missed updates and expiry](missed-updates.md) uses it once more.

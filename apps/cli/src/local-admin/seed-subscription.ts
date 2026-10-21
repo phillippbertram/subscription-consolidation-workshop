@@ -40,14 +40,20 @@ export async function seedSubscription(
   const hour = 60 * 60 * 1000;
   const marker = 'p05-local-demo';
 
+  // Two reserved demo records from the same demo provider. Most scenarios use
+  // only the first; `multiple` adds the second to show that access is the
+  // union of all valid grants.
+  const firstId = 'demo-p05-apple_mock';
+  const secondId = 'demo-p05-apple_mock-second';
+
   function record(
-    provider: Subscription['provider'],
+    providerSubscriptionId: string,
     changes: Partial<Subscription> = {},
   ) {
     return subscriptionSchema.parse({
       userId,
-      provider,
-      providerSubscriptionId: `demo-p05-${provider}`,
+      provider: 'apple_mock',
+      providerSubscriptionId,
       productId: 'premium_monthly',
       state: 'active',
       providerStatus: 'active',
@@ -119,11 +125,11 @@ export async function seedSubscription(
       break;
   }
 
-  const apple = record('apple_mock', changes);
-  const google = record('google_mock', { accessUntil: at(2 * hour) });
+  const first = record(firstId, changes);
+  const second = record(secondId, { accessUntil: at(2 * hour) });
   for (let attempt = 0; ; attempt++) {
     const aggregate = await store.load(userId);
-    const records = [apple, google].map((subscription) => ({
+    const records = [first, second].map((subscription) => ({
       ...subscription,
       revision:
         (aggregate.subscriptions.find(
@@ -134,7 +140,8 @@ export async function seedSubscription(
     }));
     const keep = (subscription: Subscription) =>
       scenario !== 'free' &&
-      (subscription.provider === 'apple_mock' || scenario === 'multiple');
+      (subscription.providerSubscriptionId === firstId ||
+        scenario === 'multiple');
     const subscriptions = aggregate.subscriptions.filter(
       (s) =>
         !records.some(

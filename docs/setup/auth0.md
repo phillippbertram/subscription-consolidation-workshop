@@ -1,8 +1,9 @@
-# Auth0 setup
+# Auth0
 
 Auth0 identifies the user; PremiumPass verifies the access token and checks
 subscription access separately. Use one development tenant and the same user
-connection for Web and Mobile. Start from [Getting started](GETTING_STARTED.md).
+connection for Web and Mobile. **Afterwards:** two synthetic users with verified
+email addresses can sign in. Requires the [Workspace](workspace.md).
 
 ## Web and API setup
 
@@ -47,15 +48,31 @@ connection for Web and Mobile. Start from [Getting started](GETTING_STARTED.md).
    shows a verified email. Addresses ending in `.example` cannot receive this mail.
    [Email verification](https://auth0.com/docs/manage-users/user-accounts/resend-verification-emails).
 7. **Authorize the client** as described below. Copy Domain and Client ID from
-   the SPA settings, and the identifier from the Custom API. Enter them using
-   the [configuration map](GETTING_STARTED.md#5-connect-the-configuration), then
-   continue with Stripe setup in the getting-started guide.
+   the SPA settings, and the identifier from the Custom API. Enter them as described in
+   [Enter the values](#enter-the-values).
 
 The issuer is `https://<domain>/`; client domain values contain only the
 hostname. With a custom domain, use it consistently. No Auth0 client secret or
 Management API token belongs in either app or the API's runtime configuration.
 When testing, use the database email/password login for these users. Choosing a
 social login creates a different identity with its own role assignment and data.
+
+## Enter the values
+
+Set these in `config/.env`:
+
+| Value / source                                | Setting in `config/.env` | Programs that receive it                                  |
+| --------------------------------------------- | ------------------------ | --------------------------------------------------------- |
+| Auth0 domain, e.g. `your-tenant.eu.auth0.com` | `AUTH0_DOMAIN`           | Web and Mobile; API and AWS as issuer `https://<domain>/` |
+| Custom API identifier                         | `AUTH0_AUDIENCE`         | API, Web, Mobile, AWS                                     |
+| SPA Client ID                                 | `WEB_AUTH0_CLIENT_ID`    | Web                                                       |
+
+**Check:** you have the tenant domain, Custom API identifier, SPA Client ID,
+and a synthetic user whose email is verified. Client ID and API audience are
+different values; neither is a client secret. Sign-in is tested once
+[Stripe](stripe.md#3-start-and-make-a-test-purchase) starts everything.
+
+**Next:** [Stripe](stripe.md).
 
 ## Application access policy
 
@@ -93,7 +110,7 @@ may not require individual grants; do not change its policy for this demo.
    The app uses the same Native application, PKCE flow, and SDK-owned secure
    credentials on both platforms. No mobile client secret is needed.
 
-4. Copy the Native Client ID and domain into the [mobile configuration](../apps/mobile/README.md#configure-the-app).
+4. Copy the Native Client ID and domain into the [mobile configuration](apple.md#configure-the-app).
    Keep the API audience unchanged. Preserve callbacks for other installed demo builds.
 
 The app uses PKCE and requests `openid profile email read:me read:premium
@@ -124,7 +141,7 @@ unset ACCESS_TOKEN
 
 For isolated authentication verification, also exercise missing `exp`, unknown
 `kid`, key rotation, cache reuse, and JWKS outage with controlled keys. No test
-verifier is a runtime fallback. See [API authentication](../services/api/README.md#authentication).
+verifier is a runtime fallback. See [API authentication](../../services/api/README.md#authentication).
 
 ## Troubleshooting
 
@@ -147,4 +164,4 @@ or applications breaks their login; deleting Auth0 users does not remove their
 DynamoDB records or cancel subscriptions. Preserve shared connections and tenants.
 See [delete applications](https://auth0.com/docs/get-started/applications/remove-applications)
 and [delete users](https://auth0.com/docs/manage-users/user-accounts/delete-users).
-Finish the [overall cleanup sequence](DEVELOPMENT.md#cleanup).
+Finish the [overall cleanup sequence](../DEVELOPMENT.md#cleanup).

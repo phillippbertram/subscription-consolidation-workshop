@@ -10,7 +10,7 @@ status belongs in [TASKS](TASKS.md).
 | D01 | React Native and Auth0                         | Real mobile login using a native development build                                                                                                         |
 | D02 | Backend token and scope verification           | Same protection locally and in Lambda; no Gateway authorizer                                                                                               |
 | D03 | AWS serverless, TypeScript, CDK                | Small reproducible development stack; target architecture includes async processing                                                                        |
-| D04 | Stripe test mode and real store test purchases | Google Play license tests and Apple Sandbox, never production purchases; local Google mocks for isolated exercises                                         |
+| D04 | Stripe test mode and real store test purchases | Google Play license tests and Apple Sandbox, never production purchases                                                                                    |
 | D05 | Central subscriptions and entitlements         | One backend policy combines all valid grants                                                                                                               |
 | D06 | Small hands-on project                         | One Premium product; no extra admin platform                                                                                                               |
 | D07 | Hono                                           | Shared Node/Lambda HTTP composition; no framework in workers/domain                                                                                        |
@@ -44,6 +44,7 @@ status belongs in [TASKS](TASKS.md).
 | Local administration | CLI in `apps/cli` using the shared processing package; fixed DynamoDB Local target; `--dry-run` preview                                                                                                      |
 | Cloud reconciliation | One five-minute rule, one opt-in Lambda per provider; discovery never writes; the worker verifies; separate failure queue                                                                                    |
 | Documentation        | Local-first setup; one owner per topic; provider extensions and explicit pause/reset/removal guidance                                                                                                        |
+| Documentation site   | VitePress default theme in `apps/docs` renders `docs/` in place; Markdown stays GitHub-compatible; one route rule for URLs and links; code links open on GitHub; published to GitHub Pages                   |
 
 Provider grace and outage behavior are defined only in the
 [access policy](PAYMENTS.md#access-policy). Architecture and code entry points

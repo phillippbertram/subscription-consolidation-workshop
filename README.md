@@ -5,6 +5,8 @@
 **A hands-on workshop on subscription consolidation: sell one subscription on
 the web, iOS, and Android, and keep access correct everywhere.**
 
+**Read the docs as a website:** [phillippbertram.github.io/subscription-consolidation-workshop](https://phillippbertram.github.io/subscription-consolidation-workshop/)
+
 > [!NOTE]
 > **Work in progress.** The local web flow with Stripe test payments works end
 > to end. Real Google Play and Apple Sandbox purchases and the AWS deployment
@@ -40,39 +42,22 @@ DynamoDB · SQS · AWS CDK · Stripe, App Store, and Google Play test modes.
 
 Each challenge is something you can trigger yourself in the demo.
 
-| Challenge                                                                            | How the demo solves it                         | Try it                                                    |
-| ------------------------------------------------------------------------------------ | ---------------------------------------------- | --------------------------------------------------------- |
-| **Different languages:** Stripe says `past_due`, Apple `4`, Google `IN_GRACE_PERIOD` | Translate everything into one shared model     | [Exercise 3](docs/exercises/03-consolidation.md)          |
-| **A success page is not a payment:** the checkout redirect opens without paying      | Only verified provider state grants access     | [Exercise 2](docs/exercises/02-first-purchase.md)         |
-| **Purchases must reach the right user:** a restore on another account                | Bind every purchase to the internal user ID    | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
-| **Several sources at once:** Apple ends, Stripe is still paid                        | Access is the union of all valid grants        | [Exercise 3](docs/exercises/03-consolidation.md)          |
-| **Unreliable events:** webhooks arrive late, twice, or never                         | Idempotent processing and scheduled repair     | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
-| **Time matters:** a subscription ends without any notification                       | Every request compares the end time with _now_ | [Exercise 3](docs/exercises/03-consolidation.md)          |
+| Challenge                                                                            | How the demo solves it                         | See it                                                           |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------- | ---------------------------------------------------------------- |
+| **Different languages:** Stripe says `past_due`, Apple `4`, Google `IN_GRACE_PERIOD` | Translate everything into one shared model     | [Several sources at once](docs/try-it/several-sources.md)        |
+| **A success page is not a payment:** the checkout redirect opens without paying      | Only verified provider state grants access     | [A first purchase](docs/try-it/first-purchase.md)                |
+| **Purchases must reach the right user:** a restore on another account                | Bind every purchase to the internal user ID    | [Purchase ownership](docs/STORE_PURCHASES.md#purchase-ownership) |
+| **Several sources at once:** Apple ends, Stripe is still paid                        | Access is the union of all valid grants        | [Several sources at once](docs/try-it/several-sources.md)        |
+| **Unreliable events:** webhooks arrive late, twice, or never                         | Idempotent processing and scheduled repair     | [Missed updates and expiry](docs/try-it/missed-updates.md)       |
+| **Time matters:** a subscription ends without any notification                       | Every request compares the end time with _now_ | [Several sources at once](docs/try-it/several-sources.md)        |
 
 ## What you need
 
-**Prior knowledge:** experience with app and cloud development. You should be
-comfortable with TypeScript, a web or React Native app, HTTP APIs, and basic
-cloud concepts such as functions, queues, and permissions. The workshop explains
-subscriptions and their pitfalls, not these fundamentals.
-
-**Accounts:** the local path needs only Auth0 and Stripe. The other accounts are
-needed only to test against the real stores or AWS; every module has a part
-that runs without them.
-
-| Account                                                                     | What you set up there                                                                       | Needed for                                              |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| [Auth0](https://auth0.com/) tenant (free)                                   | API, applications, and synthetic test users                                                 | Always                                                  |
-| [Stripe](https://stripe.com/) account with a sandbox                        | Premium product, prices, and test API keys; no real payments                                | Always                                                  |
-| [AWS](https://aws.amazon.com/) account for development                      | CDK deployment of the backend; creates billable resources                                   | Testing in AWS ([Exercise 8](docs/exercises/08-aws.md)) |
-| [Apple Developer Program](https://developer.apple.com/programs/) membership | A demo app with your bundle ID, the subscription, and a Sandbox tester in App Store Connect | Apple purchases ([guide](docs/APPLE_PURCHASES.md))      |
-| [Google Play developer account](https://play.google.com/console/)           | A demo app with your package name, the subscription, license testers, and a test release    | Google Play purchases ([guide](docs/GOOGLE_PLAY.md))    |
-
-Both stores only offer subscriptions for an app registered in your developer
-account, so you create your own demo app there first. Store accounts cost a
-registration fee and their verification can take days: register before the
-workshop. Apple purchases also need a Mac with Xcode and a physical iPhone;
-Google Play purchases need Android Studio and a device or Play-enabled emulator.
+The local path needs Node, pnpm, Docker, a free Auth0 tenant, and a Stripe
+sandbox. Real store purchases and the AWS deployment need their own accounts,
+devices, or billable resources. The [setup overview](docs/setup/README.md) lists
+the prior knowledge, tools, and accounts for each step. Store accounts cost a
+registration fee and their verification can take days, so register early.
 
 ## Quick start
 
@@ -86,25 +71,19 @@ pnpm dev
 ```
 
 Before `pnpm dev` works, connect Auth0 and Stripe once:
-**[Getting started](docs/GETTING_STARTED.md)** walks you through it, with a check
+the **[setup guide](docs/setup/README.md)** walks you through it, with a check
 after each step, up to your first test purchase.
 
-## Learning path
+## Set up and try it
 
-Eight modules, each with a short [exercise sheet](docs/exercises/README.md):
-steps to try, code to read, and questions with answers. Modules 1–6 run fully
-locally; 7–8 need [store or AWS accounts](#what-you-need) for their optional parts.
-
-| Module                    | You learn                                             | Exercise                                                  |
-| ------------------------- | ----------------------------------------------------- | --------------------------------------------------------- |
-| 1. Login and tokens       | Auth0 login, backend token checks, scope ≠ purchase   | [Exercise 1](docs/exercises/01-login-and-tokens.md)       |
-| 2. First purchase         | Checkout, signed webhook, queue, worker verification  | [Exercise 2](docs/exercises/02-first-purchase.md)         |
-| 3. Consolidation          | Translate provider states, combine grants, check time | [Exercise 3](docs/exercises/03-consolidation.md)          |
-| 4. Reliability            | Duplicates, revisions, atomic commit, outbox          | [Exercise 4](docs/exercises/04-reliability.md)            |
-| 5. Repair missed updates  | Reconciliation and expiration                         | [Exercise 5](docs/exercises/05-repair-missed-updates.md)  |
-| 6. Complimentary Premium  | Access without a purchase, audited and revocable      | [Exercise 6](docs/exercises/06-complimentary-premium.md)  |
-| 7. Native store purchases | Google Play / Apple purchase, ownership binding       | [Exercise 7](docs/exercises/07-native-store-purchases.md) |
-| 8. AWS                    | CDK stack, least-privilege IAM, cloud webhooks        | [Exercise 8](docs/exercises/08-aws.md)                    |
+1. **Set up locally:** [Workspace](docs/setup/workspace.md),
+   [Auth0](docs/setup/auth0.md), and [Stripe](docs/setup/stripe.md), up to your
+   first test purchase. The [setup overview](docs/setup/README.md) lists tools
+   and accounts for every step.
+2. **[Try it out](docs/try-it/README.md):** six scenarios against the running
+   system, each with the result you should see and the code behind it.
+3. **Add platforms (optional):** [Apple + iOS app](docs/setup/apple.md),
+   [Google + Android app](docs/setup/google.md), and [AWS](docs/setup/aws.md).
 
 Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove everything.
 

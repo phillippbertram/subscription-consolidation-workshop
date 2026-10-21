@@ -1,10 +1,10 @@
 # Payments and subscriptions
 
 **Premium starts after backend verification.** A redirect, client badge, or scope
-alone grants nothing. This is the central guide for Stripe test payments and
-shared access rules. Start with [Getting started](GETTING_STARTED.md); the idea
-behind combining providers is in [Concepts](CONCEPTS.md). Native purchases are in
-[Google Play](GOOGLE_PLAY.md) and [Apple Sandbox](APPLE_PURCHASES.md).
+alone grants nothing. This guide covers the Stripe flow and the access rules
+shared by every provider. Setup: [Stripe](setup/stripe.md). The idea behind
+combining providers is in [Concepts](CONCEPTS.md); native purchases are in
+[Store purchases](STORE_PURCHASES.md).
 
 ## Payment flow
 
@@ -34,50 +34,6 @@ sequenceDiagram
     API->>API: Evaluate time boundaries
     API-->>Web: Current Free/Premium access
 ```
-
-## Stripe test setup
-
-1. In your Stripe Dashboard, select a **sandbox/test environment**. Under
-   **Product catalog → Add product**, create **PremiumPass Premium** with
-   two recurring prices: **EUR 4.99/month** with lookup key `premium_monthly`
-   and **EUR 1.00/day** with lookup key `premium_daily`. Both use flat-rate,
-   licensed billing (not metered), quantity one, and no trial. Set each
-   **Lookup key** in its price details/edit options. Daily means an automatically
-   renewing subscription, not a one-time day pass. Copy the product's `prod_...` ID from
-   the product details. The API will resolve the concrete `price_...` ID.
-   [Product/price setup](https://docs.stripe.com/products-prices/manage-prices).
-2. In that same environment, open **API keys** and reveal the test secret key
-   (`sk_test_...`). The current backend accepts this key type; a publishable
-   `pk_test_...` or restricted `rk_test_...` key will not work. No Stripe key is
-   needed in Web. Copy the secret and product ID into API and worker, and the
-   two lookup keys into API only, using the
-   [configuration map](GETTING_STARTED.md#5-connect-the-configuration).
-   [Find API keys](https://docs.stripe.com/keys).
-3. Install the [Stripe CLI](https://docs.stripe.com/stripe-cli), then run:
-
-   ```sh
-   stripe login
-   pnpm stripe:listen
-   ```
-
-4. Confirm the CLI login selected the same account and test environment. Put its
-   `whsec_...` secret in `config/.env` as `STRIPE_WEBHOOK_SECRET`; only the Stripe webhook receives it. Leave the listener
-   running. It forwards the supported events to port 3002. Never use `--live`.
-5. Return to [Getting started, step 5](GETTING_STARTED.md#5-connect-the-configuration).
-   Restart the webhook after changing its secret.
-
-No Dashboard endpoint is needed locally. The webhook needs the signing secret
-and queue; the worker needs the API key, product ID, database, and queue. Secret
-values must never use `VITE_` or `EXPO_PUBLIC_` variables.
-Do not create a customer or subscription manually in Stripe: start checkout from
-the website so the backend creates the ownership mappings.
-
-| First-run problem                        | Fix                                                                                                                             |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `checkout_unavailable`                   | Set and uncomment all four Stripe values in the API `.env`, then restart                                                        |
-| `stripe_price_invalid` / price not found | Check lookup key, active price/product and the selected daily/monthly interval, configured `prod_` ID, and matching environment |
-| `verified_email_required`                | Complete [Auth0 email verification](AUTH0_SETUP.md#web-and-api-setup), then sign out/in                                         |
-| No events in the listener after payment  | Check its account/environment; keep it running before starting checkout                                                         |
 
 ## Products, offers, and price changes
 
@@ -127,26 +83,6 @@ new purchase; it does not change an existing subscription. Moving an existing
 subscription to another period/price, mid-cycle prorations, yearly plans, and
 production pricing require
 separate work. No subscription is migrated automatically by this implementation.
-
-### Update an existing local setup
-
-Keep the existing Stripe product, customers, subscriptions, and local records.
-Replace `STRIPE_PRICE_ID` with `STRIPE_PRODUCT_ID` in API, worker, and CLI
-configuration. In the API, replace the earlier single `STRIPE_PRICE_LOOKUP_KEY`
-with `STRIPE_MONTHLY_PRICE_LOOKUP_KEY=premium_monthly` and add
-`STRIPE_DAILY_PRICE_LOOKUP_KEY=premium_daily`. Assign each key to its matching
-price on the same product. All processes must use the
-same Stripe environment and product. Restart the API, worker, and reconciliation
-watcher together after updating their configuration. No database reset or record
-migration is needed; old purchase fingerprints remain valid. Stored attempts
-without a `planId` are read as monthly because they predate daily billing.
-
-The old environment variable is not a fallback. Leaving all API Stripe settings
-unset disables checkout; partially configured settings fail with a setup error.
-For a separately authorized AWS rollout, update the existing secret from
-`priceId` to `productId` and coordinate worker/discovery configuration. The
-existing secret cache can take five minutes to refresh. CDK synthesis does not
-modify the secret or deploy anything, and cloud checkout remains outside scope.
 
 ## Checkout and recovery
 
@@ -354,37 +290,3 @@ If access stays Free, check listener forwarding → `webhook.queued` → worker
 and correlation IDs. A 200 webhook response proves queue acceptance only.
 For local DLQ recovery: fix the cause, receive the message, send its unchanged
 body to the work queue, and delete the DLQ copy only after successful send.
-
-## Register the cloud webhook
-
-The AWS stack processes Stripe notifications but does not start checkout (see
-[what runs where](ARCHITECTURE.md#what-runs-where)). Cloud notifications need
-matching owners in the AWS table; local records are not copied to AWS.
-
-1. In the intended AWS account/region, create a Secrets Manager JSON secret with
-   `secretKey`, `productId`, `webhookSecret`, using the default encryption key.
-   Until an endpoint exists, use `PENDING_ENDPOINT_REGISTRATION` as the signing
-   secret; keep purchases stopped until it is replaced.
-2. Set `STRIPE_SECRET_ARN` in `config/.env`, follow [deployment](../infra/README.md#deploy),
-   and copy the exact `StripeWebhookUrl` output.
-3. In Stripe Workbench → Webhooks, add a **Your account / Snapshot** destination
-   for that URL, using API version `2026-09-30.endive` (the installed Stripe SDK baseline).
-   Subscribe to `checkout.session.completed`, `customer.subscription.created`,
-   `customer.subscription.updated`, `customer.subscription.deleted`,
-   `invoice.paid`, and `invoice.payment_failed`.
-4. Replace `webhookSecret` with that destination's secret. It differs from the
-   CLI secret; runtime caches can take five minutes to refresh.
-5. Verify delivery, worker completion, and owned subscription/access records
-   separately.
-
-## Cleanup
-
-To pause, stop the CLI listener. To retire the integration, first cancel only
-project-specific test subscriptions in Web or the Stripe test Dashboard and
-allow their changes to process. Remove the project's webhook destination when
-no longer needed; archive its product/price if retiring future test purchases.
-Do not reset an entire shared test environment or rotate shared keys.
-[Stripe cancellation](https://docs.stripe.com/billing/subscriptions/cancel).
-
-Deleting local data does not cancel Stripe subscriptions. Continue with the
-[overall cleanup sequence](DEVELOPMENT.md#cleanup).

@@ -58,9 +58,12 @@ export class GoogleSubscriptionProcessor {
       changed,
       verified.needsAcknowledgement,
     );
+    // The worker logs every field returned here; orderId matches the entry in
+    // the Play Console's Order management.
     return {
       outcome: changed ? 'changed' : 'verified',
       userId,
+      orderId: verified.orderId,
       subscription: verified.subscription,
     };
   }
