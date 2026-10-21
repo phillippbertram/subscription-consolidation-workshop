@@ -4,9 +4,9 @@
 layout: home
 
 hero:
-  name: PremiumPass
+  name: PremiumPass Lab
   text: Is this user Premium right now?
-  tagline: Set up one subscription across the web, iOS, and Android, then test that every app gives the same answer. Stripe, App Store, and Google Play in test mode.
+  tagline: A hands-on demo lab for cross-platform subscription management. Sell one subscription on the web, iOS, and Android, then try out and understand how every app gets the same answer. Test modes and synthetic data only.
   actions:
     - theme: brand
       text: Set up the project
@@ -36,6 +36,22 @@ features:
     link: /architecture
     linkText: Architecture
 ---
+
+## What this is
+
+A lab project to **try out and understand subscription management across
+platforms**. You run a small demo app, PremiumPass, with your own test accounts
+on your own machine:
+
+- **A demo app.** Users sign in, start on Free, and unlock a synthetic score
+  history with Premium. The website, the iPhone app, and the Android app all ask
+  the same backend.
+- **A lab.** Set it up once, then trigger the hard cases yourself: a success
+  page without a payment, duplicate and lost notifications, several purchases at
+  once, and access that ends without any event.
+- **Workshop material.** Readable code with comments that explain the _why_,
+  a test checklist with the result you should see, and diagrams of the main
+  flows. Use it on your own or in a workshop.
 
 ![PremiumPass at a glance: users pay on the website with Stripe, in the iPhone app through the App Store, or in the Android app through Google Play. The backend translates every store, combines all purchases, and checks the clock, so every app gives the same answer to the question: is this user Premium right now?](images/overview.svg)
 

@@ -102,9 +102,11 @@ const nav: DefaultTheme.NavItem[] = [
 ];
 
 export default defineConfig({
-  title: 'PremiumPass',
+  // "Lab" in every page title and in the navigation: this is a demo project
+  // to try out and understand, not a product.
+  title: 'PremiumPass Lab',
   description:
-    'Set up one subscription across web, iOS, and Android, and test that every app gives the same answer.',
+    'A hands-on demo lab for cross-platform subscription management: Stripe, App Store, and Google Play in test mode, one backend, one answer.',
   lang: 'en-US',
 
   // GitHub Pages serves this repository's site under its name.

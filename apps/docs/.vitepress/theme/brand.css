@@ -55,6 +55,9 @@
   --vp-button-brand-active-text: #f5faf7;
 
   --vp-home-hero-name-color: var(--vp-c-brand-1);
+
+  /* Height of the demo lab bar; VitePress moves nav, sidebar, and content down by it. */
+  --vp-layout-top-height: 32px;
 }
 
 .dark {
@@ -120,4 +123,50 @@
 /* The overview graphics have a light background; rounded corners frame them in dark mode. */
 .vp-doc img {
   border-radius: 12px;
+}
+
+/*
+ * The demo lab bar (theme/lab-banner.ts). It stays fixed above the navigation,
+ * so a reader on any page sees what kind of project this is. Narrow screens
+ * keep only the short claim.
+ */
+.lab-banner {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--vp-z-index-layout-top);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--vp-layout-top-height);
+  padding: 0 16px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--vp-c-divider);
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.lab-banner strong {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+.lab-banner:hover {
+  color: var(--vp-c-text-1);
+}
+
+@media (max-width: 960px) {
+  .lab-banner-detail {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .lab-banner {
+    font-size: 12px;
+  }
 }

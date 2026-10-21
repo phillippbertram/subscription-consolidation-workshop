@@ -1,9 +1,13 @@
 # PremiumPass
 
+![Type: demo lab](https://img.shields.io/badge/type-demo%20lab-1d5a43)
 ![Status: work in progress](https://img.shields.io/badge/status-work%20in%20progress-orange)
 
-**A hands-on workshop on subscription consolidation: sell one subscription on
-the web, iOS, and Android, and keep access correct everywhere.**
+**A hands-on demo lab for cross-platform subscription management: sell one
+subscription on the web, iOS, and Android, then try out and understand how every
+app keeps the same answer.** Use it on your own or as workshop material.
+Everything runs in test mode with synthetic data; nothing here is a product or a
+library.
 
 **Read the docs as a website:** [phillippbertram.github.io/subscription-consolidation-workshop](https://phillippbertram.github.io/subscription-consolidation-workshop/)
 
@@ -21,8 +25,8 @@ app has to give the same answer to one question:
 > **Is this user Premium right now?**
 
 Combining several payment providers into that one answer is called
-_subscription consolidation_. This repo shows how to do it, step by step, with
-readable code and exercises you can run locally. Under the hood:
+_subscription consolidation_. This lab shows how to do it, step by step, with
+readable code and test scenarios you can run locally. Under the hood:
 [Concepts](docs/CONCEPTS.md) explains the status translation, a worked example,
 and the glossary.
 

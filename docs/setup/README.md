@@ -1,9 +1,10 @@
 # Setup
 
-Set up the whole project once: first locally with Auth0 and Stripe, then, if
-you want, the iOS and Android apps with real store test purchases, and a
-deployment to AWS. Every page has the same shape: what works afterwards, what
-you need, numbered steps with a check, and how to remove it again.
+Set up the whole lab once: first locally with Auth0 and Stripe, then, if you
+want, the iOS and Android apps with real store test purchases, and a deployment
+to AWS. Every account runs in test or sandbox mode with synthetic users; nothing
+here takes real payments. Every page has the same shape: what works afterwards,
+what you need, numbered steps with a check, and how to remove it again.
 
 ## Prior knowledge
 
