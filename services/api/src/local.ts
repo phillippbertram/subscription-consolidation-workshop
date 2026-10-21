@@ -10,6 +10,8 @@ import { createApp } from './app.js';
 import { readAuthConfig, readLocalConfig } from './config.js';
 import { createPersistence } from './persistence.js';
 import { createLogger, readLogLevel } from '@premiumpass/logging';
+import { readAdminConfig, shortAdminSecretHint } from './admin/config.js';
+import { adminRoutes } from './admin/routes.js';
 
 const config = readLocalConfig(process.env);
 const logLevel = readLogLevel(process.env, 'debug');
@@ -17,13 +19,25 @@ const log = createLogger(logLevel, 'premiumpass-api');
 const database = readDatabaseConfig(process.env, true);
 const stores = createPersistence(database);
 const stripe = readStripeConfig(process.env);
+const apple = createLocalAppleBilling(process.env, database);
+const google = createGoogleBilling(process.env, database, true);
+const admin = readAdminConfig(process.env, database);
 const app = createApp({
   auth: readAuthConfig(process.env),
   stores,
   logLevel,
   webOrigin: readWebOrigin(process.env),
-  apple: createLocalAppleBilling(process.env, database),
-  google: createGoogleBilling(process.env, database, true),
+  apple,
+  google,
+  registerAdminRoutes: adminRoutes({
+    config: admin,
+    database,
+    providers: {
+      stripe: Boolean(stripe),
+      apple: Boolean(apple),
+      google: Boolean(google),
+    },
+  }),
   ...(stripe
     ? {
         checkout: new CheckoutService(
@@ -43,7 +57,11 @@ const server = serve({ fetch: app.fetch, ...config }, (info) => {
   log.info({
     event: 'server.started',
     url: `http://${config.hostname}:${info.port}`,
+    adminRoutes: admin ? 'enabled' : 'disabled (ADMIN_SECRET not set)',
   });
+  if (admin?.short) {
+    log.warn({ event: 'admin.secret_short', hint: shortAdminSecretHint });
+  }
 });
 
 server.on('error', (error: Error) => {

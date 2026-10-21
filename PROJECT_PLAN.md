@@ -61,7 +61,8 @@ iteration. Android verification must be recorded independently of earlier iOS wo
 | Event consumer             | Trace stable event IDs; distinguish EventBridge delivery failures from asynchronous Lambda execution failures                                                                         |
 | Reconciliation             | Every five minutes plus manual runs; paginate known customers/subscriptions, discover missed Stripe subscriptions, refresh Apple/Google state, enqueue through the existing processor |
 | Expiration                 | Reevaluate due grants; synchronous API expiry checks already protect access independently                                                                                             |
-| Complimentary Premium      | Restricted background administration to grant, inspect, and revoke access without payment; optional expiry, audit history, and shared Web/Mobile access; no additional admin UI       |
+| Complimentary Premium      | Restricted local administration (CLI or local admin console) to grant, inspect, and revoke access without payment; optional expiry, audit history, and shared Web/Mobile access       |
+| Local admin console        | Local-only web view of users, subscriptions, outbox, markers, and queues with preview-then-apply actions through shared processing; secret-protected local API routes; none in AWS    |
 
 Reconciliation must not treat provider errors as deletion. A run uses stable job
 IDs within that run; later runs can reverify. Record failures and discrepancies.

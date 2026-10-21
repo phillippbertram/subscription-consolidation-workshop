@@ -17,15 +17,16 @@ their own colors; labels and shapes identify each component as well.
 
 ## Responsibilities
 
-| Layer                       | Responsibility                                                                                 | Start reading                                                                                                                                |
-| --------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Clients                     | Login, display backend access, initiate purchases                                              | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                             |
-| Auth0                       | Authenticate users, issue API access tokens, publish public signing keys                       | [Auth0](setup/auth0.md)                                                                                                                      |
-| API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, handle enabled billing actions | [API](../services/api/README.md)                                                                                                             |
-| Webhooks                    | Verify event signatures or Pub/Sub identity, then enqueue references                           | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md), [Google](../services/google-webhook/README.md) |
-| Worker                      | Verify current provider state/ownership; persist atomically                                    | [Worker](../services/subscription-worker/README.md)                                                                                          |
-| Developer CLI               | Inspect and edit local demo state; preview or trigger reconciliation                           | [CLI](../apps/cli/README.md)                                                                                                                 |
-| Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                         | [Outbox](../services/outbox-publisher/README.md)                                                                                             |
+| Layer                       | Responsibility                                                                                  | Start reading                                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Clients                     | Login, display backend access, initiate purchases                                               | [Web](../apps/web/README.md), [Mobile](../apps/mobile/README.md)                                                                             |
+| Auth0                       | Authenticate users, issue API access tokens, publish public signing keys                        | [Auth0](setup/auth0.md)                                                                                                                      |
+| API                         | Verify Auth0 tokens/scopes, resolve user, serve profile/access, handle enabled billing actions  | [API](../services/api/README.md)                                                                                                             |
+| Webhooks                    | Verify event signatures or Pub/Sub identity, then enqueue references                            | [Stripe](../services/stripe-webhook/README.md), [Apple](../services/apple-webhook/README.md), [Google](../services/google-webhook/README.md) |
+| Worker                      | Verify current provider state/ownership; persist atomically                                     | [Worker](../services/subscription-worker/README.md)                                                                                          |
+| Developer CLI               | Inspect and edit local demo state; preview or trigger reconciliation                            | [CLI](../apps/cli/README.md)                                                                                                                 |
+| Admin console               | Local-only view of all records and queues; preview-then-apply actions via local `/admin` routes | [Admin console](ADMIN_CONSOLE.md)                                                                                                            |
+| Outbox publisher / consumer | Publish committed snapshots; log accepted events without access writes                          | [Outbox](OUTBOX.md), [publisher](../services/outbox-publisher/README.md)                                                                     |
 
 Hono belongs to HTTP services. Domain code receives ordinary values and a clock,
 not HTTP contexts. Each executable owns its configuration and supported runtime
@@ -168,7 +169,7 @@ flowchart LR
 | --------------------- | ----------------------------------------------------------------------------------------------------------- |
 | In Docker             | DynamoDB Local and ElasticMQ; all application code runs on your computer, without AWS credentials           |
 | Started by `pnpm dev` | API, Stripe, Apple and Google webhooks, worker, Web, and the reconciliation watcher (now, then every 5 min) |
-| Started separately    | Stripe CLI, Metro (Mobile), HTTPS tunnels, outbox publisher and log consumer                                |
+| Started separately    | Stripe CLI, Metro (Mobile), HTTPS tunnels, outbox publisher and log consumer, admin console                 |
 
 `pnpm webhooks:listen` starts Stripe CLI and the shared ngrok tunnel together;
 its local router forwards only Apple/Google notification POSTs to their receivers.
@@ -337,22 +338,24 @@ which the CDK stack prepares. Verification status lives only in [TASKS](TASKS.md
 | Expiration jobs                          | ✓                          | — (API still checks expiry) |
 | Outbox publication                       | ✓ ElasticMQ + log consumer | — EventBridge adapter only  |
 | Browser CORS for the website             | ✓                          | — not configured            |
-| Complimentary Premium (CLI)              | ✓                          | —                           |
+| Complimentary Premium (CLI, console)     | ✓                          | —                           |
+| Admin console (`/admin` routes)          | ✓ behind `ADMIN_SECRET`    | — not in the Lambda bundle  |
 
 API access and expiry checks never wait for the outbox, an event consumer, or an
 expiration job.
 
 ## Where the logic lives
 
-| Piece             | Code                                                                                                  | Responsibility                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Worker runtime    | [`runtime.ts`](../services/subscription-worker/src/runtime.ts)                                        | Configuration, connections, and the switch that picks a provider processor           |
-| Provider adapters | [`providers/<provider>/`](../packages/subscription-processing/src/providers/stripe/processor.ts)      | `processor.ts` (steps), `source.ts` (provider API), `store.ts` (keys and markers)    |
-| Retry loop        | [`retry.ts`](../packages/subscription-processing/src/processing/retry.ts)                             | Skip duplicates; retry a lost compare-and-swap race with fresh reads                 |
-| Shared commit     | [`dynamodb-processing.ts`](../packages/subscription-processing/src/processing/dynamodb-processing.ts) | Revision guard, profile check, access snapshot, and outbox entry in one transaction  |
-| Access rules      | [`subscriptions.ts`](../packages/domain/src/subscriptions.ts)                                         | Translate provider states and combine all grants; no I/O                             |
-| Admin grants      | [`admin-grants/`](../packages/subscription-processing/src/admin-grants/processor.ts)                  | Grant/revoke rules, audit receipts, idempotency                                      |
-| Developer CLI     | [`apps/cli`](../apps/cli/README.md)                                                                   | Prompts, local demo edits, local reconciliation; database and queue fixed to Compose |
+| Piece             | Code                                                                                                      | Responsibility                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Worker runtime    | [`runtime.ts`](../services/subscription-worker/src/runtime.ts)                                            | Configuration, connections, and the switch that picks a provider processor           |
+| Provider adapters | [`providers/<provider>/`](../packages/subscription-processing/src/providers/stripe/processor.ts)          | `processor.ts` (steps), `source.ts` (provider API), `store.ts` (keys and markers)    |
+| Retry loop        | [`retry.ts`](../packages/subscription-processing/src/processing/retry.ts)                                 | Skip duplicates; retry a lost compare-and-swap race with fresh reads                 |
+| Shared commit     | [`dynamodb-processing.ts`](../packages/subscription-processing/src/processing/dynamodb-processing.ts)     | Revision guard, profile check, access snapshot, and outbox entry in one transaction  |
+| Access rules      | [`subscriptions.ts`](../packages/domain/src/subscriptions.ts)                                             | Translate provider states and combine all grants; no I/O                             |
+| Admin grants      | [`admin-grants/`](../packages/subscription-processing/src/admin-grants/processor.ts)                      | Grant/revoke rules, audit receipts, idempotency                                      |
+| Developer CLI     | [`apps/cli`](../apps/cli/README.md)                                                                       | Prompts, local demo edits, local reconciliation; database and queue fixed to Compose |
+| Admin console     | [`services/api/src/admin/`](../services/api/src/admin/routes.ts), [`apps/admin`](../apps/admin/README.md) | Table snapshot, consistency checks, actions; pages only display the API's answer     |
 
 Three rules hold for every provider:
 
@@ -371,6 +374,7 @@ Three rules hold for every provider:
 - [Apple purchase and notifications](setup/apple.md): client synchronization and lifecycle events converge in the worker.
 - [Google Play purchases and notifications](setup/google.md): Android purchase/restore, authenticated Pub/Sub ingress, and backend acknowledgement.
 - [Reconciliation and expiration](RECONCILIATION.md): repair missed updates and apply verified access boundaries.
+- [Outbox](OUTBOX.md): announce every committed change at least once, and what goes wrong without it.
 - [Data model](DYNAMODB_DATA_MODEL.md): ownership, aggregate revision, completion markers, and outbox.
 
 ## Maintaining the diagrams
@@ -380,4 +384,6 @@ The [SVG overview](images/architecture-overview.svg) embeds provider logos
 because Markdown renderers cannot load Mermaid icon packs; update it when a
 component's responsibility changes. The non-technical
 [README overview](images/overview.svg) uses the same embedded logos; keep its
-three steps in line with [Concepts](CONCEPTS.md).
+three steps in line with [Concepts](CONCEPTS.md). The two
+[outbox illustrations](OUTBOX.md) are hand-written SVGs without logos; keep
+their labels in line with that page.

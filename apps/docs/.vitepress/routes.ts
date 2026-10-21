@@ -11,9 +11,8 @@ export const repoUrl =
 export const repoBranch = 'main';
 
 // Planning notes and project decisions for maintainers and agents, not part of
-// the reader's path. Links to them open on GitHub. ADMIN_CONSOLE.md is an
-// unapproved proposal; publish it once the console exists.
-export const excludedPages = ['TASKS.md', 'DECISIONS.md', 'ADMIN_CONSOLE.md'];
+// the reader's path. Links to them open on GitHub.
+export const excludedPages = ['TASKS.md', 'DECISIONS.md'];
 
 /** Lists the Markdown files under docs/ that become site pages, relative to docs/. */
 export function listPublishedPages(): string[] {

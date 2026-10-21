@@ -20,6 +20,7 @@ status belongs in [TASKS](TASKS.md).
 | D11 | pnpm workspace per executable                  | Independent configuration and deployment entries; share only needed packages                                                                               |
 | D12 | Complimentary Premium through admin grants     | Selected users can receive access without payment; independent, auditable, revocable grants with optional expiry; no additional admin platform             |
 | D13 | One configuration source, generated `.env`     | Edit only `config/.env`; `pnpm config:sync` writes each executable's `.env` from `config/targets.mjs`, so every program still gets only its settings (D11) |
+| D14 | Local admin console                            | `apps/admin` web app plus `/admin` routes in the local API entry only, behind a manually set `ADMIN_SECRET`; no admin route in Lambda, no Auth0 admin role |
 
 ## Implementation choices
 
@@ -41,7 +42,7 @@ status belongs in [TASKS](TASKS.md).
 | Stripe pricing       | One Premium product with daily/monthly Stripe test prices; resolve the selected lookup key and persist plan/price per attempt; recognize paid subscriptions by configured product, including archived prices |
 | Cancellation         | Stripe period-end cancellation verifies ownership; Apple uses native management; access follows verified provider state                                                                                      |
 | Duplicate exercises  | Default-off, nonpersistent development Sandbox override affects UI eligibility only                                                                                                                          |
-| Local administration | CLI in `apps/cli` using the shared processing package; fixed DynamoDB Local target; `--dry-run` preview                                                                                                      |
+| Local administration | CLI in `apps/cli` and the admin console (D14), both on the shared processing package and the fixed DynamoDB Local target; preview before every write                                                         |
 | Cloud reconciliation | One five-minute rule, one opt-in Lambda per provider; discovery never writes; the worker verifies; separate failure queue                                                                                    |
 | Documentation        | Local-first setup; one owner per topic; provider extensions and explicit pause/reset/removal guidance                                                                                                        |
 | Documentation site   | VitePress default theme in `apps/docs` renders `docs/` in place; Markdown stays GitHub-compatible; one route rule for URLs and links; code links open on GitHub; published to GitHub Pages                   |
@@ -50,10 +51,13 @@ Provider grace and outage behavior are defined only in the
 [access policy](PAYMENTS.md#access-policy). Architecture and code entry points
 are in [ARCHITECTURE](ARCHITECTURE.md); external setup is in the provider guides.
 
-Complimentary Premium uses the local CLI: one grant per user, a required reason,
-the OS user as actor, and repeat-safe request IDs. Access to the local database
-is the trust boundary; there is no Auth0 admin role or public admin endpoint.
-[Commands and limitations](DEVELOPMENT.md#complimentary-premium).
+Complimentary Premium uses the local CLI or the local admin console: one grant
+per user, a required reason, the OS user as actor, and repeat-safe request IDs.
+Access to the local machine and database is the trust boundary; the console's
+shared secret guards the local API route and names no person. There is no Auth0
+admin role and no admin endpoint in AWS.
+[Commands and limitations](DEVELOPMENT.md#complimentary-premium) ·
+[Admin console](ADMIN_CONSOLE.md).
 
 ## Open decisions
 

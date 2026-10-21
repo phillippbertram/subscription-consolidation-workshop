@@ -132,7 +132,7 @@ commit: tell the store the purchase was processed (finish / acknowledge).
 | Ownership binding  | Proof which user a purchase belongs to: Stripe customer mapping, Apple `appAccountToken`, Google `obfuscatedAccountId` |
 | Aggregate revision | Version number of all of one user's access data; a write succeeds only if nobody changed it since reading              |
 | Completion marker  | Record that an event was fully processed, so a duplicate delivery is skipped                                           |
-| Outbox             | A "please announce this change" record, saved in the same transaction as the change itself                             |
+| Outbox             | A "please announce this change" record, saved in the same transaction as the change itself ([guide](OUTBOX.md))        |
 | Reconciliation     | A scheduled re-check with the provider that repairs missed notifications                                               |
 | Expiration job     | Background work that recomputes access once a stored boundary has passed                                               |
 | Idempotency key    | Client-chosen ID that makes a retried request (e.g. checkout) return the same result                                   |
@@ -147,3 +147,4 @@ commit: tell the store the purchase was processed (finish / acknowledge).
 - [Architecture](ARCHITECTURE.md): which process does what, locally and in AWS.
 - [Data model](DYNAMODB_DATA_MODEL.md): how these records are stored.
 - [Reconciliation](RECONCILIATION.md): how missed updates are repaired.
+- [Outbox](OUTBOX.md): how every saved change gets announced, even after a crash.

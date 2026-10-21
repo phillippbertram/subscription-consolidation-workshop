@@ -93,12 +93,12 @@ Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove ev
 
 ## What is inside
 
-| Folder      | Contents                                                                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/`     | [Web](apps/web/README.md) (React), [Mobile](apps/mobile/README.md) (Expo), and the developer [CLI](apps/cli/README.md)                            |
-| `services/` | [API](services/api/README.md), one webhook per store, the [subscription worker](services/subscription-worker/README.md), and the outbox publisher |
-| `packages/` | Shared code; the access rules live in [`domain`](packages/domain/README.md)                                                                       |
-| `infra/`    | [AWS CDK stack](infra/README.md) for an optional cloud deployment                                                                                 |
+| Folder      | Contents                                                                                                                                                                |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/`     | [Web](apps/web/README.md) (React), [Mobile](apps/mobile/README.md) (Expo), the developer [CLI](apps/cli/README.md), and the local [Admin console](apps/admin/README.md) |
+| `services/` | [API](services/api/README.md), one webhook per store, the [subscription worker](services/subscription-worker/README.md), and the outbox publisher                       |
+| `packages/` | Shared code; the access rules live in [`domain`](packages/domain/README.md)                                                                                             |
+| `infra/`    | [AWS CDK stack](infra/README.md) for an optional cloud deployment                                                                                                       |
 
 | Guide                                     | Read it for                                               |
 | ----------------------------------------- | --------------------------------------------------------- |
@@ -106,6 +106,7 @@ Finish with [Cleanup](docs/DEVELOPMENT.md#cleanup) to pause, reset, or remove ev
 | [Architecture](docs/ARCHITECTURE.md)      | Components, data flow, and what runs locally vs. in AWS   |
 | [Payments](docs/PAYMENTS.md)              | Stripe flow, retries, and the exact access rules          |
 | [Reconciliation](docs/RECONCILIATION.md)  | How missed updates are repaired                           |
+| [Outbox](docs/OUTBOX.md)                  | How every saved change gets announced, even after a crash |
 | [Data model](docs/DYNAMODB_DATA_MODEL.md) | Records, keys, and atomic writes in one DynamoDB table    |
 | [Development](docs/DEVELOPMENT.md)        | Everyday commands, logs, and local demo tools             |
 | [Decisions](docs/DECISIONS.md)            | Why the project uses these approaches                     |

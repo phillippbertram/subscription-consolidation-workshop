@@ -36,17 +36,14 @@ processing.
 
 ## Why save an outbox record first?
 
-Saving a subscription and sending a message are two separate operations. If the
-worker saves the subscription and then crashes before sending, the change is
-saved but nobody hears about it. Sending first has the opposite problem: a
-consumer could hear about a change whose database write later fails.
-
-Saving the outbox record in the **same transaction** as the subscription closes
-that gap: either both are saved or neither is. The publisher can retry pending
-announcements after a restart. A crash after sending but before marking `sent`
-can still cause duplicate delivery, so retries retain the same `domainEventId`.
-This provides at-least-once publication, not exactly-once consumer execution.
-The local queue's restart limitation is described below.
+Saving a subscription and sending a message are two separate operations, and no
+transaction spans DynamoDB and a queue. Saving the outbox record in the **same
+transaction** as the subscription means either both are saved or neither is;
+the publisher retries pending announcements after a restart. A crash after
+sending but before marking `sent` can repeat a delivery with the same
+`domainEventId`: at-least-once publication, not exactly-once consumer execution.
+[The outbox guide](../../docs/OUTBOX.md) pictures the problem and walks through
+every crash case. The local queue's restart limitation is described below.
 
 | Component           | Responsibility                                                                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------------- |

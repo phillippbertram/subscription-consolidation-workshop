@@ -71,8 +71,23 @@ export const targets = [
         'APPLE_ENABLED',
         'APPLE_PRODUCT_ID',
         'SUBSCRIPTION_QUEUE_URL',
+        // Enables the local-only /admin routes; the Lambda entry ignores it.
+        'ADMIN_SECRET',
       ),
       ...googleShared,
+    },
+  },
+  {
+    file: 'apps/admin/.env',
+    purpose:
+      'Local admin console: where its dev server forwards /admin requests. The secret is typed in the browser, never stored here.',
+    settings: {
+      // No VITE_ prefix: only vite.config.ts reads it, the browser never does.
+      ADMIN_API_URL: derived(
+        'API_PORT',
+        (port) => `http://127.0.0.1:${port}`,
+        (url) => /:(\d+)$/.exec(url)?.[1] ?? url,
+      ),
     },
   },
   {

@@ -28,6 +28,12 @@ export interface AppOptions extends StripeRouteOptions {
   /** Optional providers; missing billing adapters disable their routes. */
   apple?: AppleBilling | undefined;
   google?: GoogleBilling | undefined;
+  /**
+   * Local-only admin routes, registered before Auth0 authentication because
+   * they use their own secret. Only the local entry passes this; the Lambda
+   * entry does not import the admin module at all.
+   */
+  registerAdminRoutes?: ((app: Hono<AppEnv>) => void) | undefined;
 }
 
 // Composition boundary: Hono owns HTTP parsing and responses; injected stores
@@ -82,6 +88,7 @@ export function createApp({
 
   // Public liveness endpoint; does not contact Auth0 or imply dependency readiness.
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  options.registerAdminRoutes?.(app);
 
   // Register all user routes below this middleware; authentication is the default.
   app.use('*', authenticate(auth));

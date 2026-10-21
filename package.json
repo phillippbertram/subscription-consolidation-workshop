@@ -12,6 +12,7 @@
     "dev:api": "pnpm --filter @premiumpass/api run dev",
     "dev:api:lan": "HOST=0.0.0.0 pnpm dev:api",
     "dev:web": "pnpm --filter @premiumpass/web run dev",
+    "dev:admin": "pnpm config:sync && pnpm --filter @premiumpass/admin run dev",
     "dev:mobile": "pnpm config:sync && pnpm --filter @premiumpass/mobile run dev",
     "dev:mobile:lan": "pnpm config:sync && pnpm --filter @premiumpass/mobile run dev:lan",
     "dev:webhook:stripe": "pnpm --filter @premiumpass/stripe-webhook run dev",

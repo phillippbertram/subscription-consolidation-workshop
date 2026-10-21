@@ -7,6 +7,7 @@ Use the [setup guide](../../docs/setup/README.md) for setup and
 ## Request flow
 
 1. Attach metadata/logging, handle CORS preflight, and expose public `/health`.
+   The local entry also registers the `/admin` routes here, before Auth0.
 2. Verify the access token and reject machine identities before user routes.
 3. Check route scopes/input, resolve the internal user, then call services/stores.
 4. Premium routes additionally evaluate current subscription grants.
@@ -41,9 +42,29 @@ Premium. See [Auth0 setup/checks](../../docs/setup/auth0.md).
 | `src/routes/`                                                 | Users, subscriptions, Premium, Stripe, Apple, Google HTTP boundaries |
 | `src/auth.ts`, `src/config.ts`                                | Token/scope checks and startup validation                            |
 | `src/billing/`                                                | Billing services and provider/ownership/queue adapters               |
+| `src/admin/`                                                  | Local-only admin routes: secret check, table snapshot, checks, jobs  |
 | `src/users.ts`, `src/dynamodb-users.ts`, `src/persistence.ts` | Identity/profile contract and stores                                 |
 | `src/local.ts`, `src/lambda.ts`                               | Local runtime / API Gateway handler                                  |
 | `scripts/init-local-db.ts`                                    | Initialize the fixed local table                                     |
+
+## Local admin routes
+
+`src/local.ts` passes `adminRoutes()` to the app; `src/lambda.ts` does not
+import it, so the Lambda bundle contains no admin code. With `ADMIN_SECRET`
+unset, every `/admin/*` request returns `404 admin_disabled`. With it set,
+requests need the `X-Admin-Secret` header (compared in constant time) and
+never accept an Auth0 token. `/admin` has no CORS rule; the
+[admin console](../../apps/admin/README.md) reaches it through its own dev proxy.
+
+| Path                                   | Purpose                                                                           |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| `GET /admin/state`                     | One table scan, computed access, outbox, markers, queues, checks                  |
+| `POST /admin/users/:userId/premium`    | Grant or revoke complimentary Premium; `dryRun` previews                          |
+| `POST /admin/users/:userId/refresh`    | Queue one reconciliation job per stored subscription; same `runId` is repeat-safe |
+| `POST /admin/users/:userId/expiration` | Queue an expiration job when a stored boundary has passed                         |
+| `POST /admin/queues/work-dlq/redrive`  | Preview or move work DLQ messages back to the work queue                          |
+
+[What the console shows and why](../../docs/ADMIN_CONSOLE.md).
 
 Register new user routes after shared authentication; declare scopes explicitly.
 Keep Hono contexts out of domain/services. Reuse [HTTP contracts](../../packages/api-contracts/README.md)

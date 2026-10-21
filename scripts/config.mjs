@@ -247,6 +247,18 @@ function validate(source) {
     (key) => /^(sk|rk)_test_/.test(key),
     'must be a Stripe test-mode key (sk_test_ or rk_test_)',
   );
+  // A simple passphrase is fine for a local demo; only hint at the LAN risk.
+  requireMatch(
+    'ADMIN_SECRET',
+    (secret) => secret.trim() === secret,
+    'must not start or end with whitespace',
+  );
+  if (isSet('ADMIN_SECRET') && value('ADMIN_SECRET').length < 16) {
+    warnings.push(
+      'ADMIN_SECRET is short: fine on loopback, guessable while the API listens on the LAN. A long one: `openssl rand -base64 32`.',
+    );
+  }
+
   for (const key of ['WEB_ORIGIN', 'WEB_API_URL', 'MOBILE_API_URL']) {
     requireMatch(key, (url) => validUrl(url), 'must be an http or https URL');
   }

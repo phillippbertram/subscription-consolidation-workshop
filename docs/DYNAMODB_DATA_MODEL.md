@@ -269,7 +269,8 @@ records stay stored; expiry is checked on every read.
 transport accepted one, conditionally sets `status=sent`, `sentAt`, and
 `publishedEventId`. The `domainEventId` stays stable across retries; a crash
 between acceptance and update can publish a duplicate. Publication never touches
-subscriptions or markers. There is no TTL cleanup. [Publisher](../services/outbox-publisher/README.md).
+subscriptions or markers. There is no TTL cleanup. [Why an outbox](OUTBOX.md) ·
+[Publisher](../services/outbox-publisher/README.md).
 
 ## Apple sandbox records
 
@@ -339,10 +340,11 @@ private backend data and must not be logged or placed in client configuration.
 | Local outbox discovery                               | Paginated `Scan` for pending `OUTBOX#` entries; reads the whole table                             |
 | Outbox publication marker                            | Conditional `UpdateItem` on the existing pending event after per-entry transport acceptance       |
 | Local CLI edit/seed                                  | Aggregate-guarded transaction in the fixed local table; seeding touches only its marked demo rows |
+| Local admin console state                            | One paginated consistent `Scan` of the whole local table per request; never in AWS                |
 
 - **User requests never scan.** Only background discovery (reconciliation,
-  outbox) scans this small demo table; filters do not reduce read capacity and
-  are not IAM boundaries.
+  outbox) and the local [admin console](ADMIN_CONSOLE.md) scan this small demo
+  table; filters do not reduce read capacity and are not IAM boundaries.
 - **Demo simplification:** a production system would add indexes and resumable
   discovery instead of scans.
 - Direct edits in DynamoDB Admin bypass all of these guarantees.

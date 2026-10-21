@@ -16,8 +16,11 @@ export function requestLogger(level: LogLevel) {
 
     // A clone preserves the original request bytes for handlers/signatures.
     // Checkout URLs contain session credentials; billing stays metadata-only.
+    // Admin responses hold the whole table; log only their metadata as well.
     const includeDetails =
-      level === 'debug' && !c.req.path.startsWith('/v1/billing/');
+      level === 'debug' &&
+      !c.req.path.startsWith('/v1/billing/') &&
+      !c.req.path.startsWith('/admin/');
     const requestBody = includeDetails ? previewBody(c.req.raw) : undefined;
     await next();
 

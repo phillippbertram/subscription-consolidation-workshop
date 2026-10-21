@@ -1,7 +1,7 @@
 # Duplicates and crashes
 
 See why duplicate jobs are harmless, how changes are announced
-through the outbox, and where the system could crash.
+through the [outbox](../OUTBOX.md), and where the system could crash.
 
 Use the test user with the Stripe subscription from
 [A first purchase](first-purchase.md).

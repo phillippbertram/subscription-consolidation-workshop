@@ -80,6 +80,7 @@ const sidebar: DefaultTheme.SidebarItem[] = [
       page('PAYMENTS.md', 'Payments and access policy'),
       page('STORE_PURCHASES.md', 'Store purchases'),
       page('RECONCILIATION.md', 'Reconciliation'),
+      page('OUTBOX.md', 'Outbox'),
       page('DYNAMODB_DATA_MODEL.md', 'Data model'),
     ],
   },
@@ -87,6 +88,7 @@ const sidebar: DefaultTheme.SidebarItem[] = [
     text: 'Reference',
     items: [
       page('DEVELOPMENT.md', 'Development'),
+      page('ADMIN_CONSOLE.md', 'Admin console'),
       page('DEVELOPMENT.md', 'Cleanup', 'cleanup'),
       page('CONCEPTS.md', 'Glossary', 'glossary'),
       onGitHub('docs/TASKS.md', 'Project status'),

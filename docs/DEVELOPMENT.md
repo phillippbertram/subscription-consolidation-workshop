@@ -26,10 +26,12 @@ Additional arguments follow the command directly, for example
 | `pnpm dev:webhook:google`                            | Google Pub/Sub webhook on port 3004                                                         |
 | `pnpm dev:worker`                                    | Subscription queue worker                                                                   |
 | `pnpm dev:outbox` / `pnpm dev:events`                | Outbox publisher (repeating) / its log consumer                                             |
+| `pnpm dev:admin`                                     | [Admin console](#admin-console) on `http://localhost:5175`; needs the local API             |
 | `pnpm cli reconcile --watch`                         | Reconciliation watcher, only when not using `pnpm dev`                                      |
 
 - Use either `pnpm dev` or individual processes, not both.
-- Metro, outbox publisher, and log consumer always start separately. The Google
+- Metro, outbox publisher, log consumer, and admin console always start
+  separately. The Google
   webhook starts with `pnpm dev`; while `GOOGLE_PLAY_ENABLED` is not `true` it
   answers `503 google_not_configured`.
 - After changing `config/.env`, run `pnpm config:sync` and restart the affected
@@ -206,6 +208,25 @@ ElasticMQ is a local transport substitute, not EventBridge. Accepted messages
 are lost on container restart even if the outbox is already marked sent. Keep
 the broker running during verification. [Publisher behavior and cloud boundary](../services/outbox-publisher/README.md).
 
+## Admin console
+
+A browser view of users, subscriptions, outbox, markers, and queues, with
+preview-then-apply actions. It is local only; the deployed API has no admin
+routes. [What it shows and how it is protected](ADMIN_CONSOLE.md).
+
+1. Set `ADMIN_SECRET` in `config/.env`; a simple passphrase is enough. Under
+   16 characters you get a hint (guessable on the LAN); `openssl rand -base64 32`
+   gives a long one. Empty keeps the admin routes disabled.
+2. Restart the API (`pnpm dev`, or `pnpm config:sync` and `pnpm dev:api`).
+3. Run `pnpm dev:admin`, open `http://localhost:5175`, and enter the secret.
+
+| Requires                        | For                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| Local API with `ADMIN_SECRET`   | Every page; the console forwards `/admin/*` to `http://127.0.0.1:<API_PORT>` |
+| `pnpm local:up`                 | DynamoDB Local and ElasticMQ                                                 |
+| Worker (`pnpm dev`)             | Processing the refresh, expiration, and redrive jobs the console queues      |
+| Outbox publisher (`dev:outbox`) | Turning pending outbox entries into sent ones                                |
+
 ## Local subscription CLI
 
 `pnpm cli` is the single entry for all local subscription tools
@@ -265,8 +286,10 @@ pnpm cli premium revoke <internal-user-id> --reason "Workshop ended"
 | Clients           | Web/Mobile show “Complimentary Premium” separately, without a manage action                                  |
 
 - **Trust boundary:** whoever can use the local database can grant Premium.
-  There is no Auth0 admin role and no HTTP admin route; a hosted version would
-  need both. This is a developer tool, not a multi-user admin system.
+  The [admin console](#admin-console) offers the same grant through a local API
+  route behind `ADMIN_SECRET`; there is no Auth0 admin role and no admin route
+  in AWS. A hosted version would need both. This is a developer tool, not a
+  multi-user admin system.
 - Reconciliation and the `set`/`seed` demo commands never change this grant.
   Step by step: [Complimentary Premium](try-it/complimentary-premium.md).
 

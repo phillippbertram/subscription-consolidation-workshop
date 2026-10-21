@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 600" role="img" aria-labelledby="title description">
+<title id="title">Why PremiumPass uses an outbox</title>
+<desc id="description">Three ways to save a change and announce it. Save, then send: a crash after saving means the change is never announced. Send, then save: a crash or a failed save means a change was announced that never happened. With an outbox: the change and a pending announcement are saved in one transaction, and a separate publisher sends the announcement later. A crash then only delays the announcement or sends it twice with the same ID.</desc>
+<metadata>Hand-written, self-contained SVG without external images or fonts. Keep the three cards aligned with docs/OUTBOX.md.</metadata>
+<style>
+  text { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; }
+  .title { font-size: 30px; font-weight: 700; }
+  .subtitle { font-size: 17px; }
+  .kicker { font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+  .card-title { font-size: 22px; font-weight: 700; }
+  .step { font-size: 16px; font-weight: 700; }
+  .note { font-size: 14px; }
+  .crash { font-size: 15px; font-weight: 700; }
+  .crash-note { font-size: 13px; }
+  .result { font-size: 17px; font-weight: 700; }
+</style>
+<defs>
+  <symbol id="db" viewBox="0 0 30 34">
+    <path d="M2 6v22c0 2.5 5.8 4.5 13 4.5s13-2 13-4.5V6" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+    <path d="M2 17c0 2.5 5.8 4.5 13 4.5s13-2 13-4.5" fill="none" stroke="currentColor" stroke-width="2.2"/>
+    <ellipse cx="15" cy="6" rx="13" ry="4.5" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+  </symbol>
+  <symbol id="letter" viewBox="0 0 36 26">
+    <rect x="1.5" y="1.5" width="33" height="23" rx="3" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+    <path d="M3.5 4l14.5 10.5 14.5-10.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="tray" viewBox="0 0 38 34">
+    <rect x="7" y="2" width="24" height="17" rx="2" fill="#ffffff" stroke="currentColor" stroke-width="2"/>
+    <path d="M8.5 4l10.5 7.5 10.5-7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M1.5 15h35l-4 17h-27z" fill="#ffffff" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+  </symbol>
+  <symbol id="truck" viewBox="0 0 42 30">
+    <rect x="1.5" y="3" width="25" height="18" rx="2.5" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+    <path d="M26.5 9h8l6 7v5h-14z" fill="#ffffff" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+    <circle cx="10" cy="24" r="4" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+    <circle cx="33" cy="24" r="4" fill="#ffffff" stroke="currentColor" stroke-width="2.2"/>
+  </symbol>
+  <symbol id="bolt" viewBox="0 0 20 30">
+    <path d="M12.5 1.5L2 17h8l-2.5 11.5L18.5 12h-8l2-10.5z" fill="#f97316" stroke="#c2410c" stroke-width="1.5" stroke-linejoin="round"/>
+  </symbol>
+  <g id="ok"><circle r="9" fill="#16a34a" stroke="#ffffff" stroke-width="2"/><path d="M-4 0.5l2.8 2.8 5.2-5.6" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="no"><circle r="9" fill="#e11d48" stroke="#ffffff" stroke-width="2"/><path d="M-3.5-3.5l7 7M3.5-3.5l-7 7" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/></g>
+  <marker id="green-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10Z" fill="#16a34a"/></marker>
+</defs>
+<rect width="1000" height="600" rx="28" fill="#f8fafc"/>
+<text x="48" y="66" class="title" fill="#0f172a">Saved and announced, or neither</text>
+<text x="48" y="98" class="subtitle" fill="#475569">Saving a change and announcing it are two steps. A crash in between breaks one of them.</text>
+
+<!-- Card 1: save, then send -->
+<rect x="48" y="128" width="288" height="440" rx="20" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.5"/>
+<text x="72" y="162" class="kicker" fill="#be123c">WITHOUT OUTBOX</text>
+<text x="72" y="192" class="card-title" fill="#881337">Save, then send</text>
+<rect x="72" y="214" width="240" height="64" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="1.5"/>
+<use href="#db" x="86" y="229" width="30" height="34" color="#16a34a"/>
+<use href="#ok" x="116" y="262"/>
+<text x="136" y="241" class="step" fill="#0f172a">1 · Save the change</text>
+<text x="136" y="263" class="note" fill="#475569">Premium is saved</text>
+<path d="M101 278v78" stroke="#fb923c" stroke-width="2" stroke-dasharray="4 5"/>
+<circle cx="101" cy="317" r="17" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<use href="#bolt" x="93" y="305" width="16" height="24"/>
+<text x="136" y="314" class="crash" fill="#c2410c">Crash</text>
+<text x="136" y="333" class="crash-note" fill="#9a3412">The worker stops here</text>
+<rect x="72" y="356" width="240" height="64" rx="14" fill="#ffffff" fill-opacity="0.55" stroke="#fda4af" stroke-width="1.5" stroke-dasharray="6 5"/>
+<use href="#letter" x="83" y="375" width="36" height="26" color="#94a3b8"/>
+<use href="#no" x="116" y="402"/>
+<text x="136" y="383" class="step" fill="#64748b">2 · Announce it</text>
+<text x="136" y="405" class="note" fill="#64748b">Never happens</text>
+<rect x="72" y="444" width="240" height="96" rx="14" fill="#ffe4e6"/>
+<text x="92" y="477" class="result" fill="#881337">Saved, never announced.</text>
+<text x="92" y="502" class="note" fill="#9f1239">Premium works, but no one</text>
+<text x="92" y="523" class="note" fill="#9f1239">else ever hears about it.</text>
+
+<!-- Card 2: send, then save -->
+<rect x="356" y="128" width="288" height="440" rx="20" fill="#fff1f2" stroke="#fecdd3" stroke-width="1.5"/>
+<text x="380" y="162" class="kicker" fill="#be123c">WITHOUT OUTBOX</text>
+<text x="380" y="192" class="card-title" fill="#881337">Send, then save</text>
+<rect x="380" y="214" width="240" height="64" rx="14" fill="#ffffff" stroke="#fecdd3" stroke-width="1.5"/>
+<use href="#letter" x="391" y="233" width="36" height="26" color="#16a34a"/>
+<use href="#ok" x="424" y="262"/>
+<text x="444" y="241" class="step" fill="#0f172a">1 · Announce it</text>
+<text x="444" y="263" class="note" fill="#475569">“This user is Premium!”</text>
+<path d="M409 278v78" stroke="#fb923c" stroke-width="2" stroke-dasharray="4 5"/>
+<circle cx="409" cy="317" r="17" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<use href="#bolt" x="401" y="305" width="16" height="24"/>
+<text x="444" y="314" class="crash" fill="#c2410c">Crash</text>
+<text x="444" y="333" class="crash-note" fill="#9a3412">or the save fails</text>
+<rect x="380" y="356" width="240" height="64" rx="14" fill="#ffffff" fill-opacity="0.55" stroke="#fda4af" stroke-width="1.5" stroke-dasharray="6 5"/>
+<use href="#db" x="394" y="371" width="30" height="34" color="#94a3b8"/>
+<use href="#no" x="424" y="402"/>
+<text x="444" y="383" class="step" fill="#64748b">2 · Save the change</text>
+<text x="444" y="405" class="note" fill="#64748b">Never happens</text>
+<rect x="380" y="444" width="240" height="96" rx="14" fill="#ffe4e6"/>
+<text x="400" y="477" class="result" fill="#881337">Announced, never saved.</text>
+<text x="400" y="502" class="note" fill="#9f1239">Others act on a change</text>
+<text x="400" y="523" class="note" fill="#9f1239">that does not exist.</text>
+
+<!-- Card 3: with an outbox -->
+<rect x="664" y="128" width="288" height="440" rx="20" fill="#f0fdf4" stroke="#bbf7d0" stroke-width="1.5"/>
+<text x="688" y="162" class="kicker" fill="#15803d">WITH OUTBOX</text>
+<text x="688" y="192" class="card-title" fill="#14532d">Save both, send later</text>
+<rect x="688" y="204" width="240" height="122" rx="14" fill="#ffffff" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="6 5"/>
+<text x="704" y="225" class="kicker" fill="#15803d">1 · ONE TRANSACTION</text>
+<use href="#db" x="702" y="232" width="30" height="34" color="#16a34a"/>
+<use href="#ok" x="732" y="265"/>
+<text x="752" y="246" class="step" fill="#0f172a">Save the change</text>
+<text x="752" y="265" class="note" fill="#475569">Premium is saved</text>
+<use href="#tray" x="698" y="276" width="38" height="34" color="#16a34a"/>
+<use href="#ok" x="732" y="307"/>
+<text x="752" y="290" class="step" fill="#0f172a">Write the letter</text>
+<text x="752" y="309" class="note" fill="#475569">status: pending</text>
+<path d="M717 326v24" stroke="#16a34a" stroke-width="2" marker-end="url(#green-arrow)"/>
+<text x="736" y="344" class="crash-note" fill="#15803d">later, in its own process</text>
+<rect x="688" y="356" width="240" height="64" rx="14" fill="#ffffff" stroke="#bbf7d0" stroke-width="1.5"/>
+<use href="#truck" x="696" y="374" width="42" height="30" color="#16a34a"/>
+<use href="#ok" x="736" y="402"/>
+<text x="752" y="383" class="step" fill="#0f172a">2 · Send the letter</text>
+<text x="752" y="405" class="note" fill="#475569">Retried until accepted</text>
+<rect x="688" y="444" width="240" height="96" rx="14" fill="#dcfce7"/>
+<text x="708" y="477" class="result" fill="#14532d">Both or neither.</text>
+<text x="708" y="502" class="note" fill="#166534">A crash only delays the letter</text>
+<text x="708" y="523" class="note" fill="#166534">or sends it twice, same ID.</text>
+</svg>

@@ -27,6 +27,7 @@ satisfy live acceptance. Status values: `open`, `in progress`, `partial`, `compl
 | P12 | Google Play test purchases                 | P04, P05, P06 local processing       | partial  |
 | P13 | Admin-granted complimentary Premium        | P02, P03 local, P05                  | partial  |
 | P14 | Documentation site on GitHub Pages         | P00                                  | partial  |
+| P15 | Local admin console                        | P02, P03 local, P08 local, P13       | partial  |
 
 **Current focus:** P12 real Google Play license-test purchases, starting with
 Play Console preparation and the Android build. Apple provider/device checks in
@@ -279,6 +280,38 @@ complete. AWS deployment and verification remain a separately authorized path.
 - **Open:** enable Pages (Source: GitHub Actions), push, and check the first
   workflow run and the live site. The workflow has not run on GitHub yet. The
   site build checks link targets but not heading anchors.
+
+## P15 Local admin console
+
+- **Scope:** a local-only web console (`apps/admin`) over local-only `/admin`
+  routes in the API, behind a manually set `ADMIN_SECRET`
+  ([D14](DECISIONS.md), [guide](ADMIN_CONSOLE.md)). Users, subscriptions,
+  outbox, markers, queues, consistency checks; complimentary Premium, refresh,
+  expiration, and DLQ redrive with preview. No AWS admin route.
+- **Acceptance:** admin routes absent from the Lambda bundle; disabled without
+  a secret; wrong or missing secret rejected; no CORS on `/admin`; computed
+  access matches the user API; writes only through shared transactions with
+  preview and repeat-safe IDs; no purchase token in any response.
+- **Done:** `apps/admin`, local `/admin` routes, `config/.env` setting, docs.
+  Formatting, lint, types, and builds passed; the built Lambda bundle contains
+  no admin code. Checked on October 21 against disposable in-memory DynamoDB
+  Local and ElasticMQ with synthetic records: disabled without a secret, short
+  passphrase accepted with a startup hint, missing/wrong secret and Auth0-only
+  requests 401,
+  no CORS headers on `/admin` preflights, no purchase token in `/admin/state`;
+  owner mismatch, drift, waiting outbox, pending Apple finish, DLQ, and an
+  unrecognized item were all reported. Grant preview/apply via API and
+  browser; replay (`duplicate`) and changed arguments (409) via API; expiration
+  job queued, processed by the worker, drift cleared; outbox entries turned
+  sent after one publisher pass; DLQ preview and redrive; refresh preview for
+  Stripe, Google, Apple (skipped while disabled), and demo rows. Browser pages
+  checked at desktop and phone width without horizontal scrolling. Linked
+  provider IDs (Stripe customer, subscriptions, checkout sessions, Google
+  purchase digest, store account tokens) checked read-only against the
+  persistent local database; no purchase token in the response.
+- **Open:** compare the console with `GET /v1/me/entitlements` for a real Auth0
+  user on the persistent local database, and apply a refresh job end to end
+  with real Stripe test data.
 
 ## Manual scenario index
 
